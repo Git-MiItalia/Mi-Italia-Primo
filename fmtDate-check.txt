@@ -1,0 +1,7 @@
+src\views\Customers.jsx:function fmtDate(iso) {
+src\views\Financials.jsx:function fmtDate(iso) {
+src\views\Orders.jsx:function fmtDate(iso) {
+src\views\Orders.jsx:function fmtDateTime(iso) {
+src\views\Reports.jsx:function fmtDate(iso) {
+src\views\Reservations.jsx:function fmtDateTime(iso) {
+src\views\Staff.jsx:function fmtDate(iso) {
