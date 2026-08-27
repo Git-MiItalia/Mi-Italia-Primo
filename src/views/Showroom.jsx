@@ -6,7 +6,7 @@ const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 export default function Showroom() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const [settings, setSettings]             = useState({
     wholesale_default_discount_pct: 30,
@@ -49,7 +49,7 @@ export default function Showroom() {
     apiFetch(`${API}/boutique/showroom/products?${params}`)
       .then(r => r.json())
       .then(res => { setProducts(res.data.products ?? []); setLoading(false) })
-  }, [])
+  }, [i18n.language])
 
   // ── commented out — re-fetch when search/filter changes ──
   // useEffect(() => {
@@ -121,17 +121,17 @@ export default function Showroom() {
       {/* Stats */}
       <div className="stat-row col3">
         <div className="stat-card">
-          <div className="stat-lbl">{t('showroom.stats.products')}</div>
+          <div className="stat-lbl">{t('showroom.stats.products', 'Products on Showroom')}</div>
           <div className="stat-val">{stats.products_on_showroom}</div>
-          <div className="stat-change nu">{t('showroom.stats.of')} {stats.total_products} {t('showroom.stats.total')}</div>
+          <div className="stat-change nu">{t('showroom.stats.of', 'of')} {stats.total_products} {t('showroom.stats.total', 'total')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('showroom.stats.orders')}</div>
+          <div className="stat-lbl">{t('showroom.stats.orders', 'Wholesale Orders (MTD)')}</div>
           <div className="stat-val">8</div>
-          <div className="stat-change up">↑ 3 {t('showroom.stats.this_month')}</div>
+          <div className="stat-change up">↑ 3 {t('showroom.stats.this_month', 'this month')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('showroom.stats.revenue')}</div>
+          <div className="stat-lbl">{t('showroom.stats.revenue', 'Wholesale Revenue')}</div>
           <div className="stat-val">€14,560</div>
           <div className="stat-change up">↑ 22%</div>
         </div>
@@ -142,15 +142,15 @@ export default function Showroom() {
         {/* Settings card */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('showroom.settings.title')} <em>{t('showroom.settings.title_em')}</em></div>
+            <div className="card-title">{t('showroom.settings.title', 'Showroom')} <em>{t('showroom.settings.title_em', 'Settings')}</em></div>
             <button className="btn btn-sm btn-primary" onClick={saveSettings} disabled={settingsSaving}>
-              {settingsSaved ? `✓ ${t('common.saved')}` : settingsSaving ? t('common.saving') : t('common.save')}
+              {settingsSaved ? `✓ ${t('common.saved', 'Saved')}` : settingsSaving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}
             </button>
           </div>
 
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('showroom.settings.discount_label')}</label>
+              <label className="form-lbl">{t('showroom.settings.discount_label', 'Default Wholesale Discount (%)')}</label>
               <input
                 className="form-input"
                 type="number"
@@ -158,10 +158,10 @@ export default function Showroom() {
                 onChange={e => setSettings(s => ({ ...s, wholesale_default_discount_pct: parseFloat(e.target.value) || 0 }))}
                 onWheel={e => e.target.blur()}
               />
-              <div className="form-hint">{t('showroom.settings.discount_hint')}</div>
+              <div className="form-hint">{t('showroom.settings.discount_hint', 'Applied when no per-product wholesale price is set.')}</div>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('showroom.settings.min_order_label')}</label>
+              <label className="form-lbl">{t('showroom.settings.min_order_label', 'Minimum Order Value (€)')}</label>
               <input
                 className="form-input"
                 type="number"
@@ -169,14 +169,14 @@ export default function Showroom() {
                 onChange={e => setSettings(s => ({ ...s, wholesale_min_order_value: parseFloat(e.target.value) || 0 }))}
                 onWheel={e => e.target.blur()}
               />
-              <div className="form-hint">{t('showroom.settings.min_order_hint')}</div>
+              <div className="form-hint">{t('showroom.settings.min_order_hint', 'Min wholesale order value for B2B buyers.')}</div>
             </div>
           </div>
 
           <div className="toggle-row shw-toggle-row">
             <div>
-              <div className="shw-toggle-title">{t('showroom.settings.auto_push_title')}</div>
-              <div className="shw-toggle-sub">{t('showroom.settings.auto_push_sub')}</div>
+              <div className="shw-toggle-title">{t('showroom.settings.auto_push_title', 'Auto-push new products to Showroom')}</div>
+              <div className="shw-toggle-sub">{t('showroom.settings.auto_push_sub', 'New products automatically listed for wholesale buyers')}</div>
             </div>
             <div
               className={`toggle${settings.wholesale_auto_push_enabled ? ' on' : ''}`}
@@ -188,14 +188,14 @@ export default function Showroom() {
 
           <div className="alert alert-info">
             <span className="material-symbols-outlined">business_center</span>
-            {t('showroom.settings.live_at')} <strong>showroom.miitalia.com/{slug || '…'}</strong>
+            {t('showroom.settings.live_at', 'Your Showroom is live at')} <strong>showroom.miitalia.com/{slug || '…'}</strong>
           </div>
         </div>
 
         {/* Products card */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('showroom.products.title')} <em>{t('showroom.products.title_em')}</em></div>
+            <div className="card-title">{t('showroom.products.title', 'Showroom')} <em>{t('showroom.products.title_em', 'Products')}</em></div>
           </div>
 
           {/* ── commented out — search + showroom-only filter ──
@@ -209,16 +209,16 @@ export default function Showroom() {
           </label>
           ── end commented out ── */}
 
-          {loading && <div className="state-loading">{t('showroom.products.loading')}</div>}
+          {loading && <div className="state-loading">{t('showroom.products.loading', 'Loading products…')}</div>}
 
           {!loading && (
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>{t('showroom.table.product')}</th>
-                  <th>{t('showroom.table.wholesale')}</th>
-                  <th>{t('showroom.table.moq')}</th>
-                  <th>{t('showroom.table.showroom')}</th>
+                  <th>{t('showroom.table.product', 'Product')}</th>
+                  <th>{t('showroom.table.wholesale', 'Wholesale')}</th>
+                  <th>{t('showroom.table.moq', 'MOQ')}</th>
+                  <th>{t('showroom.table.showroom', 'Showroom')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,7 +249,7 @@ export default function Showroom() {
                 ))}
                 {products.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="state-empty">{t('showroom.products.empty')}</td>
+                    <td colSpan={4} className="state-empty">{t('showroom.products.empty', 'No products found.')}</td>
                   </tr>
                 )}
               </tbody>

@@ -1,89 +1,65 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
-
-// ─── Period options ──────────────────────────────────────
-// Values match the API's `period` query param exactly.
-const PERIOD_OPTIONS = [
-  { value: 'this_month',    label: 'This Month'    },
-  { value: 'last_month',    label: 'Last Month'    },
-  { value: 'last_3_months', label: 'Last 3 Months' },
-  { value: 'this_year',     label: 'This Year'     },
-  { value: 'custom',        label: 'Custom Range'  },
-]
 
 // ─── Report definitions ──────────────────────────────────
 // `endpoint`     = base path relative to API. null = coming soon.
 // `hasPeriod`    = append ?period=<dateRange> to URL
 // `hasPagination`= append &page=1&limit=100
+// `nameKey` / `metaKey` = i18n keys within `reports.items.*`
 
 const SALES_REPORTS = [
   {
-    key:'sales', name:'Sales Report',
-    meta:'Orders, revenue, commission breakdown by channel and date',
-    formats:['csv','pdf','xlsx'], icon:'payments', variant:'sales', schedule:'Weekly',
+    key:'sales', nameKey:'sales_report', icon:'payments', variant:'sales',
     endpoint:'/boutique/reports/sales', hasPeriod:true,
   },
   {
-    key:'vat', name:'VAT / Tax Report',
-    meta:'Itemised VAT (22%) per transaction, by country of buyer',
-    formats:['csv','pdf'], icon:'receipt_long', variant:'tax', schedule:null,
+    key:'vat', nameKey:'vat_report', icon:'receipt_long', variant:'tax',
     endpoint:'/boutique/reports/vat', hasPeriod:true,
   },
   {
-    key:'payouts', name:'Payout History',
-    meta:'All Stripe payouts, commission deductions, and fees',
-    formats:['csv','pdf'], icon:'local_shipping', variant:'sales', schedule:null,
-    endpoint:null,   // not yet available
+    key:'payouts', nameKey:'payout_history', icon:'local_shipping', variant:'sales',
+    endpoint:null,
   },
 ]
 
 const LOOKS_REPORTS = [
   {
-    key:'looks', name:'Looks Feed Performance',
-    meta:'Try-ons, likes, shares, revenue attributed to Looks posts',
-    formats:['csv','xlsx'], icon:'auto_awesome', variant:'looks', schedule:null,
+    key:'looks', nameKey:'looks_feed', icon:'auto_awesome', variant:'looks',
     endpoint:'/boutique/reports/looks-feed', hasPeriod:true,
   },
 ]
 
 const INVENTORY_REPORTS = [
   {
-    key:'inventory', name:'Inventory Report',
-    meta:'Current stock levels by product, variant, and location',
-    formats:['csv','xlsx'], icon:'warehouse', variant:'inventory', schedule:'Daily',
+    key:'inventory', nameKey:'inventory_report', icon:'warehouse', variant:'inventory',
     endpoint:'/boutique/reports/inventory', hasPeriod:false,
   },
   {
-    key:'top-products', name:'Top Products Report',
-    meta:'Best sellers by revenue, units, views, and try-on count',
-    formats:['csv','pdf'], icon:'trending_up', variant:'inventory', schedule:null,
-    endpoint:null,   // not yet available
+    key:'top-products', nameKey:'top_products', icon:'trending_up', variant:'inventory',
+    endpoint:null,
   },
 ]
 
 const CUSTOMER_REPORTS = [
   {
-    key:'customers', name:'Customer Export',
-    meta:'All customers with lifetime value, order count, last purchase',
-    formats:['csv','xlsx'], icon:'group', variant:'customer', schedule:null,
+    key:'customers', nameKey:'customer_export', icon:'group', variant:'customer',
     endpoint:'/boutique/reports/customers', hasPeriod:false, hasPagination:true,
   },
   {
-    key:'returns', name:'Returns Report',
-    meta:'All return requests, reasons, refund amounts, and outcomes',
-    formats:['csv','pdf'], icon:'undo', variant:'customer', schedule:null,
+    key:'returns', nameKey:'returns_report', icon:'undo', variant:'customer',
     endpoint:'/boutique/reports/returns', hasPeriod:true,
   },
 ]
 
 const SCHEDULED_REPORTS = [
-  { id:'s1', name:'Sales Report',     frequency:'Weekly · Monday', format:'pdf',
+  { id:'s1', nameKey:'sales_report',     frequency:'Weekly · Monday', format:'pdf',
     recipients:['giulia@ateliersbianchi.it'], nextRun:'Mar 25' },
-  { id:'s2', name:'Inventory Report', frequency:'Daily · 08:00',   format:'csv',
+  { id:'s2', nameKey:'inventory_report', frequency:'Daily · 08:00',   format:'csv',
     recipients:['giulia@ateliersbianchi.it','ops@ateliersbianchi.it'], nextRun:'Tomorrow' },
-  { id:'s3', name:'VAT Report',       frequency:'Monthly · 1st',   format:'pdf',
+  { id:'s3', nameKey:'vat_report',       frequency:'Monthly · 1st',   format:'pdf',
     recipients:['accounting@ateliersbianchi.it'], nextRun:'Apr 1' },
 ]
 
@@ -96,7 +72,6 @@ function csvEscape(v) {
 }
 function csvRow(cells) { return cells.map(csvEscape).join(',') }
 
-// Build a CSV section from a rows-of-objects list. Uses first row's keys as headers.
 function csvTable(rows, headerOverrides = null) {
   if (!rows || rows.length === 0) return csvRow(['(no data)'])
   const cols = Object.keys(rows[0])
@@ -168,7 +143,6 @@ function buildInventoryCsv(data) {
   parts.push(csvRow(['Out of stock variants', t.out_of_stock_variants ?? 0]))
   parts.push('')
   parts.push(csvRow(['INVENTORY (flattened by variant)']))
-  // Flatten each product into its variants
   const rows = []
   ;(data.products ?? []).forEach(p => {
     ;(p.variants ?? []).forEach(v => {
@@ -276,44 +250,44 @@ function triggerDownload(text, filename) {
 
 function SectionHeading({ children, extraTop = false }) {
   return (
-    <div style={{
-      fontSize: 9, fontWeight: 600, letterSpacing: 1.5,
-      textTransform: 'uppercase', color: 'var(--stone)',
-      marginBottom: 10, marginTop: extraTop ? 4 : 0,
-    }}>{children}</div>
+    <div className="rpt-section-heading" style={extraTop ? { marginTop: 4 } : undefined}>{children}</div>
   )
 }
 
-function ReportCard({ report, exporting, onExport }) {
+function ReportCard({ report, exporting, onExport, t }) {
   const isDisabled = !report.endpoint || exporting
+  const name     = t(`reports.items.${report.nameKey}.name`)
+  const meta     = t(`reports.items.${report.nameKey}.meta`)
+  const fmts     = t(`reports.items.${report.nameKey}.fmts`, { returnObjects: true })
+  const schedule = t(`reports.items.${report.nameKey}.scheduled`, { defaultValue: '' })
   return (
     <div className="report-card" style={isDisabled ? { opacity: exporting ? 0.85 : 1, cursor: 'default' } : undefined}>
       <div className={`report-icon ${report.variant}`}>
         <span className="material-symbols-outlined">{report.icon}</span>
       </div>
       <div className="report-body">
-        <div className="report-name">{report.name}</div>
-        <div className="report-meta">{report.meta}</div>
+        <div className="report-name">{name}</div>
+        <div className="report-meta">{meta}</div>
         <div className="report-formats">
-          {report.formats.map(f => (
+          {(Array.isArray(fmts) ? fmts : []).map(f => (
             <span key={f} className={`report-fmt ${f}`}>{f.toUpperCase()}</span>
           ))}
           {!report.endpoint && (
-            <span style={{ fontSize: 8, color: 'var(--stone)', marginLeft: 6, fontStyle: 'italic' }}>
-              endpoint pending
+            <span className="rpt-pending-tag">
+              {t('reports.endpoint_pending')}
             </span>
           )}
         </div>
       </div>
       <div className="report-actions">
-        {report.schedule && <div className="scheduled-badge">{report.schedule}</div>}
+        {schedule && <div className="scheduled-badge">{schedule}</div>}
         <button
           className="btn btn-sm btn-primary"
           onClick={() => onExport(report)}
           disabled={exporting}
         >
           <span className="material-symbols-outlined">{exporting ? 'hourglass_top' : 'download'}</span>
-          {exporting ? 'Exporting…' : 'Export'}
+          {exporting ? t('reports.exporting') : t('reports.export_btn')}
         </button>
       </div>
     </div>
@@ -329,20 +303,16 @@ function InlineToast({ toast, onClose }) {
   }
   const c = colors[toast.type] ?? colors.info
   return (
-    <div style={{
-      position:'fixed', bottom:20, right:20, zIndex:1000,
-      padding:'10px 14px', background:'var(--white)', borderRadius: 0,
-      border:`1px solid ${c.border}`, boxShadow:'0 4px 16px rgba(26,18,9,0.14)',
-      fontSize:11, color:c.text, fontWeight:600, display:'flex', alignItems:'center', gap:10,
-      maxWidth:360,
+    <div className="rpt-toast" style={{
+      border:`1px solid ${c.border}`, color:c.text,
     }}>
-      <span style={{ background:c.bg, borderRadius: 0, padding:'3px 4px', display:'flex' }}>
+      <span className="rpt-toast-icon" style={{ background:c.bg }}>
         <span className="material-symbols-outlined" style={{ fontSize:14, color:c.text }}>
           {toast.type === 'success' ? 'check_circle' : toast.type === 'error' ? 'error' : 'info'}
         </span>
       </span>
-      <span style={{ flex:1 }}>{toast.msg}</span>
-      <button onClick={onClose} style={{ background:'transparent', border:'none', cursor:'pointer', padding:0, display:'flex', color:c.text }}>
+      <span className="rpt-toast-msg">{toast.msg}</span>
+      <button onClick={onClose} className="rpt-toast-close" style={{ color:c.text }}>
         <span className="material-symbols-outlined" style={{ fontSize:14 }}>close</span>
       </button>
     </div>
@@ -352,8 +322,18 @@ function InlineToast({ toast, onClose }) {
 // ─── Main ────────────────────────────────────────────────
 
 export default function Reports() {
+  const { t } = useTranslation()
+
+  const PERIOD_OPTIONS = [
+    { value: 'this_month',    label: t('reports.date.this_month') },
+    { value: 'last_month',    label: t('reports.date.last_month') },
+    { value: 'last_3_months', label: t('reports.date.last_3')     },
+    { value: 'this_year',     label: t('reports.date.this_year')  },
+    { value: 'custom',        label: t('reports.date.custom')     },
+  ]
+
   const [dateRange, setDateRange] = useState('this_month')
-  const [exporting, setExporting] = useState({})   // { [key]: bool }
+  const [exporting, setExporting] = useState({})
   const [toast, setToast]         = useState(null)
 
   function showToast(msg, type = 'info', ms = 3500) {
@@ -362,21 +342,21 @@ export default function Reports() {
   }
 
   async function handleExport(report) {
+    const name = t(`reports.items.${report.nameKey}.name`)
     if (!report.endpoint) {
-      showToast(`${report.name} — endpoint not yet available`, 'info')
+      showToast(`${name} — ${t('reports.endpoint_not_available')}`, 'info')
       return
     }
     setExporting(prev => ({ ...prev, [report.key]: true }))
 
     try {
-      // Build URL with query params
       const params = []
       if (report.hasPeriod)     params.push(`period=${dateRange === 'custom' ? 'this_month' : dateRange}`)
       if (report.hasPagination) params.push('page=1', 'limit=100')
       const url = `${API}${report.endpoint}${params.length ? '?' + params.join('&') : ''}`
 
       const res = await apiFetch(url).then(r => r.json())
-      if (!res?.success) throw new Error(res?.message || 'Request failed')
+      if (!res?.success) throw new Error(res?.message || t('reports.request_failed'))
 
       const builder = CSV_BUILDERS[report.key]
       if (!builder) throw new Error(`No CSV builder registered for ${report.key}`)
@@ -385,20 +365,20 @@ export default function Reports() {
       const timestamp = new Date().toISOString().slice(0, 10)
       const suffix    = report.hasPeriod ? `_${dateRange}` : ''
       triggerDownload(csv, `${report.key}${suffix}_${timestamp}.csv`)
-      showToast(`${report.name} exported`, 'success')
+      showToast(t('reports.export_success', { name }), 'success')
     } catch (e) {
-      showToast(`Failed to export: ${e.message}`, 'error', 5000)
+      showToast(t('reports.export_failed', { error: e.message }), 'error', 5000)
     } finally {
       setExporting(prev => ({ ...prev, [report.key]: false }))
     }
   }
 
   function handleNewSchedule() {
-    showToast('Scheduled reports — endpoints coming soon', 'info')
+    showToast(t('reports.schedule_pending'), 'info')
   }
 
   function handleEditSchedule(scheduleId) {
-    showToast(`Edit schedule ${scheduleId} — endpoints coming soon`, 'info')
+    showToast(t('reports.edit_schedule_pending', { id: scheduleId }), 'info')
   }
 
   return (
@@ -406,12 +386,11 @@ export default function Reports() {
       {/* Header */}
       <div className="view-header">
         <div className="view-header-left">
-          <h2>Reports & <em>Exports</em></h2>
+          <h2>{t('reports.title')} <em>{t('reports.title_em')}</em></h2>
         </div>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <div className="rpt-header-actions">
           <select
-            className="form-select"
-            style={{ width:160, fontSize:11, padding:'7px 10px' }}
+            className="form-select rpt-period-select"
             value={dateRange}
             onChange={e => setDateRange(e.target.value)}
           >
@@ -425,27 +404,27 @@ export default function Reports() {
       <div className="grid2">
         {/* ══ LEFT ══ */}
         <div>
-          <SectionHeading>Sales & Financial</SectionHeading>
+          <SectionHeading>{t('reports.sections.sales')}</SectionHeading>
           {SALES_REPORTS.map(r => (
-            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} />
+            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} t={t} />
           ))}
 
-          <SectionHeading extraTop>Looks Feed</SectionHeading>
+          <SectionHeading extraTop>{t('reports.sections.looks')}</SectionHeading>
           {LOOKS_REPORTS.map(r => (
-            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} />
+            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} t={t} />
           ))}
         </div>
 
         {/* ══ RIGHT ══ */}
         <div>
-          <SectionHeading>Inventory & Products</SectionHeading>
+          <SectionHeading>{t('reports.sections.inventory')}</SectionHeading>
           {INVENTORY_REPORTS.map(r => (
-            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} />
+            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} t={t} />
           ))}
 
-          <SectionHeading extraTop>Customers</SectionHeading>
+          <SectionHeading extraTop>{t('reports.sections.customers')}</SectionHeading>
           {CUSTOMER_REPORTS.map(r => (
-            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} />
+            <ReportCard key={r.key} report={r} exporting={!!exporting[r.key]} onExport={handleExport} t={t} />
           ))}
         </div>
       </div>
@@ -453,30 +432,34 @@ export default function Reports() {
       {/* Scheduled Reports */}
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">Scheduled <em>Reports</em></div>
+          <div className="card-title">{t('reports.scheduled.title')} <em>{t('reports.scheduled.title_em')}</em></div>
           <button className="btn btn-sm btn-outline" onClick={handleNewSchedule}>
-            <span className="material-symbols-outlined">add</span>New Schedule
+            <span className="material-symbols-outlined">add</span>{t('reports.scheduled.new_btn')}
           </button>
         </div>
         <table className="tbl">
           <thead>
             <tr>
-              <th>Report</th><th>Frequency</th><th>Format</th>
-              <th>Recipients</th><th>Next Run</th><th></th>
+              <th>{t('reports.scheduled.col_report')}</th>
+              <th>{t('reports.scheduled.col_freq')}</th>
+              <th>{t('reports.scheduled.col_format')}</th>
+              <th>{t('reports.scheduled.col_recipients')}</th>
+              <th>{t('reports.scheduled.col_next')}</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {SCHEDULED_REPORTS.map((s, i) => (
               <tr key={s.id} style={i === SCHEDULED_REPORTS.length - 1 ? { borderBottom:'none' } : undefined}>
-                <td style={{ fontWeight:600 }}>{s.name}</td>
+                <td style={{ fontWeight:600 }}>{t(`reports.items.${s.nameKey}.name`)}</td>
                 <td>{s.frequency}</td>
                 <td><span className={`report-fmt ${s.format}`}>{s.format.toUpperCase()}</span></td>
-                <td style={{ fontSize:10.5, color:'var(--stone)' }}>
+                <td className="rpt-recipients">
                   {s.recipients.join(', ')}
                 </td>
                 <td>{s.nextRun}</td>
                 <td>
-                  <button className="btn btn-sm btn-outline" onClick={() => handleEditSchedule(s.id)}>Edit</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => handleEditSchedule(s.id)}>{t('common.edit')}</button>
                 </td>
               </tr>
             ))}

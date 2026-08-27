@@ -5,6 +5,10 @@ import { apiFetch } from '../lib/api'
 const API = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
+// Notifies other mounted components (e.g. Sidebar's own avatar) that the
+// logged-in user's photo changed, without a shared store or full reload.
+const MY_PHOTO_UPDATED_EVENT = 'primo:my-photo-updated'
+
 function ini(name) {
   return (name ?? '').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
 }
@@ -25,7 +29,7 @@ export default function ViewProfile() {
       .then(json => {
         if (json.success) {
           setProfile(json.data)
-          setPhotoPreview(json.data.founder_photo_url ? `${IMG_BASE}${json.data.founder_photo_url}` : null)
+          setPhotoPreview(json.data.my_photo_url ? `${IMG_BASE}${json.data.my_photo_url}` : null)
         }
       })
       .catch(() => {})
@@ -52,7 +56,9 @@ export default function ViewProfile() {
       })
       const data = await res.json()
       if (data.success) {
-        setPhotoPreview(data.data.founder_photo_url ? `${IMG_BASE}${data.data.founder_photo_url}` : null)
+        const url = data.data.my_photo_url ?? data.data.founder_photo_url
+        setPhotoPreview(url ? `${IMG_BASE}${url}` : null)
+        window.dispatchEvent(new CustomEvent(MY_PHOTO_UPDATED_EVENT, { detail: url }))
       } else {
         setPhotoError(data.message || 'Failed to upload photo.')
       }

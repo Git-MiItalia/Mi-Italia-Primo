@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { getToken } from '../lib/auth'
 
@@ -8,6 +9,7 @@ const BASE_URL = import.meta.env.VITE_API_URL
 export default function SubscriptionReturn() {
   const [searchParams] = useSearchParams()
   const navigate        = useNavigate()
+  const { t }           = useTranslation()
   const sessionId       = searchParams.get('session_id')
   const [status, setStatus] = useState('loading') // loading | success | failed | error
 
@@ -26,10 +28,8 @@ export default function SubscriptionReturn() {
           setStatus('success')
           setTimeout(() => navigate('/subscription', { replace: true }), 2500)
         } else if (s === 'open') {
-          // Payment not completed — send back to pick a plan
           navigate('/subscription-setup', { replace: true })
         } else {
-          // expired / failed / unknown
           setStatus('failed')
         }
       })
@@ -42,8 +42,8 @@ export default function SubscriptionReturn() {
       {status === 'loading' && (
         <div className="sr-card">
           <span className="material-symbols-outlined sr-spin">sync</span>
-          <div className="sr-title">Verifying your payment…</div>
-          <div className="sr-sub">Please wait a moment.</div>
+          <div className="sr-title">{t('sub.return.verifying')}</div>
+          <div className="sr-sub">{t('sub.return.please_wait')}</div>
         </div>
       )}
 
@@ -52,12 +52,12 @@ export default function SubscriptionReturn() {
           <div className="sr-icon-wrap success">
             <span className="material-symbols-outlined">check_circle</span>
           </div>
-          <div className="sr-title">Welcome to <em>Pro</em></div>
+          <div className="sr-title">{t('sub.return.welcome')} <em>{t('sub.plans.pro')}</em></div>
           <div className="sr-sub">
-            Your subscription is active. Redirecting you to the dashboard…
+            {t('sub.return.active_redirect')}
           </div>
           <button className="btn btn-primary sr-btn" onClick={() => navigate('/subscription', { replace: true })}>
-            Go to Subscription
+            {t('sub.return.go_subscription')}
           </button>
         </div>
       )}
@@ -67,12 +67,12 @@ export default function SubscriptionReturn() {
           <div className="sr-icon-wrap error">
             <span className="material-symbols-outlined">error</span>
           </div>
-          <div className="sr-title">Payment not completed</div>
+          <div className="sr-title">{t('sub.return.not_completed')}</div>
           <div className="sr-sub">
-            Your session expired or the payment was unsuccessful. Please try again.
+            {t('sub.return.expired_or_failed')}
           </div>
           <button className="btn btn-primary sr-btn" onClick={() => navigate('/subscription-setup', { replace: true })}>
-            Back to Plans
+            {t('sub.return.back_plans')}
           </button>
         </div>
       )}
@@ -82,16 +82,16 @@ export default function SubscriptionReturn() {
           <div className="sr-icon-wrap error">
             <span className="material-symbols-outlined">error</span>
           </div>
-          <div className="sr-title">Something went wrong</div>
+          <div className="sr-title">{t('common.error_generic')}</div>
           <div className="sr-sub">
-            We couldn't verify your payment. Please contact support.
+            {t('sub.return.verify_failed')}
           </div>
-          <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:16 }}>
+          <div className="sr-error-actions">
             <button className="btn btn-outline" onClick={() => navigate('/subscription-setup', { replace: true })}>
-              Back to Plans
+              {t('sub.return.back_plans')}
             </button>
             <button className="btn btn-primary" onClick={() => navigate('/dashboard', { replace: true })}>
-              Go to Dashboard
+              {t('sub.return.go_dashboard')}
             </button>
           </div>
         </div>

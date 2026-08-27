@@ -8,12 +8,53 @@ import VariantTable from '../components/product/VariantTable'
 import ColourVariants from '../components/product/ColourVariants'
 import VariantsStock from '../components/product/VariantsStock'
 import ProductPhotos from '../components/product/ProductPhotos'
-import VirtualTryOn from '../components/product/VirtualTryOn'
-import AIModelStudio from '../components/product/AIModelStudio'
+import ProductAIModelStudio from '../components/product/ProductAIModelStudio'
 import PrintTagModal from '../components/product/PrintTagModal'
+import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, DEFAULT_CLASS_ID, findById } from '../lib/returnsPolicy/model'
+import { isLawfulOnline, suggestClass, resolvePolicy, buildClassMap } from '../lib/returnsPolicy/engine'
+import { sortSizeLabels } from '../common/sizechart'
 
 const API = import.meta.env.VITE_API_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
+
+const BARCODE_TYPE_LABEL = { ean13: 'EAN-13', code128: 'Code 128' }
+
+function randomDigits(count) {
+  let s = ''
+  for (let i = 0; i < count; i++) s += Math.floor(Math.random() * 10)
+  return s
+}
+
+// Standard EAN/UPC check digit: from the rightmost digit of the body,
+// alternate weights 3 and 1.
+function eanCheckDigit(body) {
+  let sum = 0
+  for (let i = 0; i < body.length; i++) {
+    const digit = Number(body[body.length - 1 - i])
+    sum += digit * (i % 2 === 0 ? 3 : 1)
+  }
+  return (10 - (sum % 10)) % 10
+}
+
+function randomAlphaNumeric(count) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let s = ''
+  for (let i = 0; i < count; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return s
+}
+
+function generateBarcodeValue(format) {
+  if (format === 'ean13') {
+    // Prefix 2 falls in the 20–29 "restricted circulation" range reserved
+    // for internal/in-store use, so it won't collide with real retail GTINs.
+    const body = '2' + randomDigits(11)
+    return body + eanCheckDigit(body)
+  }
+  if (format === 'code128') {
+    return randomAlphaNumeric(12)
+  }
+  return ''
+}
 
 function Toggle({ on, onToggle }) {
   return (
@@ -69,6 +110,7 @@ export default function AddProduct() {
   const [costPrice, setCostPrice]             = useState('')
   const [shippingCost, setShippingCost]       = useState('')
   const [stockData, setStockData]             = useState([])
+  const [warnThreshold, setWarnThreshold]     = useState(3)
   const [variants, setVariants]               = useState([])
   const [showAddBrand, setShowAddBrand]       = useState(false)
   const [newBrand, setNewBrand]               = useState({ name:'', country:'Italy', category:'Womenswear', website:'' })
@@ -83,16 +125,51 @@ export default function AddProduct() {
   const [vendorSku, setVendorSku]                 = useState('')
   const [vendorEmail, setVendorEmail]             = useState('')
   const [vendorLeadTime, setVendorLeadTime]       = useState('1–2 weeks')
-  const [barcodeFormat, setBarcodeFormat]         = useState('EAN-13 (European standard)')
+  const [barcodeFormat, setBarcodeFormat]         = useState('ean13')
   const [barcodeValue, setBarcodeValue]           = useState('')
   const [wholesaleDiscount, setWholesaleDiscount] = useState('')
   const [wholesaleMinQty, setWholesaleMinQty]     = useState('')
   const [whatsappEnquiry, setWhatsappEnquiry]     = useState('')
   const [initialCategoryPath, setInitialCategoryPath] = useState(null)
+  const [initialStyleSlugs, setInitialStyleSlugs] = useState(null)
   const [editLoaded, setEditLoaded] = useState(false)
   const [photoRefreshKey, setPhotoRefreshKey] = useState(0)
   const bumpPhotoRefresh = () => setPhotoRefreshKey(k => k + 1)
   const [showPrintTag, setShowPrintTag] = useState(false)
+  const [sizeChart, setSizeChart] = useState(null)
+  const [showCatRequest, setShowCatRequest]         = useState(false)
+  const [catRequestName, setCatRequestName]         = useState('')
+  const [catRequestExample, setCatRequestExample]   = useState('')
+  const [catRequestNote, setCatRequestNote]         = useState('')
+  const [catRequestSubmitting, setCatRequestSubmitting] = useState(false)
+  const [catRequestSuccess, setCatRequestSuccess]   = useState(false)
+
+  // ─── Returns policy (per-product channel, class, override) ───
+  const [listedOnline, setListedOnline]         = useState(true)
+  const [returnsClassId, setReturnsClassId]     = useState(DEFAULT_CLASS_ID)
+  const [classMode, setClassMode]               = useState('suggested') // 'suggested' | 'manual'
+  const [policyOverrideId, setPolicyOverrideId] = useState(null)
+  const [overrideOpen, setOverrideOpen]         = useState(false)
+
+  // Store-level returns config (policy library + class map + default) — read-only here
+  const [rpPolicies, setRpPolicies] = useState(SEED_POLICIES)
+  const [rpClasses, setRpClasses]   = useState(RETURNS_CLASSES)
+  const [rpDefaultId, setRpDefaultId] = useState(BASELINE_POLICY_ID)
+
+  useEffect(() => {
+    apiFetch(`${API}/boutique/profile`).then(r => r.json()).then(res => {
+      if (!res.success) return
+      const d = res.data
+      if (Array.isArray(d.returns_policies_json) && d.returns_policies_json.length) setRpPolicies(d.returns_policies_json)
+      if (d.returns_classes_json) {
+        setRpClasses(RETURNS_CLASSES.map(c => ({
+          ...c,
+          map: Object.prototype.hasOwnProperty.call(d.returns_classes_json, c.id) ? d.returns_classes_json[c.id] : c.map,
+        })))
+      }
+      if (d.returns_default_policy_id) setRpDefaultId(d.returns_default_policy_id)
+    }).catch(() => {})
+  }, [])
 
   // ── Shared variant-payload builder ──────────────────────────────────────────
   // Applied to POST + both PUTs to prevent unique constraint violations from:
@@ -101,7 +178,42 @@ export default function AddProduct() {
   //      photo-triggered early product creation, alongside real variants.
   // For PUT calls, pass includeIds=true so backend can update-in-place.
   function buildVariantsPayload({ includeIds = false } = {}) {
-    const raw = stockData.length > 0
+    const validSizes = sizes.filter(s => s.size?.toString().trim())
+
+    const raw = validSizes.length > 0
+      // `sizes` (the Sizes card) is the source of truth for which rows exist —
+      // `stockData` only supplies already-entered quantities where they still
+      // match. stockData is only pushed up on manual qty/toggle edits or the
+      // Variants & Stock card's own Save button, so it goes stale the moment a
+      // size is added/removed elsewhere; treating it as an alternative branch
+      // (instead of a quantity lookup) silently dropped newly added sizes.
+      ? validSizes.flatMap(s => {
+          const sizeLabel = s.size.toString()
+          const targetColours = colours.length > 0
+            ? colours
+            : [{ name: selectedColour || null, hex: null }]
+          return targetColours.map(c => {
+            const colourName = c.name ?? null
+            const stockEntry = stockData.find(sd =>
+              sd.size === sizeLabel && (sd.colour === colourName || (!sd.colour && !colourName))
+            )
+            const base = {
+              size_label: sizeLabel,
+              size_it:    sizeLabel,
+              colour:     colourName,
+              colour_hex: c.hex ?? null,
+              stock_qty:  stockEntry?.qty ?? 0,
+            }
+            if (includeIds) {
+              const existing = variants.find(v =>
+                v.size_label === sizeLabel && (v.colour === colourName || (!v.colour && !colourName))
+              )
+              if (existing?.id) base.id = existing.id
+            }
+            return base
+          })
+        })
+      : stockData.length > 0
       ? stockData.map(s => {
           const base = {
             size_label: s.size,
@@ -119,21 +231,24 @@ export default function AddProduct() {
           }
           return base
         })
-      : sizes.length > 0
-      ? sizes.filter(s => s.size?.toString().trim()).map(s => ({
-          size_label: s.size?.toString(),
-          size_it:    s.size?.toString(),
-          colour:     colours[0]?.name ?? selectedColour ?? null,
-          colour_hex: colours[0]?.hex ?? null,
-          stock_qty:  0,
-        }))
-      : [{
-          size_label: 'One Size',
-          size_it:    'One Size',
-          colour:     colours[0]?.name ?? selectedColour ?? null,
-          colour_hex: colours[0]?.hex ?? null,
-          stock_qty:  0,
-        }]
+      : (() => {
+          // Only emit a "One Size" variant when it's a genuine choice —
+          // i.e. the user has picked at least one colour. During early
+          // photo-triggered creation (no sizes, no colours yet), emit NO
+          // variants so no "One Size / null / 0 stock" ghost is persisted.
+          const fallbackColour = colours[0]?.name ?? selectedColour ?? null
+          if (!fallbackColour) return []
+          return [{
+            size_label: 'One Size',
+            size_it:    'One Size',
+            colour:     fallbackColour,
+            colour_hex: colours[0]?.hex ?? null,
+            stock_qty:  0,
+            ...(includeIds && variants.find(v => v.size_label === 'One Size')?.id
+              ? { id: variants.find(v => v.size_label === 'One Size').id }
+              : {}),
+          }]
+        })()
 
     // Case-insensitive dedupe on (size_label, colour) — later entries win
     const seen = new Map()
@@ -170,6 +285,17 @@ export default function AddProduct() {
           })
           setBrandCarry((res.data.own    ?? []).map(mapBrand))
           setBrandAll  ((res.data.global ?? []).map(mapBrand))
+        }
+      })
+      .catch(() => {})
+
+    // Fetch the merchant's saved low-stock warning threshold (same setting Inventory.jsx uses),
+    // so this page's stock-quantity cells flag "low" consistently with the Inventory table.
+    apiFetch(`${API}/boutique/inventory/settings`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && Number.isFinite(res.data?.low_stock_warning_threshold)) {
+          setWarnThreshold(res.data.low_stock_warning_threshold)
         }
       })
       .catch(() => {})
@@ -212,7 +338,7 @@ export default function AddProduct() {
         setVendorSku(p.vendor_sku ?? '')
         setVendorEmail(p.vendor_email ?? '')
         setVendorLeadTime(p.vendor_lead_time ?? '1–2 weeks')
-        setBarcodeFormat(p.barcode_format ?? 'EAN-13 (European standard)')
+        setBarcodeFormat((p.barcode_format ?? 'ean13').toLowerCase())
         setBarcodeValue(p.barcode ?? '')
         setWholesaleDiscount(p.wholesale_price ?? '')
         setWholesaleMinQty(p.wholesale_min_qty ?? '')
@@ -221,19 +347,13 @@ export default function AddProduct() {
         setShippingCost(p.shipping_duty ?? '')
         setDesignedInItaly(p.designed_in_italy ?? true)
         setInitialCategoryPath(p.category_path ?? null)
-
-        // Also seed category state so saveChanges has the value
-        if (p.category_path) {
-          const parts = p.category_path.split(' > ')
-          setCategory({
-            l1: parts[0] ?? null,
-            l2: parts[1] ?? null,
-            l3: parts[2] ?? null,
-            l4: [],
-          })
-        }
+        setInitialStyleSlugs(p.style_slugs ?? null)
+        setListedOnline(p.returns_listed_online ?? true)
+        setReturnsClassId(p.returns_class ?? DEFAULT_CLASS_ID)
+        setClassMode(p.returns_class_mode ?? 'suggested')
+        setPolicyOverrideId(p.returns_policy_override_id ?? null)
         setEditLoaded(true)
-
+        setSizeChart(p.size_chart ?? null)
         // Restore brand
         if (p.brand_id && p.brand_name) {
           setSelectedBrand({ id: p.brand_id, name: p.brand_name, isOwn: false })
@@ -242,7 +362,7 @@ export default function AddProduct() {
         }
 
         // Build sizes, colours, stockData from variants
-        const existingSizes = [...new Set((p.variants ?? []).map(v => v.size_label))]
+        const existingSizes = sortSizeLabels([...new Set((p.variants ?? []).map(v => v.size_label))])
           .map(s => ({ size: s }))
 
         const existingColours = [...new Map(
@@ -312,21 +432,39 @@ export default function AddProduct() {
         cost_price:              costPrice         ? parseFloat(costPrice)         : null,
         shipping_duty:           shippingCost      ? parseFloat(shippingCost)      : null,
         brand_id:                selectedBrand.isOwn ? null : selectedBrand.id,
-        category_path:           category ? [category.l1, category.l2, category.l3].filter(Boolean).join(' > ') : null,
-        style_slugs:             category?.l4 ?? [],
-        variants:                buildVariantsPayload({ includeIds: false })
+        category_path:           category ? [category.l1, category.l2, category.l3].filter(Boolean).join(' / ') : null,
+        category_type_id:        category?.typeId ?? null,
+        category_style_id:       category?.styleId ?? null,
+        category_style_slug:     category?.styleSlug ?? null,
+        //style_slugs:             category?.l4 ?? [],
+        returns_listed_online:      listedOnline,
+        returns_class:              returnsClassId,
+        returns_class_mode:         classMode,
+        returns_policy_override_id: policyOverrideId,
+        variants:                buildVariantsPayload({ includeIds: false }),
+        size_chart:              sizeChart || null,
       })
     }).then(r => r.json())
 
     if (res.success) {
-      setProductId(res.data?.product?.id ?? null)
+      const newId = res.data?.product?.id ?? null
+      setProductId(newId)
+      setVariants(res.data?.product?.variants ?? [])
       setPublished(true)
-      return res.data?.product?.id ?? null
+      return newId
     }
     return null
   }
 
   function saveChanges() {
+    const missing = []
+    if (!productName.trim()) missing.push(t('add_product.validation.name_required'))
+    if (!sku.trim())         missing.push(t('add_product.validation.sku_required'))
+    if (!retailPrice)        missing.push(t('add_product.validation.price_required'))
+    if (missing.length > 0) {
+      show(t('add_product.validation.missing', { fields: missing.join(', ') }))
+      return
+    }
     apiFetch(`${API}/boutique/products/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -355,14 +493,22 @@ export default function AddProduct() {
         cost_price:              costPrice         ? parseFloat(costPrice)         : null,
         shipping_duty:           shippingCost      ? parseFloat(shippingCost)      : null,
         category_path: category
-          ? [category.l1, category.l2, category.l3].filter(Boolean).join(' > ')
+          ? [category.l1, category.l2, category.l3].filter(Boolean).join(' / ')
           : initialCategoryPath ?? null,
-        style_slugs:             category?.l4 ?? [],
-        variants:                buildVariantsPayload({ includeIds: true })
+        category_type_id:        category?.typeId ?? null,
+        category_style_id:       category?.styleId ?? null,
+        category_style_slug:     category?.styleSlug ?? null,
+        //style_slugs:             category?.l4 ?? [],
+        returns_listed_online:      listedOnline,
+        returns_class:              returnsClassId,
+        returns_class_mode:         classMode,
+        returns_policy_override_id: policyOverrideId,
+        variants:                buildVariantsPayload({ includeIds: true }),
+        size_chart:              sizeChart || null,
       })
 
     }).then(r => r.json()).then(res => {
-      if (!res.success) return
+      if (!res.success) { show(res.message || 'Failed to save changes'); return }
 
       // Save stock changes via inventory API
       if (stockData.length > 0 && variants.length > 0) {
@@ -391,6 +537,20 @@ export default function AddProduct() {
   function selectBrand(b) { setSelectedBrand(b); setBrandOpen(false) }
 
   const pickupPrice = (parseFloat(retailPrice) * (1 - parseFloat(pickupDiscount || 0) / 100)).toFixed(2)
+
+  // ─── Returns policy resolution (product override > returns class > store default) ───
+  const rpSuggestion = suggestClass({ division: category?.l1, type: category?.l2 })
+  const rpClassMap   = buildClassMap(rpClasses)
+  const rpGetPolicy  = (pid) => findById(rpPolicies, pid)
+  const rpResolved   = resolvePolicy({
+    overridePolicyId: policyOverrideId,
+    classId:          returnsClassId,
+    classMap:         rpClassMap,
+    storeDefault:     rpDefaultId,
+    online:           listedOnline,
+    getPolicy:        rpGetPolicy,
+  })
+  const rpResolvedPolicy = rpGetPolicy(rpResolved.policyId)
 
   return (
     <>
@@ -432,6 +592,11 @@ export default function AddProduct() {
                 {t('add_product.published_msg')}
               </span>
               <button className="btn btn-primary" onClick={async () => {
+                const missing = []
+                if (!productName.trim()) missing.push(t('add_product.validation.name_required'))
+                if (!sku.trim())         missing.push(t('add_product.validation.sku_required'))
+                if (!retailPrice)        missing.push(t('add_product.validation.price_required'))
+                if (missing.length > 0) { show(t('add_product.validation.missing', { fields: missing.join(', ') })); return }
                 // Save latest form state to the just-created product before leaving
                 const res = await apiFetch(`${API}/boutique/products/${productId}`, {
                   method: 'PUT',
@@ -461,11 +626,19 @@ export default function AddProduct() {
                     cost_price:              costPrice         ? parseFloat(costPrice)         : null,
                     shipping_duty:           shippingCost      ? parseFloat(shippingCost)      : null,
                     brand_id:                selectedBrand.isOwn ? null : selectedBrand.id,
-                    category_path:           category ? [category.l1, category.l2, category.l3].filter(Boolean).join(' > ') : null,
-                    style_slugs:             category?.l4 ?? [],
+                    category_path:           category ? [category.l1, category.l2, category.l3].filter(Boolean).join(' / ') : initialCategoryPath ?? null,
+                    category_type_id:        category?.typeId ?? null,
+                    category_style_id:       category?.styleId ?? null,
+                    category_style_slug:     category?.styleSlug ?? null,
+                    //style_slugs:             category?.l4 ?? [],
+                    returns_listed_online:      listedOnline,
+                    returns_class:              returnsClassId,
+                    returns_class_mode:         classMode,
+                    returns_policy_override_id: policyOverrideId,
                     variants:                buildVariantsPayload({ includeIds: true })
                   })
                 }).then(r => r.json())
+                 if (!res.success) { show(res.message || 'Failed to save changes'); return }
 
                 // Also push stock updates via inventory endpoint
                 if (res.success && stockData.length > 0 && variants.length > 0) {
@@ -562,8 +735,15 @@ export default function AddProduct() {
             <div className="form-group">
               <label className="form-lbl">{t('add_product.details.category_label')}</label>
               <CategorySelector
-                onChange={(cat) => setCategory(cat)}
+                onChange={(cat) => {
+                  setCategory(cat)
+                  if (classMode === 'suggested') {
+                    setReturnsClassId(suggestClass({ division: cat?.l1, type: cat?.l2 }).classId)
+                  }
+                }}
                 initialCategory={initialCategoryPath}
+                initialStyleSlugs={initialStyleSlugs}
+                onNotFound={() => setShowCatRequest(true)}
               />
               <div className="form-hint">{t('add_product.details.category_hint')}</div>
             </div>
@@ -666,7 +846,7 @@ export default function AddProduct() {
               )}
             </div>
 
-            <div className="ap-founder-row" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16 }}>
+            <div className="ap-founder-row">
               <div>
                 <div className="ap-founder-title">{t('add_product.pricing.founder_card')}</div>
                 <div className="ap-founder-sub">{t('add_product.pricing.founder_sub')}</div>
@@ -685,20 +865,11 @@ export default function AddProduct() {
           />
 
           {/* AI Model Studio — extracted to standalone component */}
-          <AIModelStudio
+          <ProductAIModelStudio
             productId={productId}
             refreshKey={photoRefreshKey}
             onPhotosChange={bumpPhotoRefresh}
           />
-
-          {/* Virtual Try-On */}
-          <div className="card">
-            <div className="card-hdr">
-              <div className="card-title">Virtual <em>Try-On</em></div>
-              <div className="ap-card-sub">Front / back / side reference photos per variant</div>
-            </div>
-            <VirtualTryOn productId={productId} />
-          </div>
         </div>
 
         {/* ══ RIGHT COLUMN ══ */}
@@ -708,6 +879,8 @@ export default function AddProduct() {
               category={category}
               initialSizes={isEditMode ? sizes : undefined}
               onRowsChange={(s) => setSizes(s)}
+              onSizeChartChange={(sc) => setSizeChart(sc)}
+              initialSizeChart={isEditMode ? sizeChart : undefined}
               skipCategoryReset={isEditMode && editLoaded}
             />
           </div>
@@ -725,6 +898,7 @@ export default function AddProduct() {
             onStockChange={(s) => setStockData(s)}
             initialStock={stockData}
             variants={variants}
+            warnThreshold={warnThreshold}
           />
 
           {/* Inventory & Costing */}
@@ -819,18 +993,27 @@ export default function AddProduct() {
                 <select
                   className="form-select"
                   value={barcodeFormat}
-                  onChange={e => setBarcodeFormat(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value
+                    setBarcodeFormat(val)
+                    if (!val) setBarcodeValue('')
+                  }}
                 >
                   <option value="">No barcode</option>
-                  <option value="EAN13">EAN-13 (European standard)</option>
-                  <option value="EAN8">EAN-8</option>
+                  <option value="ean13">EAN-13 (European standard)</option>
+                  <option value="code128">Code 128</option>
                 </select>
               </div>
               <div className="form-group ap-no-mb">
                 <label className="form-lbl">Barcode Value</label>
                 <div className="ap-barcode-input-row">
                   <input className="form-input" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)} />
-                  <button className="btn btn-sm btn-outline" title="Auto-generate">
+                  <button
+                    className="btn btn-sm btn-outline"
+                    title="Auto-generate"
+                    disabled={!barcodeFormat}
+                    onClick={() => setBarcodeValue(generateBarcodeValue(barcodeFormat))}
+                  >
                     <span className="material-symbols-outlined">auto_awesome</span>
                   </button>
                 </div>
@@ -840,7 +1023,7 @@ export default function AddProduct() {
               <div className="ap-barcode-preview-inner">
                 <div className="ap-barcode-preview-lbl">Barcode Preview</div>
                 <div className="ap-barcode-number">{barcodeValue || '—'}</div>
-                <div className="ap-barcode-type">{barcodeFormat.split(' ')[0]}</div>
+                <div className="ap-barcode-type">{BARCODE_TYPE_LABEL[barcodeFormat] ?? ''}</div>
               </div>
               <div className="ap-barcode-actions">
                 <button className="btn btn-sm btn-outline ap-nowrap" onClick={() => setShowPrintTag(true)}>
@@ -892,13 +1075,132 @@ export default function AddProduct() {
                 <option value="draft">{t('add_product.visibility.status_draft')}</option>
               </select>
             </div>
-            <div className="ap-toggle-row" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, padding:'12px 0', borderBottom:'1px solid var(--mist)' }}>
+            <div className="ap-toggle-row ap-toggle-border">
               <div className="ap-toggle-label">{t('add_product.visibility.reserve')}</div>
               <Toggle on={reserveOn} onToggle={() => setReserveOn(v => !v)} />
             </div>
-            <div className="ap-toggle-row" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, padding:'12px 0' }}>
+            <div className="ap-toggle-row">
               <div className="ap-toggle-label">{t('add_product.visibility.shipping')}</div>
               <Toggle on={shippingOn} onToggle={() => setShippingOn(v => !v)} />
+            </div>
+          </div>
+
+          {/* Returns */}
+          <div className="card">
+            <div className="card-hdr">
+              <div className="card-title">{t('add_product.returns.title_a', 'Returns')} <em>{t('add_product.returns.title_b', 'Policy')}</em></div>
+            </div>
+
+            <div className="ap-toggle-row ap-toggle-border">
+              <div>
+                <div className="ap-toggle-label">{t('add_product.returns.online_label', 'Listed online')}</div>
+                <div className="form-hint">
+                  {listedOnline
+                    ? t('add_product.returns.online_hint_on', 'Distance sale: 14-day minimum enforced.')
+                    : t('add_product.returns.online_hint_off', 'In-store only: boutique sets its own goodwill policy.')}
+                </div>
+              </div>
+              <Toggle on={listedOnline} onToggle={() => setListedOnline(v => !v)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-lbl">{t('add_product.returns.class_label', 'Returns class')}</label>
+              <select
+                className="form-select"
+                value={returnsClassId}
+                onChange={e => { setReturnsClassId(e.target.value); setClassMode('manual') }}
+              >
+                {rpClasses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.en}{rpSuggestion.classId === c.id ? ` (${t('add_product.returns.suggested_tag', 'suggested')})` : ''}
+                  </option>
+                ))}
+              </select>
+              <div className="form-hint">
+                {rpSuggestion.reasonEn
+                  ? `${t('add_product.returns.suggest_from', 'Suggested class')}: ${findById(rpClasses, rpSuggestion.classId)?.en} · ${rpSuggestion.reasonEn}`
+                  : t('add_product.returns.suggest_none', 'No special signal from this category. Defaulting to Standard goods.')}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-lbl">{t('add_product.returns.policy_label', 'Returns policy')}</label>
+              <div className="rp-row" style={{ marginBottom: 0 }}>
+                <div className="rp-row-body">
+                  <div className="rp-row-name">{rpResolvedPolicy ? rpResolvedPolicy.en : '—'}</div>
+                  <div className="rp-row-desc">
+                    {rpResolved.source === 'product'
+                      ? t('add_product.returns.src_product', 'Overridden · this product')
+                      : rpResolved.source === 'class'
+                        ? `${t('add_product.returns.src_class', 'From returns class')} · ${findById(rpClasses, returnsClassId)?.en}`
+                        : t('add_product.returns.src_store', 'Inherited · store default')}
+                    {rpResolved.fallback ? ` (${t('add_product.returns.online_fallback', 'online fallback')})` : ''}
+                  </div>
+                </div>
+                <button type="button" className="btn btn-sm btn-outline" onClick={() => setOverrideOpen(v => !v)}>
+                  {overrideOpen ? t('common.close', 'Close') : t('add_product.returns.override_btn', 'Override')}
+                </button>
+              </div>
+
+              <div className="rp-row-meta" style={{ marginTop: 10 }}>
+                <span style={rpResolved.source === 'store' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
+                  {t('add_product.returns.trail_store', 'Store default')}
+                </span>
+                {' › '}
+                <span style={rpResolved.source === 'class' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
+                  {t('add_product.returns.trail_class', 'Returns class')}
+                </span>
+                {' › '}
+                <span style={rpResolved.source === 'product' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
+                  {t('add_product.returns.trail_product', 'This product')}
+                </span>
+              </div>
+
+              {overrideOpen && (
+                <div style={{ marginTop: 12 }}>
+                  <div
+                    className={`rp-opt${policyOverrideId === null ? ' sel' : ''}`}
+                    onClick={() => setPolicyOverrideId(null)}
+                  >
+                    <div className="rp-opt-radio" />
+                    <div className="rp-opt-body">
+                      <div className="rp-opt-name">{t('add_product.returns.no_override', 'No override — use resolved policy')}</div>
+                      <div className="rp-opt-sub">{t('add_product.returns.no_override_sub', 'Follows the returns class, or the store default.')}</div>
+                    </div>
+                  </div>
+                  {rpPolicies.map(p => {
+                    const blocked = listedOnline && !isLawfulOnline(p)
+                    const sel = p.id === policyOverrideId
+                    return (
+                      <div
+                        key={p.id}
+                        className={`rp-opt${sel ? ' sel' : ''}${blocked ? ' blocked' : ''}`}
+                        onClick={() => !blocked && setPolicyOverrideId(p.id)}
+                      >
+                        <div className="rp-opt-radio" />
+                        <div className="rp-opt-body">
+                          <div className="rp-opt-name">{p.en}</div>
+                          <div className="rp-opt-sub">{p.none ? t('returns_policy.window_none', 'No returns') : `${p.days} ${t('returns_policy.days', 'days')}`}</div>
+                        </div>
+                        {blocked && (
+                          <div className="rp-opt-badge">
+                            <span className="material-symbols-outlined">lock</span>
+                            {t('add_product.returns.unavailable_online', 'Unavailable online')}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="alert alert-info rp-callout">
+              <span className="material-symbols-outlined">lightbulb</span>
+              <span>
+                <strong>{t('add_product.returns.callout_strong', 'Why locked, not hidden:')}</strong>{' '}
+                {t('add_product.returns.callout_body', "Primo won't let you pick a policy that would be unlawful for the current channel — those options are grayed out and locked instead of silently accepted. Turn the channel off and they become available for in-store use.")}
+              </span>
             </div>
           </div>
         </div>
@@ -907,7 +1209,7 @@ export default function AddProduct() {
       {/* Add Brand Modal */}
       {showAddBrand && (
         <div className="modal-backdrop" onClick={() => setShowAddBrand(false)}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ overflowY:'auto', maxHeight:'90vh' }}>
+          <div className="modal modal-sm ap-brand-modal-scroll" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Add a <em>Brand</em></div>
               <div className="modal-close" onClick={() => setShowAddBrand(false)}>
@@ -916,20 +1218,20 @@ export default function AddProduct() {
             </div>
 
             {brandSuccess ? (
-              <div style={{ textAlign:'center', padding:'20px 0' }}>
-                <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-                <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:22, marginBottom:6 }}>
-                  Brand <em style={{ color:'var(--gold)' }}>Submitted</em>
+              <div className="ap-brand-success">
+                <div className="ap-brand-success-emoji">✅</div>
+                <div className="ap-brand-success-title">
+                  Brand <em>Submitted</em>
                 </div>
-                <div style={{ fontSize:11, color:'var(--stone)', marginBottom:20 }}>
+                <div className="ap-brand-success-sub">
                   <strong>{newBrand.name}</strong> has been added to your Boutique.
                 </div>
-                <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }}
+                <button className="btn btn-primary ap-brand-success-btn"
                   onClick={() => { setShowAddBrand(false); setBrandSuccess(false) }}>Done</button>
               </div>
             ) : (
               <>
-                <div className="alert alert-info" style={{ marginBottom:14 }}>
+                <div className="alert alert-info ap-mb14">
                   <span className="material-symbols-outlined">info</span>
                   New brands are reviewed by Mi Italia within 24h.
                 </div>
@@ -995,6 +1297,76 @@ export default function AddProduct() {
                     }}>
                     <span className="material-symbols-outlined">send</span>
                     {brandSubmitting ? 'Submitting…' : 'Submit Brand'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showCatRequest && (
+        <div className="modal-backdrop" onClick={() => setShowCatRequest(false)}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Request New <em>Category</em></div>
+              <div className="modal-close" onClick={() => setShowCatRequest(false)}>
+                <span className="material-symbols-outlined">close</span>
+              </div>
+            </div>
+
+            {catRequestSuccess ? (
+              <div className="ap-brand-success">
+                <div className="ap-brand-success-emoji">✅</div>
+                <div className="ap-brand-success-title">Request <em>Sent</em></div>
+                <div className="ap-brand-success-sub">Mi Italia will review your request and get back to you.</div>
+                <button className="btn btn-primary ap-brand-success-btn"
+                  onClick={() => {
+                    setShowCatRequest(false); setCatRequestSuccess(false)
+                    setCatRequestName(''); setCatRequestExample(''); setCatRequestNote('')
+                  }}>Done</button>
+              </div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-lbl">Category Name</label>
+                  <input className="form-input" placeholder="e.g. Home Fragrance"
+                    value={catRequestName} onChange={e => setCatRequestName(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-lbl">Example Product <span className="sup-optional">(optional)</span></label>
+                  <input className="form-input" placeholder="e.g. Fico d'India diffuser 200ml"
+                    value={catRequestExample} onChange={e => setCatRequestExample(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-lbl">Message</label>
+                  <textarea className="form-textarea" rows={4}
+                    placeholder="Why do you need this category?"
+                    value={catRequestNote} onChange={e => setCatRequestNote(e.target.value)} />
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-primary" disabled={!catRequestName.trim() || catRequestSubmitting}
+                    onClick={async () => {
+                      if (!catRequestName.trim()) return
+                      setCatRequestSubmitting(true)
+                      try {
+                        // L1 only for now — L2 (parentCategoryId) and L3 (parentTypeId) requests
+                        // hit this same endpoint once their trigger screens exist.
+                        const res = await apiFetch(`${API}/boutique/category-requests`, {
+                          method: 'POST',
+                          body: JSON.stringify({
+                            level:           'L1',
+                            proposedName:    catRequestName.trim(),
+                            exampleProduct:  catRequestExample.trim() || undefined,
+                            note:            catRequestNote.trim() || undefined,
+                          }),
+                        }).then(r => r.json())
+                        if (res?.success) setCatRequestSuccess(true)
+                      } catch {}
+                      finally { setCatRequestSubmitting(false) }
+                    }}>
+                    <span className="material-symbols-outlined">send</span>
+                    {catRequestSubmitting ? 'Sending…' : 'Send'}
                   </button>
                 </div>
               </>

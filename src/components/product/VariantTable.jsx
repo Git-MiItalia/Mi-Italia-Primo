@@ -8,7 +8,7 @@ function makeEmptyRow(cols) {
 
 function schemaToVariantCols(schemaCols) {
   return schemaCols.map((label, i) => ({
-    key:      label.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    key:      label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''),
     label,
     editable: i > 0,
   }))
@@ -38,7 +38,7 @@ function sizesToRows(initialSizes, cols) {
   })
 }
 
-export default function VariantTable({ category, initialSizes, onRowsChange }) {
+export default function VariantTable({ category, initialSizes, onRowsChange, onSizeChartChange, initialSizeChart, skipCategoryReset }) {
   const { t } = useTranslation()
 
   const l1 = category?.l1 ?? null
@@ -47,6 +47,37 @@ export default function VariantTable({ category, initialSizes, onRowsChange }) {
 
   const schema     = getSchema(l1, l2, l3)
   const activeCols = schema ? schemaToVariantCols(schema.cols) : []
+
+  // Build API-format size_chart from current cols + rows
+  function buildSizeChartPayload(cols, chartRows) {
+    if (!cols?.length || !chartRows?.length) return null
+    // Exclude the identifying first column by position, not by literal key —
+    // most schemas key it 'size', but Shoes schemas key it 'uk' (its label is
+    // "UK"), so filtering on the string 'size' left 'uk' in `columns` too.
+    const columns = cols
+      .slice(1)
+      .map(c => ({ key: c.key, label: c.label }))
+    if (columns.length === 0) return null
+    return {
+      unit: 'cm',
+      columns,
+      rows: chartRows.map(r => {
+        const row = { size: r.size ?? r[cols[0]?.key] ?? '' }
+        columns.forEach(c => { row[c.key] = r[c.key] ?? '' })
+        return row
+      }),
+    }
+  }
+
+  function notifySizeChart(cols, chartRows) {
+    if (onSizeChartChange) onSizeChartChange(buildSizeChartPayload(cols, chartRows))
+  }
+
+  // Guarantee a `.size` field regardless of the schema's first column key
+  // (e.g. Shoes schemas key their first column 'uk', not 'size').
+  function withSize(cols, row) {
+    return { ...row, size: row.size ?? row[cols?.[0]?.key] ?? '' }
+  }
 
   const [rows,    setRows]    = useState([])
   const [editing, setEditing] = useState(false)
@@ -62,16 +93,14 @@ export default function VariantTable({ category, initialSizes, onRowsChange }) {
     prevCatRef.current = { l1, l2, l3 }
 
     if (!schema) {
-      // No schema — if we have initialSizes and haven't initialised yet, use them
-      if (!initialised.current && initialSizes?.length) {
-        // Build minimal single-col rows
-        const minimalCols = [{ key:'size', label:'Size', editable:false }]
-        const r = sizesToRows(initialSizes, minimalCols)
-        setRows(r)
-        if (onRowsChange) onRowsChange(r)
-        initialised.current = true
-      } else if (catChanged) {
+      // schema is only ever null while category (l1/l2/l3) hasn't fully resolved
+      // yet — getSchema() falls back to ONE_SIZE for every fully-resolved
+      // category. Don't seed a degraded single-column fallback here (and don't
+      // lock `initialised`) — wait for a later render once category resolves
+      // and the schema-aware branch below can restore full-fidelity rows.
+      if (catChanged) {
         setRows([]); setEditing(false); setNewRow(null)
+        notifySizeChart([], [])
       }
       return
     }
@@ -79,25 +108,46 @@ export default function VariantTable({ category, initialSizes, onRowsChange }) {
     const cols = schemaToVariantCols(schema.cols)
 
     if (!initialised.current && initialSizes?.length) {
-      // Edit mode — seed rows from existing sizes
-      const r = sizesToRows(initialSizes, cols)
-      setRows(r)
-      if (onRowsChange) onRowsChange(r)
+      // Edit mode — seed rows from existing sizes, use API size_chart if available
+      if (initialSizeChart?.columns?.length && initialSizeChart?.rows?.length) {
+        // Reconstruct rows from the API size_chart. Saved chart rows always
+        // store the identifying value under the canonical 'size' key, but the
+        // live render (`cols`, from the current schema) expects it under that
+        // schema's own first-column key (e.g. 'uk' for Shoes) — remap it here
+        // so it isn't dropped as an unrecognized field.
+        const apiRows = initialSizeChart.rows.map(r => {
+          const row = { [cols[0]?.key]: r.size ?? '' }
+          initialSizeChart.columns.forEach(c => { row[c.key] = r[c.key] ?? '' })
+          return row
+        })
+        setRows(apiRows)
+        if (onRowsChange) onRowsChange(apiRows.map(row => withSize(cols, row)))
+        notifySizeChart(cols, apiRows)
+      } else {
+        const r = sizesToRows(initialSizes, cols)
+        setRows(r)
+        if (onRowsChange) onRowsChange(r.map(row => withSize(cols, row)))
+        notifySizeChart(cols, r)
+      }
       initialised.current = true
-    } else if (catChanged) {
+    } else if (catChanged && !(skipCategoryReset && initialised.current)) {
       // Category was explicitly changed by user — load schema defaults
-      setRows(schemaToVariantRows(schema.rows, cols))
+      const r = schemaToVariantRows(schema.rows, cols)
+      setRows(r)
       setEditing(false)
       setNewRow(null)
+      notifySizeChart(cols, r)
       initialised.current = true
     } else if (!initialised.current) {
       // Add mode first load — use schema defaults
-      setRows(schemaToVariantRows(schema.rows, cols))
+      const r = schemaToVariantRows(schema.rows, cols)
+      setRows(r)
       setEditing(false)
       setNewRow(null)
+      notifySizeChart(cols, r)
       initialised.current = true
     }
-  }, [l1, l2, l3],initialSizes)
+  }, [l1, l2, l3])
 
   function startEditing() {
     setNewRow(makeEmptyRow(activeCols))
@@ -126,7 +176,8 @@ export default function VariantTable({ category, initialSizes, onRowsChange }) {
         setRows(next)
       }
     }
-    if (onRowsChange) onRowsChange(next)
+    if (onRowsChange) onRowsChange(next.map(row => withSize(activeCols, row)))
+    notifySizeChart(activeCols, next)
     setEditing(false)
     setNewRow(null)
   }
@@ -153,7 +204,10 @@ export default function VariantTable({ category, initialSizes, onRowsChange }) {
         <div className="card-title">Sizes</div>
         {!editing ? (
           <div className="vt-hdr-actions">
-            <button className="btn btn-sm btn-primary" onClick={() => { if (onRowsChange) onRowsChange(rows) }}>
+            <button className="btn btn-sm btn-primary" onClick={() => {
+              if (onRowsChange) onRowsChange(rows.map(row => withSize(activeCols, row)))
+              notifySizeChart(activeCols, rows)
+            }}>
               <span className="material-symbols-outlined">check</span>Save Sizes
             </button>
             <button className="btn btn-sm btn-outline" onClick={startEditing}>

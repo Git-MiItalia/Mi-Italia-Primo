@@ -1,102 +1,89 @@
-import { useState,useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { useCategoryTree, findDivision, findType, findStyle, getAttrNames } from '../../lib/categoryTree'
 
-const CAT_DATA = {
-  "Women's": {
-    icon: 'female',
-    types: {
-      'Dresses':     { styles: ['Mini Dress','Midi Dress','Maxi Dress','Wrap Dress','Shirt Dress','Slip Dress','Bodycon','Cocktail Dress'], attrs: ['Casual','Smart Casual','Evening','Resort','Bridal','Workwear'] },
-      'Tops':        { styles: ['Blouse','T-Shirt','Knitwear','Bodysuit','Corset','Camisole','Polo'],                                     attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Trousers':    { styles: ['Straight Leg','Wide Leg','Tailored','Cropped','Joggers','Shorts','Flared'],                              attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Skirts':      { styles: ['Mini','Midi','Maxi','Pleated','A-Line','Pencil','Wrap'],                                                 attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Outerwear':   { styles: ['Coat','Jacket','Blazer','Gilet','Trench','Puffer','Cape'],                                               attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Knitwear':    { styles: ['Sweater','Cardigan','Turtleneck','Vest','Twin Set'],                                                     attrs: ['Casual','Smart Casual','Resort'] },
-      'Swimwear':    { styles: ['Bikini','One-Piece','Tankini','Cover-Up'],                                                               attrs: ['Resort','Beach','Sport'] },
-      'Accessories': { styles: ['Bag','Shoes','Jewellery','Belt','Scarf','Sunglasses','Hat'],                                             attrs: ['Casual','Evening','Resort'] },
-    }
-  },
-  "Men's": {
-    icon: 'male',
-    types: {
-      'Tops':        { styles: ['Shirt','T-Shirt','Polo','Knitwear','Sweatshirt'],                      attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Trousers':    { styles: ['Tailored','Chinos','Denim','Shorts','Cargo'],                          attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Outerwear':   { styles: ['Coat','Jacket','Blazer','Gilet','Vest','Puffer','Trench'],             attrs: ['Casual','Smart Casual','Evening','Workwear'] },
-      'Suits':       { styles: ['Two-Piece','Three-Piece','Dinner Suit','Separates'],                   attrs: ['Business','Evening','Formal'] },
-      'Knitwear':    { styles: ['Sweater','Cardigan','Turtleneck','Vest'],                              attrs: ['Casual','Smart Casual'] },
-      'Accessories': { styles: ['Bag','Shoes','Tie','Belt','Scarf','Cap','Watch Strap'],                attrs: ['Casual','Evening','Formal'] },
-    }
-  },
-  'Unisex': {
-    icon: 'person',
-    types: {
-      'Streetwear':  { styles: ['Hoodie','Sweatshirt','Joggers','Shorts','T-Shirt'], attrs: ['Casual','Sport'] },
-      'Outerwear':   { styles: ['Jacket','Coat','Puffer','Gilet'],                  attrs: ['Casual','Outdoor'] },
-      'Accessories': { styles: ['Bag','Cap','Scarf','Belt','Shoes'],                attrs: ['Casual','Sport'] },
-    }
-  },
-  'Vintage': {
-    icon: 'history',
-    types: {
-      "Women's Vintage": { styles: ['Dress','Blouse','Skirt','Jacket','Coat','Trousers'], attrs: ['70s','80s','90s','Y2K'] },
-      "Men's Vintage":   { styles: ['Shirt','Jacket','Coat','Trousers','Knitwear'],       attrs: ['70s','80s','90s','Military'] },
-      'Unisex Vintage':  { styles: ['Denim','Sportswear','Accessories'],                  attrs: ['70s','80s','90s'] },
-    }
-  },
-  'Kids': {
-    icon: 'child_care',
-    types: {
-      'Girls':  { styles: ['Dress','Top','Trousers','Outerwear','Accessories'], attrs: ['0-2y','3-6y','7-12y'] },
-      'Boys':   { styles: ['Top','Trousers','Outerwear','Accessories'],         attrs: ['0-2y','3-6y','7-12y'] },
-      'Unisex': { styles: ['Top','Trousers','Outerwear','Accessories'],         attrs: ['0-2y','3-6y','7-12y'] },
-    }
-  }
-}
+function initState() { return { l1: null, l2: null, l3: null, l4: [], typeId: null, styleId: null, styleSlug: null } }
 
-const L1_KEYS = Object.keys(CAT_DATA)
-
-function initState() { return { l1:null, l2:null, l3:null, l4:[] } }
-
-function parseInitial(categoryPath) {
+function parseInitial(tree, categoryPath, styleSlugs) {
   if (!categoryPath) return { state: initState(), panel: 'l1', collapsed: false }
-  const parts = categoryPath.split(' > ')
-  const state = {
-    l1: parts[0] ?? null,
-    l2: parts[1] ?? null,
-    l3: parts[2] ?? null,
-    l4: [],
+  const parts = categoryPath.split(' / ')
+  const l1 = parts[0] ?? null
+  const l2 = parts[1] ?? null
+  const l3 = parts[2] ?? null
+
+  // Validate l1 exists in the live tree — if not, treat as empty to prevent crash
+  const l1Node = l1 ? findDivision(tree, l1) : null
+  if (l1 && !l1Node) return { state: initState(), panel: 'l1', collapsed: false }
+
+  // Validate l2 exists under l1
+  const l2Node = l2 ? findType(l1Node, l2) : null
+  if (l2 && l1 && !l2Node) {
+    return { state: { ...initState(), l1, l2: null, l3: null }, panel: 'l2', collapsed: false }
   }
-  const collapsed = !!parts[2]
-  const panel = parts[2] ? 'attrs' : parts[1] ? 'l3' : parts[0] ? 'l2' : 'l1'
+
+  const l3Node = l3 ? findStyle(l2Node, l3) : null
+  const state = {
+    l1,
+    l2,
+    l3,
+    l4: Array.isArray(styleSlugs) ? [...styleSlugs] : [],
+    typeId:    l2Node?.id ?? null,
+    // styleId is null until the backend adds an id to L3 styles — picked up
+    // automatically the moment it appears, no frontend change needed then.
+    styleId:   l3Node?.id ?? null,
+    styleSlug: l3Node?.slug ?? null,
+  }
+  const collapsed = !!l3
+  const panel = l3 ? 'attrs' : l2 ? 'l3' : l1 ? 'l2' : 'l1'
   return { state, panel, collapsed }
 }
 
 
-export default function CategorySelector({ onChange, initialCategory }) {
-  const parsed = parseInitial(initialCategory)
+export default function CategorySelector({ onChange, initialCategory, initialStyleSlugs, onNotFound }) {
+  const { tree, loading, error } = useCategoryTree()
 
-  const [state,     setState]     = useState(parsed.state)
-  const [panel,     setPanel]     = useState(parsed.panel)
-  const [collapsed, setCollapsed] = useState(parsed.collapsed)
+  const [state, setState]         = useState(initState())
+  const [panel, setPanel]         = useState('l1')
+  const [collapsed, setCollapsed] = useState(false)
+  const [initRef, setInitRef]     = useState(null)
 
+  // Re-sync from props once the live tree has loaded — but only fire onChange
+  // once per distinct initialCategory value to avoid overwriting AddProduct state
   useEffect(() => {
+    if (loading) return
     if (!initialCategory) return
-    const parsed = parseInitial(initialCategory)
+    if (initRef === initialCategory) return
+    const parsed = parseInitial(tree, initialCategory, initialStyleSlugs)
     setState(parsed.state)
     setPanel(parsed.panel)
     setCollapsed(parsed.collapsed)
+    setInitRef(initialCategory)
     if (onChange) onChange(parsed.state)
-  }, [initialCategory])
+  }, [loading, tree, initialCategory, initialStyleSlugs])
 
-  function getTypes()    { return state.l1 ? Object.keys(CAT_DATA[state.l1].types) : [] }
-  function getStyles()   { return (state.l1 && state.l2) ? CAT_DATA[state.l1].types[state.l2].styles : [] }
-  function getAttrs()    { return (state.l1 && state.l2) ? CAT_DATA[state.l1].types[state.l2].attrs  : [] }
+  // Safe accessors — guard against missing entries in the live tree
+  function getDivisionNode() { return state.l1 ? findDivision(tree, state.l1) : null }
+  function getTypeNode()     { return state.l2 ? findType(getDivisionNode(), state.l2) : null }
+  function getTypes()  { return getDivisionNode()?.types?.map(t => t.name) ?? [] }
+  function getStyles() { return getTypeNode()?.styles?.map(s => s.name) ?? [] }
+  function getAttrs()  { return getAttrNames(getTypeNode()) }
   function isSingle(arr) { return arr.length <= 5 }
   function notify(s)     { if (onChange) onChange(s) }
 
-  function selectL1(val) { const next = { l1:val, l2:null, l3:null, l4:[] }; setState(next); setPanel('l2'); notify(next) }
-  function selectL2(val) { const next = { ...state, l2:val, l3:null, l4:[] }; setState(next); setPanel('l3'); notify(next) }
+  function selectL1(val) { const next = { ...initState(), l1: val }; setState(next); setPanel('l2'); notify(next) }
+  function selectL2(val) {
+    const typeId = findType(getDivisionNode(), val)?.id ?? null
+    const next = { ...state, l2: val, l3: null, l4: [], typeId, styleId: null, styleSlug: null }
+    setState(next); setPanel('l3'); notify(next)
+  }
   function selectL3(val) {
-    const next = { ...state, l3:val, l4:[] }
-    setState(next); setPanel('attrs'); setCollapsed(true); notify(next)
+    const typeNode = findType(getDivisionNode(), state.l2)
+    const styleNode = findStyle(typeNode, val)
+    const next = { ...state, l3: val, l4: [], styleId: styleNode?.id ?? null, styleSlug: styleNode?.slug ?? null }
+    setState(next)
+    setPanel('attrs')
+    // Live API doesn't populate attrs today — skip the empty Occasion step
+    if (getAttrNames(typeNode).length === 0) setCollapsed(true)
+    notify(next)
   }
 
   function toggleAttr(val) {
@@ -107,26 +94,26 @@ export default function CategorySelector({ onChange, initialCategory }) {
 
   function goBack() {
     if (panel === 'l2') { setState(initState()); setPanel('l1') }
-    else if (panel === 'l3') { setState(s => ({ ...s, l2:null, l3:null, l4:[] })); setPanel('l2') }
-    else if (panel === 'attrs') { setState(s => ({ ...s, l3:null, l4:[] })); setPanel('l3') }
+    else if (panel === 'l3') { setState(s => ({ ...s, l2: null, l3: null, l4: [], typeId: null, styleId: null, styleSlug: null })); setPanel('l2') }
+    else if (panel === 'attrs') { setState(s => ({ ...s, l3: null, l4: [], styleId: null, styleSlug: null })); setPanel('l3') }
   }
 
   function goTo(level) {
     if (level === 0)      { setState(initState()); setPanel('l1'); setCollapsed(false) }
-    else if (level === 1) { setState(s => ({ ...s, l2:null, l3:null, l4:[] })); setPanel('l2'); setCollapsed(false) }
-    else if (level === 2) { setState(s => ({ ...s, l3:null, l4:[] })); setPanel('l3'); setCollapsed(false) }
+    else if (level === 1) { setState(s => ({ ...s, l2: null, l3: null, l4: [], typeId: null, styleId: null, styleSlug: null })); setPanel('l2'); setCollapsed(false) }
+    else if (level === 2) { setState(s => ({ ...s, l3: null, l4: [], styleId: null, styleSlug: null })); setPanel('l3'); setCollapsed(false) }
   }
 
-  function reset() { setState(initState()); setPanel('l1'); setCollapsed(false) }
+  function reset() { setState(initState()); setPanel('l1'); setCollapsed(false); notify(initState()) }
 
   const panelHdr = {
-    l1:    { icon:'apps',         text:'Gender / Division' },
-    l2:    { icon: state.l1 ? CAT_DATA[state.l1].icon : 'category', text: state.l1 ? `${state.l1} — Product Type` : 'Product Type' },
-    l3:    { icon:'style',        text: state.l2 ? `${state.l1} ${state.l2} — Style` : 'Style' },
-    attrs: { icon:'auto_awesome', text:'Occasion' },
-  }[panel] || { icon:'category', text:'Category' }
+    l1:    { icon: 'apps',         text: 'Gender / Division' },
+    l2:    { icon: getDivisionNode()?.icon || 'category', text: state.l1 ? `${state.l1} — Product Type` : 'Product Type' },
+    l3:    { icon: 'style',        text: state.l2 ? `${state.l1} ${state.l2} — Style` : 'Style' },
+    attrs: { icon: 'auto_awesome', text: 'Occasion' },
+  }[panel] || { icon: 'category', text: 'Category' }
 
-  const items       = { l1: L1_KEYS, l2: getTypes(), l3: getStyles() }[panel] || []
+  const items       = { l1: tree.map(c => c.name), l2: getTypes(), l3: getStyles() }[panel] || []
   const attrs       = getAttrs()
   const canGoBack   = panel !== 'l1'
   const resultPath  = [state.l1, state.l2, state.l3].filter(Boolean).join(' → ')
@@ -135,8 +122,11 @@ export default function CategorySelector({ onChange, initialCategory }) {
   return (
     <div>
       {/* Breadcrumb + Back button */}
-      <div className="cat-bc-nav" style={{ justifyContent:'space-between' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'wrap' }}>
+      <div className="cat-bc-nav">
+        <div className="cat-bc-crumbs">
+          {state.l3 && collapsed && (
+            <span className="cat-selected-label">Selected Category:</span>
+          )}
           {!state.l1 && <span className="cat-bc-crumb">Choose...</span>}
           {state.l1 && (
             <span
@@ -165,15 +155,25 @@ export default function CategorySelector({ onChange, initialCategory }) {
           )}
         </div>
 
-        {canGoBack && !collapsed && (
-          <span
-            onClick={goBack}
-            style={{ fontSize:10, fontWeight:600, color:'var(--stone)', cursor:'pointer', display:'flex', alignItems:'center', gap:3, flexShrink:0 }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize:13 }}>arrow_back</span>
-            Back
-          </span>
-        )}
+        <div className="cat-bc-nav-right">
+          {canGoBack && !collapsed && (
+            <span className="cat-bc-back" onClick={goBack}>
+              <span className="material-symbols-outlined">arrow_back</span>
+              Back
+            </span>
+          )}
+
+          {state.l3 && collapsed && (
+            <span className="cat-bc-change" onClick={reset}>Change</span>
+          )}
+
+          {onNotFound && (
+            <span className="cat-notfound-btn" onClick={onNotFound}>
+              <span className="material-symbols-outlined">search_off</span>
+              Category Not Found
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Drill-down panel */}
@@ -183,6 +183,8 @@ export default function CategorySelector({ onChange, initialCategory }) {
             <span className="material-symbols-outlined">{panelHdr.icon}</span>
             <span>{panelHdr.text}</span>
           </div>
+          {loading && <div className="cat-bc-hint">Loading categories…</div>}
+          {!loading && error && <div className="cat-bc-hint">Couldn't load categories. Please refresh.</div>}
           <div className={`cat-bc-grid${isSingle(items) ? ' col1' : ''}`}>
             {items.map(item => {
               const selected =
@@ -219,24 +221,11 @@ export default function CategorySelector({ onChange, initialCategory }) {
             ))}
           </div>
           <div className="cat-bc-hint">Helps surface this product in occasion-based filters in the app</div>
-          <div style={{ padding:'8px 12px', borderTop:'1px solid var(--mist)' }}>
-            <button className="btn btn-sm btn-primary" style={{ width:'100%', justifyContent:'center' }}
-              onClick={() => setCollapsed(true)}>
+          <div className="cat-done-wrap">
+            <button className="btn btn-sm btn-primary cat-done-btn" onClick={() => setCollapsed(true)}>
               <span className="material-symbols-outlined">check</span>Done
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Result strip */}
-      {state.l3 && collapsed && (
-        <div className="cat-result-strip" style={{ marginTop:6 }}>
-          <span className="material-symbols-outlined" style={{ fontSize:14, color:'var(--gold)' }}>category</span>
-          <div style={{ flex:1 }}>
-            <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)' }}>{resultPath}</div>
-            <div style={{ fontSize:12, fontWeight:600, color:'var(--cream)' }}>{resultFinal}</div>
-          </div>
-          <div style={{ fontSize:9, color:'var(--gold)', fontWeight:600, cursor:'pointer' }} onClick={reset}>Change</div>
         </div>
       )}
     </div>

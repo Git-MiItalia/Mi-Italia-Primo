@@ -2,10 +2,14 @@ import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import useLangStore from '../store/langStore'
+import PrintTagModal from '../components/product/PrintTagModal'
+
 
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
+const WEBSHOP_BASE = import.meta.env.VITE_WEBSHOP_URL 
 
 function imgSrc(url) {
   if (!url) return null
@@ -34,6 +38,7 @@ const AGE_FILTERS = [
 export default function Products() {
   const navigate      = useNavigate()
   const { t }         = useTranslation()
+  const lang          = useLangStore(s => s.lang)
 
   const [activeTab, setActiveTab]   = useState(0)
   const [selected, setSelected]     = useState(new Set())
@@ -43,6 +48,15 @@ export default function Products() {
   const [editingId, setEditingId]   = useState(null)
   const [editData, setEditData]     = useState({})
   const [filterAge, setFilterAge]   = useState('all')
+  const [menuOpen, setMenuOpen]             = useState(null)
+  const [dupModal, setDupModal]             = useState(null)
+  const [dupSku, setDupSku]                 = useState('')
+  const [dupLoading, setDupLoading]         = useState(false)
+  const [dupError, setDupError]             = useState('')
+  const [showPrintTag, setShowPrintTag]     = useState(false)
+  const [printTagProduct, setPrintTagProduct] = useState(null)
+  const [searchQuery, setSearchQuery]       = useState('')
+
 
   useEffect(() => {
     apiFetch(`${API}/boutique/products`)
@@ -52,7 +66,7 @@ export default function Products() {
         setTotal(res.data.total)
         setLoading(false)
       })
-  }, [])
+  }, [lang])
 
   const TABS = [
     `${t('products.tabs.all')} (${total})`,
@@ -86,9 +100,83 @@ export default function Products() {
     return acc
   }, {})
 
+  // ── Three-dot menu ──
+
+  function generateDupSku() {
+    const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+    return `DUP-${rand}`
+  }
+
+  function openDuplicate(product) {
+    setMenuOpen(null)
+    setDupSku(generateDupSku())
+    setDupError('')
+    setDupModal(product)
+  }
+
+  async function handleDuplicate() {
+    if (!dupSku.trim()) { setDupError('SKU is required'); return }
+    setDupLoading(true); setDupError('')
+    const res = await apiFetch(`${API}/boutique/products/${dupModal.id}/duplicate`, {
+      method: 'POST',
+      body: JSON.stringify({ sku: dupSku.trim() })
+    }).then(r => r.json()).catch(() => ({ success: false, message: 'Network error' }))
+    setDupLoading(false)
+    if (res.success) {
+      setDupModal(null)
+      // Refresh list
+      apiFetch(`${API}/boutique/products`).then(r => r.json()).then(r => {
+        setProducts(r.data.products ?? [])
+        setTotal(r.data.total)
+      })
+    } else {
+      setDupError(res.message ?? 'Failed to duplicate product')
+    }
+  }
+
+  async function openPrintTag(product) {
+    setMenuOpen(null)
+    // Fetch full product details for the modal
+    const res = await apiFetch(`${API}/boutique/products/${product.id}`).then(r => r.json()).catch(() => null)
+    if (!res?.success) return
+    const p = res.data
+    const parts = (p.category_path ?? '').split(' / ')
+    setPrintTagProduct({
+      product: {
+        name:        p.name,
+        sku:         p.sku ?? '',
+        retailPrice: parseFloat(p.retail_price) || 0,
+        madeIn:      p.made_in ?? 'Italy',
+        barcodeValue: p.barcode ?? '',
+        barcodeFormat: p.barcode_format ?? '',
+        vendorSku:   p.vendor_sku ?? '',
+      },
+      category: parts.length >= 3 ? { l1: parts[0], l2: parts[1], l3: parts[2], l4: p.style_slugs ?? [] } : null,
+      brand: p.brand_name ?? '',
+      sizes: (p.variants ?? []).map(v => ({ size: v.size_label })),
+      productId: p.id,
+    })
+    setShowPrintTag(true)
+  }
+
+  function openAsCustomer(product) {
+    setMenuOpen(null)
+    window.open(`${WEBSHOP_BASE}/${product.id}`, '_blank')
+  }
+
   const ageFilteredProducts = filterAge === 'all'
     ? visibleProducts
     : visibleProducts.filter(p => getAgeInfo(p)?.bracket === filterAge)
+
+  const searchedProducts = (() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return ageFilteredProducts
+    return ageFilteredProducts.filter(p =>
+      p.name?.toLowerCase().includes(q)
+      || p.sku?.toLowerCase().includes(q)
+      || p.brand_name?.toLowerCase().includes(q)
+    )
+  })()
 
   const deadStockItems = visibleProducts.filter(p => getAgeInfo(p)?.bracket === 'dead')
   const allSelected    = selected.size > 0 && selected.size === visibleProducts.length
@@ -203,9 +291,21 @@ export default function Products() {
             )
           })}
         </div>
-        <div className="prod-age-report" onClick={() => navigate('/reports')}>
-          <span className="material-symbols-outlined prod-age-report-icon">open_in_new</span>
-          {t('products.full_report')}
+        <div className="prod-age-right">
+          <div className="prod-search">
+            <span className="material-symbols-outlined prod-search-icon">search</span>
+            <input
+              type="text"
+              className="prod-search-input"
+              placeholder={t('products.search_placeholder')}
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="prod-age-report" onClick={() => navigate('/reports')}>
+            <span className="material-symbols-outlined prod-age-report-icon">open_in_new</span>
+            {t('products.full_report')}
+          </div>
         </div>
       </div>
 
@@ -262,8 +362,10 @@ export default function Products() {
               <th></th>
             </tr>
           </thead>
+
+          
           <tbody>
-            {ageFilteredProducts.map(p => {
+            {searchedProducts.map(p => {
               const totalStock  = parseInt(p.total_stock ?? 0)
               const stockLow    = totalStock <= 2
               const pickupPrice = p.pickup_discount_pct
@@ -319,9 +421,25 @@ export default function Products() {
                       <span className="material-symbols-outlined">edit</span>
                     </button>
                     {' '}
-                    <button className="btn btn-sm btn-outline">
+                    <button className="btn btn-sm btn-outline" onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id) }}>
                       <span className="material-symbols-outlined">more_vert</span>
                     </button>
+                    {menuOpen === p.id && (
+                      <>
+                      <div className="pd-menu-overlay" onClick={() => setMenuOpen(null)} />
+                      <div className="pd-menu-dropdown">
+                        <div className="pd-menu-item" onClick={() => openDuplicate(p)}>
+                          <span className="material-symbols-outlined">content_copy</span>Duplicate Product
+                        </div>
+                        <div className="pd-menu-item" onClick={() => openPrintTag(p)}>
+                          <span className="material-symbols-outlined">print</span>Print Tag
+                        </div>
+                        <div className="pd-menu-item" onClick={() => openAsCustomer(p)}>
+                          <span className="material-symbols-outlined">visibility</span>View as Customer
+                        </div>
+                      </div>
+                      </>
+                    )}
                   </td>
                 </tr>
               )
@@ -376,6 +494,50 @@ export default function Products() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Duplicate Modal */}
+      {dupModal && (
+        <div className="modal-backdrop" onClick={() => setDupModal(null)}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Duplicate <em>Product</em></div>
+              <div className="modal-close" onClick={() => setDupModal(null)}>
+                <span className="material-symbols-outlined">close</span>
+              </div>
+            </div>
+            <div className="alert alert-info">
+              <span className="material-symbols-outlined">content_copy</span>
+              <div>This will create a copy of <strong>{dupModal.name}</strong> with all details, variants, and images. The new product will be saved as a draft.</div>
+            </div>
+            {dupError && <div className="eng-error">{dupError}</div>}
+            <div className="form-group">
+              <label className="form-lbl">New SKU *</label>
+              <input className="form-input" value={dupSku} onChange={e => setDupSku(e.target.value)} placeholder="e.g. DUP-A1B2" />
+              <div className="form-hint">Original SKU ({dupModal.sku}) cannot be reused. Enter a unique SKU for the duplicate.</div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setDupModal(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleDuplicate} disabled={dupLoading}>
+                <span className="material-symbols-outlined">content_copy</span>
+                {dupLoading ? 'Duplicating…' : 'Duplicate Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Tag Modal */}
+      {showPrintTag && printTagProduct && (
+        <PrintTagModal
+          isOpen={showPrintTag}
+          onClose={() => { setShowPrintTag(false); setPrintTagProduct(null) }}
+          product={printTagProduct.product}
+          category={printTagProduct.category}
+          brand={printTagProduct.brand}
+          sizes={printTagProduct.sizes}
+          productId={printTagProduct.productId}
+        />
       )}
     </>
   )

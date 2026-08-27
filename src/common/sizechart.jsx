@@ -80,8 +80,9 @@ const SCHEMAS = {
   "Women's|Accessories": ONE_SIZE,
 
   // ── WOMEN'S SHOES ─────────────────────────────────────────────────────────────
+  // "Shoes" is now its own top-level type (was a style under Accessories).
 
-  "Women's|Accessories|Shoes": {
+  "Women's|Shoes": {
     cols: ['UK', 'EURO', 'To Fit Foot Length (cm)'],
     rows: [
       { UK:'6',  EURO:'39',   'To Fit Foot Length (cm)':25.0 },
@@ -94,7 +95,19 @@ const SCHEMAS = {
 
   // ── MEN'S ─────────────────────────────────────────────────────────────────────
 
-  "Men's|Tops": {
+  // Men's "Tops" was split into "Shirts" and "Tees & Polos" by the live category
+  // tree. Same measurements reused for both pending differentiated data.
+  "Men's|Shirts": {
+    cols: ['Size', 'Brand Size', 'Chest (cm)', 'Across Shoulder (cm)'],
+    rows: [
+      { Size:'XS', 'Brand Size':'XS', 'Chest (cm)':91.4,  'Across Shoulder (cm)':44.5 },
+      { Size:'S',  'Brand Size':'S',  'Chest (cm)':96.5,  'Across Shoulder (cm)':45.7 },
+      { Size:'M',  'Brand Size':'M',  'Chest (cm)':101.6, 'Across Shoulder (cm)':47.0 },
+      { Size:'L',  'Brand Size':'L',  'Chest (cm)':106.7, 'Across Shoulder (cm)':48.3 },
+    ],
+  },
+
+  "Men's|Tees & Polos": {
     cols: ['Size', 'Brand Size', 'Chest (cm)', 'Across Shoulder (cm)'],
     rows: [
       { Size:'XS', 'Brand Size':'XS', 'Chest (cm)':91.4,  'Across Shoulder (cm)':44.5 },
@@ -114,7 +127,8 @@ const SCHEMAS = {
     ],
   },
 
-  "Men's|Outerwear": {
+  // Renamed from "Outerwear" to "Jackets & Outerwear" in the live category tree.
+  "Men's|Jackets & Outerwear": {
     cols: ['Size', 'Brand Size', 'Chest (cm)', 'Across Shoulder (cm)'],
     rows: [
       { Size:'XS', 'Brand Size':'38', 'Chest (cm)':101.6, 'Across Shoulder (cm)':44.5 },
@@ -145,8 +159,9 @@ const SCHEMAS = {
   "Men's|Accessories": ONE_SIZE,
 
   // ── MEN'S SHOES ───────────────────────────────────────────────────────────────
+  // "Shoes" is now its own top-level type (was a style under Accessories).
 
-  "Men's|Accessories|Shoes": {
+  "Men's|Shoes": {
     cols: ['UK', 'EURO', 'To Fit Foot Length (cm)'],
     rows: [
       { UK:'6',  EURO:'40',   'To Fit Foot Length (cm)':24.5 },
@@ -163,7 +178,7 @@ const SCHEMAS = {
 
   // ── KIDS · GIRLS ─────────────────────────────────────────────────────────────
 
-  'Kids|Girls|Dress': {
+  'Kids|Girls|Dresses': {
     cols: ['Size', 'Brand Size', 'To Fit Bust (cm)', 'To Fit Waist (cm)', 'To Fit Hip (cm)'],
     rows: [
       { Size:'Newborn', 'Brand Size':'0-1M', 'To Fit Bust (cm)':36.8, 'To Fit Waist (cm)':37.6, 'To Fit Hip (cm)':39.4 },
@@ -173,7 +188,7 @@ const SCHEMAS = {
     ],
   },
 
-  'Kids|Girls|Top': {
+  'Kids|Girls|Tops': {
     cols: ['Size', 'Brand Size', 'Across Shoulder (cm)', 'Chest (cm)'],
     rows: [
       { Size:'3-4Y', 'Brand Size':'3Y', 'Across Shoulder (cm)':24.1, 'Chest (cm)':54.1 },
@@ -182,7 +197,7 @@ const SCHEMAS = {
     ],
   },
 
-  'Kids|Girls|Trousers': {
+  'Kids|Girls|Bottoms': {
     cols: ['Size', 'Brand Size', 'To Fit Waist (cm)', 'Inseam Length (cm)'],
     rows: [
       { Size:'6Y',  'Brand Size':'S', 'To Fit Waist (cm)':55.1, 'Inseam Length (cm)':58.4 },
@@ -203,7 +218,7 @@ const SCHEMAS = {
 
   // ── KIDS · BOYS ───────────────────────────────────────────────────────────────
 
-  'Kids|Boys|Top': {
+  'Kids|Boys|Tops': {
     cols: ['Size', 'Chest (cm)', 'Across Shoulder (cm)'],
     rows: [
       { Size:'6-7Y',   'Chest (cm)':68.6, 'Across Shoulder (cm)':25.4 },
@@ -214,7 +229,7 @@ const SCHEMAS = {
     ],
   },
 
-  'Kids|Boys|Trousers': {
+  'Kids|Boys|Bottoms': {
     cols: ['Size', 'Brand Size', 'To Fit Waist (cm)'],
     rows: [
       { Size:'2-3Y', 'Brand Size':'2-3Y', 'To Fit Waist (cm)':53.1 },
@@ -238,61 +253,89 @@ const SCHEMAS = {
   },
 }
 
+// ─── SIZE ORDERING ──────────────────────────────────────────────────────────
+// Ranks arbitrary size_label strings into a logical display order: letter
+// sizes (by fixed scale), then "One Size", then numeric sizes ascending,
+// then anything unrecognized (kids' age/month labels, etc.) alphabetically.
+
+const LETTER_SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL','4XL','5XL']
+
+export function sortSizeLabels(labels) {
+  function rank(label) {
+    const s = (label ?? '').toString().trim()
+    const upper = s.toUpperCase()
+    const letterIdx = LETTER_SIZE_ORDER.indexOf(upper)
+    if (letterIdx !== -1) return [0, letterIdx, s]
+    if (upper.replace(/\s+/g, '') === 'ONESIZE') return [1, 0, s]
+    const num = Number(s)
+    if (s !== '' && !Number.isNaN(num)) return [2, num, s]
+    return [3, 0, s.toLowerCase()]
+  }
+  return [...labels].sort((a, b) => {
+    const ra = rank(a), rb = rank(b)
+    if (ra[0] !== rb[0]) return ra[0] - rb[0]
+    if (ra[0] === 3) return ra[2] < rb[2] ? -1 : ra[2] > rb[2] ? 1 : 0
+    return ra[1] - rb[1]
+  })
+}
+
 // ─── RESOLVER ─────────────────────────────────────────────────────────────────
 
 export function getSchema(l1, l2, l3) {
   if (!l1 || !l2 || !l3) return null
 
-  // Shoes
-  if (l3 === 'Shoes') {
-    if (l1 === 'Unisex') return SCHEMAS["Men's|Accessories|Shoes"]
-    return SCHEMAS[`${l1}|Accessories|Shoes`] ?? ONE_SIZE
+  // Shoes — now its own top-level type under Women's/Men's (was a style under
+  // Accessories before). Sized the same regardless of which shoe style (l3).
+  if (l2 === 'Shoes') {
+    if (l1 === 'Unisex') return SCHEMAS["Men's|Shoes"]
+    return SCHEMAS[`${l1}|Shoes`] ?? ONE_SIZE
   }
 
-  // Kids — L3 specific
+  // Kids — L3 specific. "Unisex" no longer exists as a Kids type; "Baby (0-2y)",
+  // "Shoes" and "Accessories" are new Kids-level types with no chart yet.
   if (l1 === 'Kids') {
     const girlsKey = `Kids|Girls|${l3}`
     const boysKey  = `Kids|Boys|${l3}`
-    if (l2 === 'Girls')  return SCHEMAS[girlsKey] ?? ONE_SIZE
-    if (l2 === 'Boys')   return SCHEMAS[boysKey]  ?? ONE_SIZE
-    if (l2 === 'Unisex') return SCHEMAS[boysKey]  ?? ONE_SIZE
+    if (l2 === 'Girls') return SCHEMAS[girlsKey] ?? ONE_SIZE
+    if (l2 === 'Boys')  return SCHEMAS[boysKey]  ?? ONE_SIZE
     return ONE_SIZE
   }
 
   // Unisex Streetwear — map by L3
   if (l1 === 'Unisex' && l2 === 'Streetwear') {
     const map = {
-      'Hoodie':     "Men's|Outerwear",
-      'Sweatshirt': "Men's|Outerwear",
+      'Hoodie':     "Men's|Jackets & Outerwear",
+      'Sweatshirt': "Men's|Jackets & Outerwear",
       'Joggers':    "Men's|Trousers",
       'Shorts':     "Men's|Trousers",
-      'T-Shirt':    "Men's|Tops",
+      'T-Shirt':    "Men's|Tees & Polos",
     }
     const target = map[l3]
     return target ? SCHEMAS[target] ?? ONE_SIZE : ONE_SIZE
   }
 
-  // Unisex Outerwear → Men's Outerwear
-  if (l1 === 'Unisex' && l2 === 'Outerwear') return SCHEMAS["Men's|Outerwear"]
+  // Unisex Outerwear → Men's Jackets & Outerwear
+  if (l1 === 'Unisex' && l2 === 'Outerwear') return SCHEMAS["Men's|Jackets & Outerwear"]
 
   // Unisex Accessories
   if (l1 === 'Unisex' && l2 === 'Accessories') return ONE_SIZE
 
-  // Vintage — map by L3
+  // Vintage — map by L3. Live tree's Vintage L2 is now plain "Women's"/"Men's"
+  // (was "Women's Vintage"/"Men's Vintage"/"Unisex Vintage"), and L3 style
+  // names are now plural ("Dresses" not "Dress", etc). Vintage also gained
+  // brand-new sub-types (Accessories, Bags, Jewelry, Home & Decor) that never
+  // had a chart — those fall through to the direct lookup below (ONE_SIZE).
   if (l1 === 'Vintage') {
-    const isWomens = l2 === "Women's Vintage"
+    const isWomens = l2 === "Women's"
     const map = {
-      'Dress':       "Women's|Dresses",
-      'Blouse':      "Women's|Tops",
-      'Skirt':       "Women's|Skirts",
-      'Jacket':      isWomens ? "Women's|Outerwear" : "Men's|Outerwear",
-      'Coat':        isWomens ? "Women's|Outerwear" : "Men's|Outerwear",
-      'Trousers':    isWomens ? "Women's|Trousers"  : "Men's|Trousers",
-      'Shirt':       "Men's|Tops",
-      'Knitwear':    "Men's|Knitwear",
-      'Denim':       "Men's|Outerwear",
-      'Sportswear':  "Men's|Outerwear",
-      'Accessories': 'Unisex|Accessories',
+      'Dresses':  "Women's|Dresses",
+      'Blouses':  "Women's|Tops",
+      'Skirts':   "Women's|Skirts",
+      'Jackets':  isWomens ? "Women's|Outerwear" : "Men's|Jackets & Outerwear",
+      'Coats':    isWomens ? "Women's|Outerwear" : "Men's|Jackets & Outerwear",
+      'Trousers': isWomens ? "Women's|Trousers"  : "Men's|Trousers",
+      'Shirts':   "Men's|Shirts",
+      'Knitwear': "Men's|Knitwear",
     }
     const target = map[l3]
     return target ? SCHEMAS[target] ?? ONE_SIZE : ONE_SIZE

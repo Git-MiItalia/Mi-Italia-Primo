@@ -6,7 +6,6 @@ const useNotifStore = create((set) => ({
   toastQueue:     [],
 
   addNotification: (n) => set(state => {
-    console.log('[Store] inside set, checking duplicate:', state.notifications.some(x => x.id === n.id))
     if (state.notifications.some(x => x.id === n.id)) return state
     return {
       notifications: [n, ...state.notifications],

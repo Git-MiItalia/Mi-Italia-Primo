@@ -20,16 +20,16 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en', { day:'numeric', month:'short', year:'numeric' })
 }
 
-const PERIODS = [
-  { value:'mtd',        label:'This Month (MTD)'  },
-  { value:'last_month', label:'Last Month'         },
-  { value:'last_3',     label:'Last 3 Months'      },
-  { value:'this_year',  label:'This Year'          },
-]
-
 export default function Financials() {
   const navigate    = useNavigate()
   const { t }       = useTranslation()
+
+  const PERIODS = [
+    { value:'mtd',        label: t('financials.period.mtd')        },
+    { value:'last_month', label: t('financials.period.last_month') },
+    { value:'last_3',     label: t('financials.period.last_3')     },
+    { value:'this_year',  label: t('financials.period.this_year')  },
+  ]
 
   const [period,       setPeriod]       = useState('mtd')
   const [data,         setData]         = useState(null)
@@ -69,23 +69,27 @@ export default function Financials() {
 
   const stripeConnected = stripe.charges_enabled && stripe.payouts_enabled
 
+  const planLabel = kpis.monthly_platform_fee?.plan
+    ? kpis.monthly_platform_fee.plan.charAt(0).toUpperCase() + kpis.monthly_platform_fee.plan.slice(1)
+    : 'Connect'
+
   const channels = [
     {
-      label:  'Ship (Ecommerce)',
+      label:  t('financials.by_channel.ship'),
       orders: revenue.ecommerce?.orders      ?? 0,
       gross:  revenue.ecommerce?.amount      ?? 0,
       rate:   fees.ecommerce_commission?.rate ?? 0,
       comm:   fees.ecommerce_commission?.amount ?? 0,
     },
     {
-      label:  'Reserve & Pickup',
+      label:  t('financials.by_channel.pickup'),
       orders: revenue.reserve_pickup?.orders ?? 0,
       gross:  revenue.reserve_pickup?.amount ?? 0,
-      rate:   0, // no commission on pickup
+      rate:   0,
       comm:   0,
     },
     {
-      label:  'POS (In-Store)',
+      label:  t('financials.by_channel.pos'),
       orders: revenue.in_store_pos?.orders   ?? 0,
       gross:  revenue.in_store_pos?.amount   ?? 0,
       rate:   fees.pos_commission?.rate      ?? 0,
@@ -100,65 +104,63 @@ export default function Financials() {
     <div>
 
       {/* Period selector */}
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:14 }}>
-        <select className="form-select" style={{ maxWidth:200 }} value={period} onChange={e => setPeriod(e.target.value)}>
+      <div className="fin-period-row">
+        <select className="form-select fin-period-select" value={period} onChange={e => setPeriod(e.target.value)}>
           {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
       </div>
 
       {/* ── Stripe + Plan strip ── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'var(--white)', borderRadius: 0, boxShadow: 'var(--shadow)' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 0, background: '#635BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span className="material-symbols-outlined" style={{ color: 'white', fontSize: 18 }}>
+      <div className="fin-strip">
+        <div className="fin-stripe-card">
+          <div className="fin-stripe-icon">
+            <span className="material-symbols-outlined fin-icon-white">
               {stripeConnected ? 'link' : 'link_off'}
             </span>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>
-              Stripe Connect — {stripeConnected ? 'Active' : 'Not Connected'}
+          <div className="fin-stripe-body">
+            <div className="fin-stripe-title">
+              {t('financials.stripe_label')} — {stripeConnected ? t('financials.stripe_active_short') : t('financials.stripe_not_connected')}
             </div>
-            <div style={{ fontSize: 9, color: 'var(--stone)' }}>
+            <div className="fin-stripe-sub">
               {stripeConnected
-                ? 'Sales revenue deposited automatically · commissions deducted'
-                : 'Connect your Stripe account to receive payments'}
+                ? t('financials.stripe_sub')
+                : t('financials.stripe_connect_prompt')}
             </div>
           </div>
           {stripeConnected && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 9, color: 'var(--stone)' }}>Account ID</div>
-              <div style={{ fontSize: 11, fontWeight: 600, fontFamily: 'monospace' }}>{stripe.account_id ?? '—'}</div>
+            <div className="fin-stripe-acct">
+              <div className="fin-stripe-acct-lbl">{t('financials.account_id')}</div>
+              <div className="fin-stripe-acct-val">{stripe.account_id ?? '—'}</div>
             </div>
           )}
           <span className={`status ${stripeConnected ? 'active' : 'cancelled'}`}>
-            {loading ? '—' : stripeConnected ? 'Connected' : 'Not Connected'}
+            {loading ? '—' : stripeConnected ? t('financials.connected') : t('financials.stripe_not_connected')}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: 'var(--white)', borderRadius: 0, boxShadow: 'var(--shadow)' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 0, background: 'linear-gradient(135deg,var(--deep),#2E2112)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span className="material-symbols-outlined" style={{ color: 'var(--gold)', fontSize: 18 }}>workspace_premium</span>
+        <div className="fin-plan-card">
+          <div className="fin-plan-icon">
+            <span className="material-symbols-outlined fin-icon-gold">workspace_premium</span>
           </div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>
-              {kpis.monthly_platform_fee?.plan
-                ? kpis.monthly_platform_fee.plan.charAt(0).toUpperCase() + kpis.monthly_platform_fee.plan.slice(1) + ' Plan'
-                : 'Connect Plan'}
+            <div className="fin-plan-title">
+              {t('financials.plan_label', { plan: planLabel })}
             </div>
-            <div style={{ fontSize: 9, color: 'var(--stone)' }}>
+            <div className="fin-plan-sub">
               {kpis.monthly_platform_fee?.amount > 0
-                ? `${fmt(kpis.monthly_platform_fee.amount)}/month`
-                : 'Commission-based · no monthly fee'}
+                ? t('financials.plan_monthly', { amount: fmt(kpis.monthly_platform_fee.amount) })
+                : t('financials.plan_commission_only')}
             </div>
           </div>
-          <button className="btn btn-sm btn-outline" onClick={() => navigate('/subscription')}>Manage</button>
+          <button className="btn btn-sm btn-outline" onClick={() => navigate('/subscription')}>{t('financials.manage')}</button>
         </div>
       </div>
 
       {/* ── 5 stat cards ── */}
       <div className="stat-row col5">
         <div className="stat-card">
-          <div className="stat-lbl">Gross Sales</div>
+          <div className="stat-lbl">{t('financials.stats.gross_sales')}</div>
           <div className="stat-val">{loading ? '—' : fmt(kpis.gross_sales?.amount)}</div>
           {kpis.gross_sales?.change_pct != null && (
             <div className={`stat-change ${kpis.gross_sales.change_pct >= 0 ? 'up' : 'dn'}`}>
@@ -167,27 +169,28 @@ export default function Financials() {
           )}
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">Monthly Platform Fee</div>
+          <div className="stat-lbl">{t('financials.stats.platform_fee')}</div>
           <div className="stat-val" style={{ color: 'var(--red)' }}>
             {loading ? '—' : kpis.monthly_platform_fee?.amount > 0 ? `−${fmt(kpis.monthly_platform_fee.amount)}` : '€0'}
           </div>
           <div className="stat-change nu">
-            {kpis.monthly_platform_fee?.plan
-              ? kpis.monthly_platform_fee.plan.charAt(0).toUpperCase() + kpis.monthly_platform_fee.plan.slice(1) + ' Plan'
-              : '—'}
+            {t('financials.plan_label', { plan: planLabel })}
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">Sales Commission</div>
+          <div className="stat-lbl">{t('financials.stats.commission')}</div>
           <div className="stat-val" style={{ color: 'var(--red)' }}>
             {loading ? '—' : `−${fmt(kpis.sales_commission?.amount)}`}
           </div>
           <div className="stat-change nu">
-            Ecom {fmtPct(kpis.sales_commission?.ecom_rate)} · POS {fmtPct(kpis.sales_commission?.pos_rate)}
+            {t('financials.commission_summary', {
+              ecom: fmtPct(kpis.sales_commission?.ecom_rate),
+              pos:  fmtPct(kpis.sales_commission?.pos_rate)
+            })}
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">Net Earnings</div>
+          <div className="stat-lbl">{t('financials.stats.net_earnings')}</div>
           <div className="stat-val" style={{ color: 'var(--green)' }}>
             {loading ? '—' : fmt(kpis.net_earnings?.amount)}
           </div>
@@ -198,14 +201,16 @@ export default function Financials() {
           )}
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">Pending Payout</div>
+          <div className="stat-lbl">{t('financials.stats.pending_payout')}</div>
           <div className="stat-val" style={{ color: 'var(--gold)' }}>
             {loading ? '—' : fmt(kpis.pending_payout?.amount)}
           </div>
           <div className="stat-change nu">
             {kpis.pending_payout?.next_payout_date
-              ? `Next: ${new Date(kpis.pending_payout.next_payout_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`
-              : 'No payout scheduled'}
+              ? t('financials.stats.next_payout', {
+                  date: new Date(kpis.pending_payout.next_payout_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })
+                })
+              : t('financials.no_payout_scheduled')}
           </div>
         </div>
       </div>
@@ -215,38 +220,38 @@ export default function Financials() {
         {/* ── Fee breakdown ── */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">Fee <em>Breakdown</em></div>
+            <div className="card-title">{t('financials.fee_breakdown.title')} <em>{t('financials.fee_breakdown.title_em')}</em></div>
           </div>
 
           <div className="fee-breakdown">
-            <div className="fin-fee-sec-lbl">Revenue</div>
+            <div className="fin-fee-sec-lbl">{t('financials.fee_breakdown.revenue')}</div>
             <div className="fee-row">
-              <div className="fee-label">Ecommerce sales ({revenue.ecommerce?.orders ?? 0} orders)</div>
+              <div className="fee-label">{t('financials.ecom_sales', { count: revenue.ecommerce?.orders ?? 0 })}</div>
               <div className="fee-val">{fmt(revenue.ecommerce?.amount)}</div>
             </div>
             <div className="fee-row">
-              <div className="fee-label">Reserve & Pickup ({revenue.reserve_pickup?.orders ?? 0} orders)</div>
+              <div className="fee-label">{t('financials.pickup_sales', { count: revenue.reserve_pickup?.orders ?? 0 })}</div>
               <div className="fee-val">{fmt(revenue.reserve_pickup?.amount)}</div>
             </div>
             <div className="fee-row">
-              <div className="fee-label">In-store POS ({revenue.in_store_pos?.orders ?? 0} transactions)</div>
+              <div className="fee-label">{t('financials.pos_sales', { count: revenue.in_store_pos?.orders ?? 0 })}</div>
               <div className="fee-val">{fmt(revenue.in_store_pos?.amount)}</div>
             </div>
-            <div className="fee-row" style={{ borderTop: '2px solid var(--mist)', marginTop: 4, paddingTop: 10 }}>
-              <div className="fee-label"><strong>Gross Revenue</strong></div>
+            <div className="fee-row fin-fee-total-row">
+              <div className="fee-label"><strong>{t('financials.fee_breakdown.gross_revenue')}</strong></div>
               <div className="fee-val total">{fmt(revenue.gross_revenue)}</div>
             </div>
           </div>
 
           <div className="fee-breakdown">
-            <div className="fin-fee-sec-lbl">Mi Italia Fees</div>
+            <div className="fin-fee-sec-lbl">{t('financials.fee_breakdown.mi_fees')}</div>
             <div className="fee-row">
               <div className="fee-label">
-                <strong>Monthly platform fee</strong><br />
-                <span style={{ fontSize: 9 }}>
-                  {kpis.monthly_platform_fee?.plan ?? 'Connect'} Plan
+                <strong>{t('financials.fee_breakdown.platform_fee')}</strong><br />
+                <span className="fin-fee-detail">
+                  {t('financials.plan_label', { plan: kpis.monthly_platform_fee?.plan ?? 'Connect' })}
                   {fees.monthly_platform_fee?.due_date
-                    ? ` · due ${new Date(fees.monthly_platform_fee.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`
+                    ? ` · ${t('financials.due_date', { date: new Date(fees.monthly_platform_fee.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' }) })}`
                     : ''}
                 </span>
               </div>
@@ -256,31 +261,31 @@ export default function Financials() {
             </div>
             <div className="fee-row">
               <div className="fee-label">
-                <strong>Ecommerce commission</strong><br />
-                <span style={{ fontSize: 9 }}>
-                  {fmtPct(fees.ecommerce_commission?.rate)} on {fmt(fees.ecommerce_commission?.applied_on)}
+                <strong>{t('financials.fee_breakdown.ecom_commission')}</strong><br />
+                <span className="fin-fee-detail">
+                  {fmtPct(fees.ecommerce_commission?.rate)} {t('financials.on')} {fmt(fees.ecommerce_commission?.applied_on)}
                 </span>
               </div>
               <div className="fee-val debit">−{fmt(fees.ecommerce_commission?.amount)}</div>
             </div>
             <div className="fee-row">
               <div className="fee-label">
-                <strong>POS commission</strong><br />
-                <span style={{ fontSize: 9 }}>
-                  {fmtPct(fees.pos_commission?.rate)} on {fmt(fees.pos_commission?.applied_on)}
+                <strong>{t('financials.fee_breakdown.pos_commission')}</strong><br />
+                <span className="fin-fee-detail">
+                  {fmtPct(fees.pos_commission?.rate)} {t('financials.on')} {fmt(fees.pos_commission?.applied_on)}
                 </span>
               </div>
               <div className="fee-val debit">−{fmt(fees.pos_commission?.amount)}</div>
             </div>
-            <div className="fee-row" style={{ borderTop: '2px solid var(--mist)', marginTop: 4, paddingTop: 10 }}>
-              <div className="fee-label"><strong>Total Fees</strong></div>
+            <div className="fee-row fin-fee-total-row">
+              <div className="fee-label"><strong>{t('financials.fee_breakdown.total_fees')}</strong></div>
               <div className="fee-val debit">−{fmt(fees.total_fees)}</div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'linear-gradient(135deg,var(--deep),#2E2112)', borderRadius: 0}}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--cream)' }}>Net Earnings</div>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 26, fontWeight: 600, color: 'var(--gold)' }}>
+          <div className="fin-net-bar">
+            <div className="fin-net-label">{t('financials.net_earnings')}</div>
+            <div className="fin-net-val">
               {fmt(feeBreak.net_earnings)}
             </div>
           </div>
@@ -292,17 +297,17 @@ export default function Financials() {
           {/* Sales by channel */}
           <div className="card">
             <div className="card-hdr">
-              <div className="card-title">Sales by <em>Channel</em></div>
+              <div className="card-title">{t('financials.by_channel.title')} <em>{t('financials.by_channel.title_em')}</em></div>
             </div>
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Channel</th>
-                  <th>Orders</th>
-                  <th>Gross</th>
-                  <th>Rate</th>
-                  <th>Comm.</th>
-                  <th>Net</th>
+                  <th>{t('financials.by_channel.channel')}</th>
+                  <th>{t('financials.by_channel.orders')}</th>
+                  <th>{t('financials.by_channel.gross')}</th>
+                  <th>{t('financials.by_channel.rate')}</th>
+                  <th>{t('financials.by_channel.comm')}</th>
+                  <th>{t('financials.by_channel.net')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -318,8 +323,8 @@ export default function Financials() {
                     <td style={{ color: 'var(--green)', fontWeight: 600 }}>{fmt(c.gross - c.comm)}</td>
                   </tr>
                 ))}
-                <tr style={{ background: 'var(--card)', fontWeight: 600 }}>
-                  <td>Total</td>
+                <tr className="fin-channel-total">
+                  <td>{t('financials.by_channel.total')}</td>
                   <td>{totalOrders}</td>
                   <td>{fmt(revenue.gross_revenue)}</td>
                   <td>—</td>
@@ -333,7 +338,7 @@ export default function Financials() {
           {/* Payout history — wired to API */}
           <div className="card">
             <div className="card-hdr">
-              <div className="card-title">Payout <em>History</em></div>
+              <div className="card-title">{t('financials.payout.title')} <em>{t('financials.payout.title_em')}</em></div>
               {payouts.length > 0 && (
                 <div className="card-action" onClick={() => {
                   const rows = [['Date','Amount','Status']]
@@ -348,39 +353,39 @@ export default function Financials() {
                   a.download = 'payout-history.csv'
                   a.click()
                 }}>
-                  <span className="material-symbols-outlined">download</span>Export CSV
+                  <span className="material-symbols-outlined">download</span>{t('financials.payout.export')}
                 </div>
               )}
             </div>
 
             {/* Payout summary */}
             {(payoutSummary.pending_payout != null || payoutSummary.total_paid != null) && (
-              <div style={{ display:'flex', gap:12, marginBottom:12 }}>
-                <div className="stat-card" style={{ flex:1 }}>
-                  <div className="stat-lbl">Pending Payout</div>
+              <div className="fin-payout-summary">
+                <div className="stat-card fin-payout-stat">
+                  <div className="stat-lbl">{t('financials.stats.pending_payout')}</div>
                   <div className="stat-val" style={{ color:'var(--gold)' }}>{fmt(payoutSummary.pending_payout)}</div>
                 </div>
-                <div className="stat-card" style={{ flex:1 }}>
-                  <div className="stat-lbl">Total Paid Out</div>
+                <div className="stat-card fin-payout-stat">
+                  <div className="stat-lbl">{t('financials.total_paid')}</div>
                   <div className="stat-val" style={{ color:'var(--green)' }}>{fmt(payoutSummary.total_paid)}</div>
                 </div>
               </div>
             )}
 
             {payoutsLoading ? (
-              <div className="empty"><span className="material-symbols-outlined">hourglass_empty</span>Loading…</div>
+              <div className="empty"><span className="material-symbols-outlined">hourglass_empty</span>{t('common.loading')}</div>
             ) : payouts.length === 0 ? (
               <div className="empty">
                 <span className="material-symbols-outlined">account_balance</span>
-                No payouts yet
+                {t('financials.no_payouts')}
               </div>
             ) : (
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Status</th>
+                    <th>{t('financials.payout.date')}</th>
+                    <th>{t('financials.payout.amount')}</th>
+                    <th>{t('financials.payout.status')}</th>
                   </tr>
                 </thead>
                 <tbody>

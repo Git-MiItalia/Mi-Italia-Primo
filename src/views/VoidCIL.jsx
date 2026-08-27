@@ -1,28 +1,8 @@
 import { useState } from 'react'
-
-// ─── Reason options ──────────────────────────────────────
-const REASONS = [
-  { key:'damaged',        label:'Damaged in transit' },
-  { key:'wrong_size',     label:'Wrong size'         },
-  { key:'not_described',  label:'Not as described'   },
-  { key:'changed_mind',   label:'Changed mind'       },
-  { key:'too_late',       label:'Arrived too late'   },
-  { key:'quality',        label:'Quality issue'      },
-]
+import { useTranslation } from 'react-i18next'
 
 // ─── Pipeline template ───────────────────────────────────
-const PIPELINE = [
-  { num:1, title:'Return Requested',
-    sub:'Customer submitted return request.' },
-  { num:2, title:'Boutique Review',
-    sub:'Review the request and approve or reject. If approved, generate a DHL return label for the customer.' },
-  { num:3, title:'Customer Ships Item Back',
-    sub:'DHL prepaid return label sent to customer. Awaiting drop-off.' },
-  { num:4, title:'Item Received & Inspected',
-    sub:'Confirm item received in acceptable condition before processing refund.' },
-  { num:5, title:'Refund Issued',
-    sub:"Stripe refund processed to customer's original payment method." },
-]
+// Moved inside component for t() access
 
 // ─── Mock returns data ───────────────────────────────────
 const MOCK_RETURNS = [
@@ -94,35 +74,52 @@ const MOCK_RETURNS = [
   },
 ]
 
-const TABS = [
-  { key:'open',        label:'Open'        },
-  { key:'in_progress', label:'In Progress' },
-  { key:'completed',   label:'Completed'   },
-  { key:'rejected',    label:'Rejected'    },
-]
-
-// ─── Utility ─────────────────────────────────────────────
-function statusLabel(s) {
-  return s === 'in_progress' ? 'In Progress'
-       : s === 'completed'   ? 'Completed'
-       : s === 'rejected'    ? 'Rejected'
-       : 'Open'
-}
-function statusPill(s) {
-  return s === 'open'        ? 'pending'
-       : s === 'in_progress' ? 'shipped'
-       : s === 'completed'   ? 'active'
-       : s === 'rejected'    ? 'cancelled'
-       : 'pending'
-}
-
 // ─── Main ────────────────────────────────────────────────
 
 export default function Returns() {
+  const { t } = useTranslation()
   const [returns,       setReturns]       = useState(MOCK_RETURNS)
   const [activeTab,     setActiveTab]     = useState('open')
   const [selectedId,    setSelectedId]    = useState('RET-084')
   const [toast,         setToast]         = useState(null)
+
+  const REASONS = [
+    { key:'damaged',        label: t('ret.reasons.damaged')       },
+    { key:'wrong_size',     label: t('ret.reasons.wrong_size')    },
+    { key:'not_described',  label: t('ret.reasons.not_described') },
+    { key:'changed_mind',   label: t('ret.reasons.changed_mind')  },
+    { key:'too_late',       label: t('ret.reasons.too_late')      },
+    { key:'quality',        label: t('ret.reasons.quality')       },
+  ]
+
+  const PIPELINE = [
+    { num:1, title: t('ret.pipeline.requested'),   sub: t('ret.pipeline.requested_sub')  },
+    { num:2, title: t('ret.pipeline.review'),       sub: t('ret.pipeline.review_sub')      },
+    { num:3, title: t('ret.pipeline.ships'),        sub: t('ret.pipeline.ships_sub')       },
+    { num:4, title: t('ret.pipeline.received'),     sub: t('ret.pipeline.received_sub')    },
+    { num:5, title: t('ret.pipeline.refunded'),     sub: t('ret.pipeline.refunded_sub')    },
+  ]
+
+  const TABS = [
+    { key:'open',        label: t('ret.tabs_labels.open')        },
+    { key:'in_progress', label: t('ret.tabs_labels.in_progress') },
+    { key:'completed',   label: t('ret.tabs_labels.completed')   },
+    { key:'rejected',    label: t('ret.tabs_labels.rejected')    },
+  ]
+
+  function statusLabel(s) {
+    return s === 'in_progress' ? t('ret.tabs_labels.in_progress')
+         : s === 'completed'   ? t('ret.tabs_labels.completed')
+         : s === 'rejected'    ? t('ret.tabs_labels.rejected')
+         : t('ret.tabs_labels.open')
+  }
+  function statusPill(s) {
+    return s === 'open'        ? 'pending'
+         : s === 'in_progress' ? 'shipped'
+         : s === 'completed'   ? 'active'
+         : s === 'rejected'    ? 'cancelled'
+         : 'pending'
+  }
 
   const counts = TABS.reduce((acc, t) => {
     acc[t.key] = returns.filter(r => r.status === t.key).length
@@ -145,29 +142,29 @@ export default function Returns() {
   function approveWithLabel(r) {
     updateReturn(r.id, { status:'in_progress', currentStep:3 })
     setActiveTab('in_progress')
-    showToast('DHL label generated · customer notified')
+    showToast(t('ret.toast.dhl_generated'))
   }
   function approveNoReturn(r) {
     updateReturn(r.id, { status:'completed', currentStep:5 })
     setActiveTab('completed')
-    showToast('Return approved · refund queued')
+    showToast(t('ret.toast.approved'))
   }
   function rejectReturn(r) {
     updateReturn(r.id, { status:'rejected' })
     setActiveTab('rejected')
-    showToast('Return rejected · customer notified')
+    showToast(t('ret.toast.rejected'))
   }
   function markReceived(r) {
     updateReturn(r.id, { currentStep:4 })
-    showToast('Item marked as received')
+    showToast(t('ret.toast.received'))
   }
   function issueRefund(r) {
     updateReturn(r.id, { status:'completed', currentStep:5 })
     setActiveTab('completed')
-    showToast('Refund issued via Stripe')
+    showToast(t('ret.toast.refunded'))
   }
   function whatsapp(r) {
-    showToast(`Opening WhatsApp for ${r.customer}…`)
+    showToast(t('ret.toast.whatsapp', { name: r.customer }))
     // TODO: real integration — open wa.me/${r.phone.replace(/\D/g,'')}
   }
   function changeReason(r, reasonKey) {
@@ -202,14 +199,14 @@ export default function Returns() {
           <div className="card" style={{ padding:0 }}>
             {filtered.length === 0 ? (
               <div style={{ padding:'40px 20px', textAlign:'center', color:'var(--stone)', fontSize:11 }}>
-                No {statusLabel(activeTab).toLowerCase()} returns.
+                {t('ret.empty_list', { status: statusLabel(activeTab).toLowerCase() })}
               </div>
             ) : (
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>Return ID</th><th>Customer</th><th>Item</th>
-                    <th>Reason</th><th>Value</th><th>Opened</th><th>Status</th>
+                    <th>{t('ret.table.id')}</th><th>{t('ret.table.customer')}</th><th>{t('ret.table.item')}</th>
+                    <th>{t('ret.table.reason')}</th><th>{t('ret.value')}</th><th>{t('ret.table.opened')}</th><th>{t('ret.table.status')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -242,7 +239,7 @@ export default function Returns() {
         <div className="detail-panel">
           {!selected ? (
             <div style={{ padding:'40px 20px', textAlign:'center', color:'var(--stone)', fontSize:11 }}>
-              Select a return to view details.
+              {t('ret.empty_detail')}
             </div>
           ) : (
             <>
@@ -251,9 +248,9 @@ export default function Returns() {
                   <span className="material-symbols-outlined">undo</span>
                 </div>
                 <div>
-                  <div className="detail-panel-title">Return #{selected.id}</div>
+                  <div className="detail-panel-title">{t('ret.detail.return')} #{selected.id}</div>
                   <div className="detail-panel-sub">
-                    {selected.customer} · Order #{selected.orderId} · Opened {selected.opened}
+                    {selected.customer} · {t('ret.detail.order')} #{selected.orderId} · {t('ret.opened')} {selected.opened}
                   </div>
                 </div>
                 <span className={`status ${statusPill(selected.status)}`} style={{ marginLeft:'auto' }}>
@@ -275,8 +272,8 @@ export default function Returns() {
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:12, fontWeight:600 }}>{it.name}</div>
                       <div style={{ fontSize:9, color:'var(--stone)' }}>
-                        Size {it.size} · {it.colour} · SKU: {it.sku}
-                        {it.qty > 1 && ` · Qty ${it.qty}`}
+                        {t('ret.item_meta', { size: it.size, colour: it.colour, sku: it.sku })}
+                        {it.qty > 1 && t('ret.item_qty_suffix', { qty: it.qty })}
                       </div>
                     </div>
                     <div style={{ fontWeight:700, fontSize:14 }}>€{(it.price * it.qty).toFixed(2)}</div>
@@ -288,7 +285,7 @@ export default function Returns() {
                   fontSize:10, fontWeight:600, color:'var(--stone)',
                   textTransform:'uppercase', letterSpacing:0.5,
                   marginTop:14, marginBottom:10,
-                }}>Return Pipeline</div>
+                }}>{t('ret.detail.pipeline')}</div>
 
                 <div style={{ marginBottom:14 }}>
                   {PIPELINE.map((step, idx) => {
@@ -300,7 +297,7 @@ export default function Returns() {
 
                     let timing = '—'
                     if (step.num === 1) timing = selected.openedTime
-                    else if (isActive)  timing = 'Now'
+                    else if (isActive)  timing = t('ret.now')
 
                     return (
                       <div key={step.num} className="return-step"
@@ -328,7 +325,7 @@ export default function Returns() {
                 <div style={{
                   fontSize:10, fontWeight:600, color:'var(--stone)',
                   textTransform:'uppercase', letterSpacing:0.5, marginBottom:8,
-                }}>Return Reason</div>
+                }}>{t('ret.reason_label')}</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
                   {REASONS.map(r => (
                     <div key={r.key}
@@ -340,7 +337,7 @@ export default function Returns() {
                 </div>
                 {selected.reasonDetail && (
                   <div style={{ fontSize:10.5, color:'var(--stone)', fontStyle:'italic', marginBottom:14, paddingLeft:2 }}>
-                    Note: {selected.reasonDetail}
+                    {t('ret.reason_note', { detail: selected.reasonDetail })}
                   </div>
                 )}
 
@@ -348,16 +345,16 @@ export default function Returns() {
                 <div style={{
                   fontSize:10, fontWeight:600, color:'var(--stone)',
                   textTransform:'uppercase', letterSpacing:0.5, marginBottom:8,
-                }}>Refund Breakdown</div>
+                }}>{t('ret.refund_breakdown')}</div>
                 <div className="refund-breakdown">
-                  <div className="refund-line"><span>Item total</span><span>€{selected.value.toFixed(2)}</span></div>
-                  <div className="refund-line"><span>DHL return shipping</span><span>€{selected.shippingCost.toFixed(2)} (prepaid by boutique)</span></div>
+                  <div className="refund-line"><span>{t('ret.item_total')}</span><span>€{selected.value.toFixed(2)}</span></div>
+                  <div className="refund-line"><span>{t('ret.dhl_shipping')}</span><span>€{selected.shippingCost.toFixed(2)} {t('ret.prepaid')}</span></div>
                   <div className="refund-line deduction">
-                    <span>Restocking fee (optional)</span>
+                    <span>{t('ret.restocking_fee')}</span>
                     <span>−€{selected.restockingFee.toFixed(2)}</span>
                   </div>
                   <div className="refund-line total">
-                    <span>Refund total</span>
+                    <span>{t('ret.refund_total')}</span>
                     <span style={{ color:'var(--green)' }}>€{refundTotal.toFixed(2)}</span>
                   </div>
                 </div>
@@ -372,7 +369,7 @@ export default function Returns() {
                         style={{ width:'100%', justifyContent:'center'}}
                         onClick={() => approveWithLabel(selected)}>
                         <span className="material-symbols-outlined">local_shipping</span>
-                        Generate DHL Return Label &amp; Approve
+                        {t('ret.actions.generate_dhl')}
                       </button>
                       <div style={{ display:'flex', gap:8 }}>
                         <button className="btn"
@@ -384,7 +381,7 @@ export default function Returns() {
                           }}
                           onClick={() => approveNoReturn(selected)}>
                                                   <span className="material-symbols-outlined">check_circle</span>
-                          Approve — No Return Needed
+                          {t('ret.actions.approve_no_return')}
                         </button>
                         <button className="btn"
                           style={{
@@ -395,7 +392,7 @@ export default function Returns() {
                           }}
                           onClick={() => rejectReturn(selected)}>
                           <span className="material-symbols-outlined">cancel</span>
-                          Reject Return
+                          {t('ret.actions.reject')}
                         </button>
                       </div>
                     </>
@@ -406,7 +403,7 @@ export default function Returns() {
                       style={{ width:'100%', justifyContent:'center' }}
                       onClick={() => markReceived(selected)}>
                       <span className="material-symbols-outlined">inventory</span>
-                      Mark Item as Received
+                      {t('ret.actions.mark_received')}
                     </button>
                   )}
 
@@ -415,7 +412,7 @@ export default function Returns() {
                       style={{ width:'100%', justifyContent:'center', background:'var(--green)', color:'white', border:'none' }}
                       onClick={() => issueRefund(selected)}>
                       <span className="material-symbols-outlined">payments</span>
-                      Issue Refund via Stripe
+                      {t('ret.actions.issue_refund')}
                     </button>
                   )}
 
@@ -426,7 +423,7 @@ export default function Returns() {
                       fontSize:11, color:'var(--green)', display:'flex', alignItems:'center', gap:8,
                     }}>
                       <span className="material-symbols-outlined" style={{ fontSize:16 }}>check_circle</span>
-                      Return completed · €{refundTotal.toFixed(2)} refunded to customer.
+                      {t('ret.banner.completed', { amount: '€' + refundTotal.toFixed(2) })}
                     </div>
                   )}
 
@@ -437,7 +434,7 @@ export default function Returns() {
                       fontSize:11, color:'var(--red)', display:'flex', alignItems:'center', gap:8,
                     }}>
                       <span className="material-symbols-outlined" style={{ fontSize:16 }}>cancel</span>
-                      Return rejected · customer notified.
+                      {t('ret.banner.rejected')}
                     </div>
                   )}
 
@@ -445,7 +442,7 @@ export default function Returns() {
                     style={{ width:'100%', justifyContent:'center' }}
                     onClick={() => whatsapp(selected)}>
                     <span className="material-symbols-outlined">chat_bubble</span>
-                    WhatsApp {selected.customer.split(' ')[0]} {selected.customer.split(' ').slice(1).join(' ')}
+                    {t('ret.actions.whatsapp', { name: selected.customer })}
                   </button>
                 </div>
               </div>

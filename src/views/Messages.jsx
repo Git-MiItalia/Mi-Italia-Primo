@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
 
-const quickReplies = ['Reserve link', 'Size guide', 'Stock update', 'Shipping info', 'Thank you']
+const QUICK_REPLY_KEYS = ['reserve_link', 'size_guide', 'stock_update', 'shipping_info', 'thank_you']
 
 function AvatarPlaceholder({ size = 18 }) {
   return (
@@ -13,26 +14,9 @@ function AvatarPlaceholder({ size = 18 }) {
   )
 }
 
-function fmtTime(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  const now = new Date()
-  const diffDays = Math.floor((now - d) / 86400000)
-  if (diffDays === 0) return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7)  return d.toLocaleDateString('en', { weekday: 'short' })
-  return d.toLocaleDateString('en', { day: 'numeric', month: 'short' })
-}
-
-function getStatusLabel(status) {
-  if (status === 'sending')   return <span className="msg-status-lbl sending">Sending…</span>
-  if (status === 'sent')      return <span className="msg-status-lbl sent">Sent</span>
-  if (status === 'delivered') return <span className="msg-status-lbl delivered">Delivered</span>
-  if (status === 'read')      return <span className="msg-status-lbl read">Read</span>
-  return null
-}
-
 export default function Messages() {
+  const { t, i18n } = useTranslation()
+
   const [conversations, setConversations] = useState([])
   const [loadingConvos, setLoadingConvos] = useState(true)
   const [activeId,      setActiveId]      = useState(null)
@@ -44,8 +28,26 @@ export default function Messages() {
   const bodyRef     = useRef(null)
   const activeIdRef = useRef(null)
 
+  function fmtTime(iso) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    const now = new Date()
+    const diffDays = Math.floor((now - d) / 86400000)
+    if (diffDays === 0) return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
+    if (diffDays === 1) return t('messages.yesterday')
+    if (diffDays < 7)  return d.toLocaleDateString('en', { weekday: 'short' })
+    return d.toLocaleDateString('en', { day: 'numeric', month: 'short' })
+  }
+
+  function getStatusLabel(status) {
+    if (status === 'sending')   return <span className="msg-status-lbl sending">{t('messages.status.sending')}</span>
+    if (status === 'sent')      return <span className="msg-status-lbl sent">{t('messages.status.sent')}</span>
+    if (status === 'delivered') return <span className="msg-status-lbl delivered">{t('messages.status.delivered')}</span>
+    if (status === 'read')      return <span className="msg-status-lbl read">{t('messages.status.read')}</span>
+    return null
+  }
+
   useEffect(() => {
-    // Fetch conversations on mount
     apiFetch(`${API}/boutique/messages/conversations`)
       .then(r => r.json())
       .then(res => {
@@ -57,95 +59,7 @@ export default function Messages() {
       })
       .catch(() => {})
       .finally(() => setLoadingConvos(false))
-
-    // SSE connection — opens once, stays open
-    const token = localStorage.getItem('primo_token')
-    if (token) {
-      const es = new EventSource(`${API}/boutique/messages/stream?token=${encodeURIComponent(token)}`)
-
-      es.onmessage = (e) => {
-        try {
-          const payload = JSON.parse(e.data)
-
-          if (payload.type === 'inbound_message' || payload.type === 'outbound_message') {
-            const message = payload.message
-
-            if (activeIdRef.current && payload.conversation_id === activeIdRef.current) {
-              setActiveConvo(prev => {
-                if (!prev) return prev
-                const msgs = prev.messages ?? []
-
-                // If exact ID already exists, just update status
-                if (msgs.some(m => m.id === message.id)) {
-                  return { ...prev, messages: msgs.map(m => m.id === message.id ? { ...m, status: message.status } : m) }
-                }
-
-                if (payload.type === 'outbound_message') {
-                  // Match by wa_message_id
-                  if (message.wa_message_id && msgs.some(m => m.wa_message_id === message.wa_message_id)) {
-                    return { ...prev, messages: msgs.map(m => m.wa_message_id === message.wa_message_id ? { ...m, status: message.status } : m) }
-                  }
-
-                  // Match temp message still in list
-                  const tempIdx = msgs.findIndex(m => m.id?.toString().startsWith('temp-') && m.body === message.body)
-                  if (tempIdx !== -1) {
-                    const updated = [...msgs]
-                    updated[tempIdx] = { ...message, direction: 'outbound' }
-                    return { ...prev, messages: updated }
-                  }
-
-                  // Already replaced by POST — match by body+direction within 5 seconds
-                  const recentMatch = msgs.findIndex(m =>
-                    m.direction === 'outbound' &&
-                    m.body === message.body &&
-                    Math.abs(new Date(m.created_at) - new Date(message.created_at)) < 5000
-                  )
-                  if (recentMatch !== -1) {
-                    const updated = [...msgs]
-                    updated[recentMatch] = { ...updated[recentMatch], ...message, direction: 'outbound' }
-                    return { ...prev, messages: updated }
-                  }
-                }
-
-                // Genuinely new message — append
-                return { ...prev, messages: [...msgs, message] }
-              })
-            }
-
-            setConversations(prev => prev.map(c =>
-              c.id === payload.conversation_id
-                ? { ...c, last_message_preview: message.body, last_message_at: message.created_at, unread_count: c.id === activeIdRef.current ? 0 : (c.unread_count ?? 0) + 1 }
-                : c
-            ))
-
-          } else if (payload.type === 'status_update') {
-            setActiveConvo(prev => {
-              if (!prev) return prev
-              return {
-                ...prev,
-                messages: prev.messages.map(m =>
-                  m.wa_message_id === payload.wa_message_id
-                    ? { ...m, status: payload.status }
-                    : m
-                )
-              }
-            })
-          }
-        } catch {}
-      }
-
-      es.onerror = () => {}
-      return () => es.close()
-    }
-  }, [])
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    if (!bodyRef.current) return
-    setTimeout(() => {
-      if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-    }, 50)
-  }, [activeConvo?.messages])
+  }, [i18n.language])
 
   function fetchConversation(id) {
     setActiveId(id)
@@ -154,28 +68,27 @@ export default function Messages() {
     apiFetch(`${API}/boutique/messages/conversations/${id}`)
       .then(r => r.json())
       .then(res => {
-        if (res.success) {
+        if (res.success && activeIdRef.current === id) {
           setActiveConvo(res.data)
-          setTimeout(() => {
-            if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-          }, 50)
+          setConversations(prev => prev.map(c => c.id === id ? { ...c, unread_count: 0 } : c))
         }
       })
       .catch(() => {})
       .finally(() => setLoadingMsgs(false))
   }
 
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+  }, [activeConvo])
+
   async function send() {
     const text = input.trim()
-    if (!text || !activeId || sending) return
+    if (!text || !activeConvo || sending) return
     setSending(true)
-
     const tempMsg = {
       id: `temp-${Date.now()}`,
       direction: 'outbound',
       body: text,
-      sender_type: 'boutique',
-      msg_type: 'text',
       status: 'sending',
       created_at: new Date().toISOString(),
     }
@@ -183,18 +96,15 @@ export default function Messages() {
     setInput('')
 
     try {
-      const res  = await apiFetch(`${API}/boutique/messages/conversations/${activeId}/reply`, {
+      const res = await apiFetch(`${API}/boutique/messages/conversations/${activeConvo.id}/send`, {
         method: 'POST',
-        body:   JSON.stringify({ body: text }),
-      })
-      const data = await res.json()
+        body: JSON.stringify({ body: text })
+      }).then(r => r.json())
 
-      if (data.success) {
+      if (res.success) {
         setActiveConvo(prev => prev ? {
           ...prev,
-          messages: (prev.messages ?? []).map(m =>
-            m.id === tempMsg.id ? { ...data.data, direction: 'outbound' } : m
-          )
+          messages: (prev.messages ?? []).map(m => m.id === tempMsg.id ? { ...res.data, status: 'sent' } : m)
         } : prev)
         setConversations(prev => prev.map(c =>
           c.id === activeId
@@ -224,15 +134,15 @@ export default function Messages() {
   const unreadTotal = conversations.filter(c => c.unread_count > 0).length
 
   function convName(c) {
-    return c.customer_name || c.customer_phone || 'Unknown'
+    return c.customer_name || c.customer_phone || t('messages.unknown_contact')
   }
 
   function convMeta(c) {
     const parts = []
     if (c.customer_phone) parts.push(`+${c.customer_phone}`)
     if (c.product_name)   parts.push(c.product_name)
-    if (!c.within_window) parts.push('Outside reply window')
-    return parts.join(' · ') || 'WhatsApp'
+    if (!c.within_window) parts.push(t('messages.outside_window'))
+    return parts.join(' · ') || t('messages.wa_label')
   }
 
   return (
@@ -241,9 +151,9 @@ export default function Messages() {
       {/* ── Sidebar ── */}
       <div className="msg-sidebar">
         <div className="msg-sidebar-hdr">
-          <div className="msg-sidebar-title">Messages</div>
+          <div className="msg-sidebar-title">{t('messages.title')}</div>
           <div className="msg-sidebar-badges">
-            <span className="msg-wa-badge">WhatsApp</span>
+            <span className="msg-wa-badge">{t('messages.wa_label')}</span>
             {unreadTotal > 0 && <span className="sb-badge msg-unread-count">{unreadTotal}</span>}
           </div>
         </div>
@@ -251,19 +161,19 @@ export default function Messages() {
         <div className="msg-search">
           <div className="msg-search-inner">
             <span className="material-symbols-outlined">search</span>
-            <input placeholder="Search conversations..." />
+            <input placeholder={t('messages.search_placeholder')} />
           </div>
         </div>
 
         <div className="msg-list">
           {loadingConvos && (
-            <div className="msg-empty" style={{ padding: '20px 16px', textAlign: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--stone)' }}>sync</span>
+            <div className="msg-empty msg-empty-loading">
+              <span className="material-symbols-outlined msg-empty-icon-sm">sync</span>
             </div>
           )}
           {!loadingConvos && conversations.length === 0 && (
-            <div className="msg-empty" style={{ padding: '24px 16px', textAlign: 'center', fontSize: 11, color: 'var(--stone)' }}>
-              No conversations yet.
+            <div className="msg-empty msg-empty-list">
+              {t('messages.no_conversations')}
             </div>
           )}
           {conversations.map(c => (
@@ -297,23 +207,23 @@ export default function Messages() {
             </div>
             <div className="msg-main-actions">
               <button className="btn btn-sm btn-outline">
-                <span className="material-symbols-outlined">person</span>View Profile
+                <span className="material-symbols-outlined">person</span>{t('messages.view_profile')}
               </button>
               <button className="btn btn-sm btn-whatsapp">
-                <span className="material-symbols-outlined">open_in_new</span>Open in WhatsApp
+                <span className="material-symbols-outlined">open_in_new</span>{t('messages.open_wa')}
               </button>
             </div>
           </div>
 
           <div className="msg-body" ref={bodyRef}>
-            <div className="msg-date-divider">{`Today · ${new Date().toLocaleDateString('en', { month:'long', day:'numeric', year:'numeric' })}`}</div>
+            <div className="msg-date-divider">{t('messages.today_divider', { date: new Date().toLocaleDateString('en', { month:'long', day:'numeric', year:'numeric' }) })}</div>
 
             {loadingMsgs ? (
               <div className="msg-empty">
-                <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--stone)' }}>sync</span>
+                <span className="material-symbols-outlined msg-empty-icon-md">sync</span>
               </div>
             ) : (activeConvo.messages ?? []).length === 0 ? (
-              <div className="msg-empty">{`Start of conversation with ${convName(activeConvo)}`}</div>
+              <div className="msg-empty">{t('messages.start_of_convo', { name: convName(activeConvo) })}</div>
             ) : (
               (activeConvo.messages ?? []).map((m, idx, arr) => {
                 const type = m.direction === 'outbound' ? 'sent' : 'received'
@@ -328,8 +238,8 @@ export default function Messages() {
                     <div className={`msg-bubble-wrap msg-bubble-wrap-${type}`}>
                       {m.template_name && (
                         <div className="msg-template-ref">
-                          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>auto_awesome</span>
-                          Template: {m.template_name}
+                          <span className="material-symbols-outlined msg-template-icon">auto_awesome</span>
+                          {t('messages.template_ref', { name: m.template_name })}
                         </div>
                       )}
                       <div className={`msg-bubble ${type}${m.status === 'sending' ? ' sending' : ''}`}>
@@ -352,29 +262,32 @@ export default function Messages() {
           {!activeConvo.within_window && (
             <div className="msg-window-warn">
               <span className="material-symbols-outlined">schedule</span>
-              Outside the 24-hour reply window. You can only send template messages.
+              {t('messages.window_warn')}
             </div>
           )}
 
           <div className="msg-quick-replies">
-            {quickReplies.map((r, i) => (
-              <div key={r} onClick={() => setInput(r)} className={`msg-quick-chip${i === 0 ? ' msg-quick-wa' : ''}`}>
-                {r}
-              </div>
-            ))}
+            {QUICK_REPLY_KEYS.map((key, i) => {
+              const label = t(`messages.quick_replies.${key}`)
+              return (
+                <div key={key} onClick={() => setInput(label)} className={`msg-quick-chip${i === 0 ? ' msg-quick-wa' : ''}`}>
+                  {label}
+                </div>
+              )
+            })}
           </div>
 
           <div className="msg-input-area">
             <textarea
               className="msg-input-box"
               rows={1}
-              placeholder={activeConvo.within_window ? 'Type a message...' : 'Outside reply window…'}
+              placeholder={activeConvo.within_window ? t('messages.input_placeholder') : t('messages.outside_window_placeholder')}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               disabled={!activeConvo.within_window || sending}
             />
-            <button className="btn btn-sm btn-outline" title="Attach product">
+            <button className="btn btn-sm btn-outline" title={t('messages.attach_product')}>
               <span className="material-symbols-outlined msg-attach-icon">attach_file</span>
             </button>
             <button
@@ -389,10 +302,10 @@ export default function Messages() {
       ) : (
         !loadingConvos && (
           <div className="msg-main msg-main-empty">
-            <div style={{ textAlign: 'center', color: 'var(--stone)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 48, display: 'block', marginBottom: 12, opacity: 0.3 }}>chat</span>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>No conversation selected</div>
-              <div style={{ fontSize: 11, marginTop: 4 }}>Select a conversation from the list</div>
+            <div className="msg-empty-center">
+              <span className="material-symbols-outlined msg-empty-icon-lg">chat</span>
+              <div className="msg-empty-title">{t('messages.empty_title')}</div>
+              <div className="msg-empty-sub">{t('messages.empty_sub')}</div>
             </div>
           </div>
         )

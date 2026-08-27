@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 
@@ -76,7 +77,8 @@ function StockBadge({ type, value }) {
 
 // ══════════════════════════════════════════════════════════════════════════
 export default function Locations() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const [view, setView] = useState('overview')
 
   // ── Locations ───────────────────────────────────────────────────────────
@@ -110,7 +112,6 @@ export default function Locations() {
   const [loadingReservations, setLoadingReservations] = useState(true)
 
   // ── Modal state ─────────────────────────────────────────────────────────
-  const [showAddLoc, setShowAddLoc]         = useState(false)
   const [showEditLoc, setShowEditLoc]       = useState(null)
   const [showAddStaff, setShowAddStaff]     = useState(false)
   const [showEditStaff, setShowEditStaff]   = useState(null)
@@ -124,7 +125,7 @@ export default function Locations() {
     fetchStock()
     fetchTransfers()
     fetchReservations()
-  }, [])
+  }, [i18n.language])
 
   // ── Fetchers ────────────────────────────────────────────────────────────
   function fetchLocations() {
@@ -237,7 +238,7 @@ export default function Locations() {
           <button className="btn btn-outline btn-sm" disabled title="Coming soon">
             <span className="material-symbols-outlined">download</span>{t('common.export')}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddLoc(true)}>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/locations/new')}>
             <span className="material-symbols-outlined">add</span>{t('locations.add_location')}
           </button>
         </div>
@@ -621,14 +622,6 @@ export default function Locations() {
         </>
       )}
 
-      {/* ══ MODAL: Add Location ══ */}
-      {showAddLoc && (
-        <AddLocationModal
-          onClose={() => setShowAddLoc(false)}
-          onCreated={() => { setShowAddLoc(false); fetchLocations() }}
-        />
-      )}
-
       {/* ══ MODAL: Edit Location ══ */}
       {showEditLoc && (
         <EditLocationModal
@@ -674,89 +667,6 @@ export default function Locations() {
 // ══════════════════════════════════════════════════════════════════════════
 // MODAL COMPONENTS
 // ══════════════════════════════════════════════════════════════════════════
-
-function AddLocationModal({ onClose, onCreated }) {
-  const { t } = useTranslation()
-  const [name, setName]           = useState('')
-  const [type, setType]           = useState('standard')
-  const [addressLine1, setAddr]   = useState('')
-  const [city, setCity]           = useState('')
-  const [postcode, setPostcode]   = useState('')
-  const [country, setCountry]     = useState('IT')
-  const [monSat, setMonSat]       = useState('10:00-19:30')
-  const [sun, setSun]             = useState('11:00-18:00')
-  const [saving, setSaving]       = useState(false)
-  const [error, setError]         = useState(null)
-
-  async function submit() {
-    if (!name.trim() || !addressLine1.trim() || saving) return
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await apiFetch(`${API}/boutique/locations`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name, type, addressLine1, city, postcode, country,
-          openingHours: { mon_sat: monSat, sun },
-          miItaliaListingName: name,
-        }),
-      }).then(r => r.json())
-      if (res?.success) onCreated()
-      else setError(res?.message ?? 'Failed to create location')
-    } catch (err) {
-      console.error('[AddLocationModal] failed', err); setError('Network error')
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-hdr">
-          <span className="modal-title">{t('locations.modal.add_title')} <em>{t('locations.modal.add_title_em')}</em></span>
-          <button className="modal-close" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
-        </div>
-        <div className="form-row2">
-          <div className="form-group"><label className="form-lbl">{t('locations.modal.loc_name')}</label>
-            <input className="form-input" placeholder="e.g. Neglia — Porta Nuova" value={name} onChange={e => setName(e.target.value)} /></div>
-          <div className="form-group"><label className="form-lbl">{t('locations.modal.type')}</label>
-            <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
-              <option value="standard">Standard</option>
-              <option value="flagship">Flagship</option>
-              <option value="popup">Pop-up</option>
-              <option value="outlet">Outlet</option>
-            </select></div>
-        </div>
-        <div className="form-group"><label className="form-lbl">{t('locations.modal.address')}</label>
-          <input className="form-input" placeholder="Via della Spiga 10" value={addressLine1} onChange={e => setAddr(e.target.value)} /></div>
-        <div className="form-row3">
-          <div className="form-group"><label className="form-lbl">{t('locations.modal.city')}</label>
-            <input className="form-input" placeholder="Milano" value={city} onChange={e => setCity(e.target.value)} /></div>
-          <div className="form-group"><label className="form-lbl">{t('locations.modal.postcode')}</label>
-            <input className="form-input" placeholder="20121" value={postcode} onChange={e => setPostcode(e.target.value)} /></div>
-          <div className="form-group"><label className="form-lbl">{t('locations.modal.country')}</label>
-            <select className="form-select" value={country} onChange={e => setCountry(e.target.value)}>
-              <option value="IT">Italy</option><option value="FR">France</option>
-              <option value="UK">UK</option><option value="AE">UAE</option>
-            </select></div>
-        </div>
-        <div className="form-row2">
-          <div className="form-group"><label className="form-lbl">Mon–Sat hours</label>
-            <input className="form-input" value={monSat} onChange={e => setMonSat(e.target.value)} placeholder="10:00-19:30" /></div>
-          <div className="form-group"><label className="form-lbl">Sunday hours</label>
-            <input className="form-input" value={sun} onChange={e => setSun(e.target.value)} placeholder="11:00-18:00 or Closed" /></div>
-        </div>
-        {error && <div className="alert alert-red loc-inline-alert"><span className="material-symbols-outlined">error</span>{error}</div>}
-        <Alert type="info" icon="info">{t('locations.modal.add_alert')}</Alert>
-        <div className="modal-footer">
-          <button className="btn btn-outline" onClick={onClose}>{t('common.cancel')}</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving || !name.trim() || !addressLine1.trim()}>
-            {saving ? 'Saving…' : `${t('locations.modal.add_btn')} →`}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 function EditLocationModal({ location, onClose, onSaved }) {

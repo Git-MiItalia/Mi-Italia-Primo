@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { sortSizeLabels } from '../../common/sizechart'
 
 function Toggle({ on, onToggle }) {
   return (
@@ -9,13 +10,13 @@ function Toggle({ on, onToggle }) {
   )
 }
 
-export default function VariantsStock({ sizes, colours, onStockChange, initialStock = [], variants = [] }) {
+export default function VariantsStock({ sizes, colours, onStockChange, initialStock = [], variants = [], warnThreshold = 3 }) {
   const { t } = useTranslation()
 
   const sizeList = useMemo(() => {
     const fromSizes = (sizes ?? []).filter(r => r.size?.toString().trim())
     if (fromSizes.length > 0) return fromSizes
-    if (variants.length > 0) return [...new Set(variants.map(v => v.size_label))].map(s => ({ size: s }))
+    if (variants.length > 0) return sortSizeLabels([...new Set(variants.map(v => v.size_label))]).map(s => ({ size: s }))
     return []
   }, [JSON.stringify(sizes), variants.length])
 
@@ -162,7 +163,7 @@ export default function VariantsStock({ sizes, colours, onStockChange, initialSt
                           min="0"
                           value={cell.qty}
                           onChange={e => setQty(si, c.id, e.target.value)}
-                          className={`vs-qty-input${cell.qty === 0 ? ' zero' : cell.qty <= 2 ? ' low' : ' ok'}`}
+                          className={`vs-qty-input${cell.qty === 0 ? ' zero' : cell.qty <= warnThreshold ? ' low' : ' ok'}`}
                           onWheel={e => e.target.blur()}
                         />
                         <div className="vs-toggle-wrap">

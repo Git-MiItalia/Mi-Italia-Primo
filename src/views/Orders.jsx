@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import Toast, { useToast } from '../components/ui/Toast'
 import useNotifStore from '../store/notifStore'
+import useLangStore from '../store/langStore'
+import { generatePackingSlip } from '../lib/packingSlip'
 
 const API = import.meta.env.VITE_API_URL
 const STATUS_TABS = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
@@ -123,6 +125,7 @@ function OrderTimeline({ order }) {
 
 export default function Orders() {
   const { t } = useTranslation()
+  const lang  = useLangStore(s => s.lang)
 
   const notifications = useNotifStore(s => s.notifications)
   const markRead      = useNotifStore(s => s.markRead)
@@ -187,7 +190,7 @@ export default function Orders() {
         if (list.length > 0) fetchDetail(list[0].id)
         setLoading(false)
       })
-  }, [])
+  }, [lang])
 
   function handleTabClick(i) {
     setActiveTab(i)
@@ -382,6 +385,7 @@ export default function Orders() {
                     <div className="ord-item-variant">
                       {item.variant_size_snapshot ?? item.size} · {item.variant_colour_snapshot ?? item.colour}
                       {item.sku_snapshot ? ` · SKU: ${item.sku_snapshot}` : ''}
+                      {' · '}{t('orders.detail.qty')}: {item.qty ?? 1}
                     </div>
                   </div>
                   <div className="ord-item-price">€{item.unit_price}</div>
@@ -428,7 +432,8 @@ export default function Orders() {
                       <span className="material-symbols-outlined">local_shipping</span>
                       Generate DHL Label
                     </button>
-                    <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}>
+                    <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}
+                      onClick={() => generatePackingSlip(selected.id)}>
                       <span className="material-symbols-outlined">print</span>
                       Packing Slip
                     </button>

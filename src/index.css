@@ -30,7 +30,8 @@
   --dhl:        #C8102E;
 
   /* Layout */
-  --sidebar:    240px;
+  --sidebar:           240px;
+  --sidebar-collapsed: 72px;
 
   /* Radii */
   --radius:      0;

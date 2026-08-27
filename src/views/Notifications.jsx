@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
@@ -28,7 +28,10 @@ function getNotifIcon(type) {
 }
 
 function getNavRoute(type, link) {
-  if (link) return link
+  if (link) {
+    // Strip trailing IDs — routes like /reservations/{uuid} don't exist
+    return link.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, '')
+  }
   if (!type) return null
   const t = type.toLowerCase()
   if (t.includes('reservation')) return '/reservations'
@@ -52,7 +55,7 @@ function timeAgo(isoDate) {
 }
 
 export default function Notifications() {
-  const { t }    = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
   const TABS  = [t('notifications.tabs.all'), t('notifications.tabs.reservations'), t('notifications.tabs.orders'), t('notifications.tabs.stock'), t('notifications.tabs.messages')]
@@ -77,16 +80,22 @@ export default function Notifications() {
     setToggles(prev => prev.map((v, idx) => idx === i ? !v : v))
   }
 
+  // Skip refetching if the global store already has notifications for the
+  // language we're currently rendering in — but a language switch must still
+  // force a fresh fetch, since we can't know what locale pre-existing
+  // (e.g. websocket-populated) notifications were fetched in.
+  const fetchedLangRef = useRef(null)
   useEffect(() => {
-    if (notifications.length > 0) return
+    if (notifications.length > 0 && fetchedLangRef.current === i18n.language) return
     setLoading(true)
     apiFetch(`${API}/boutique/notifications`)
       .then(r => r.json())
       .then(res => {
         if (res.success) setNotifications(res.data.notifications ?? [], res.data.unread_count ?? 0)
+        fetchedLangRef.current = i18n.language
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [i18n.language])
 
   function handleNotifClick(n) {
     if (!n.read_at && !n.is_read) {

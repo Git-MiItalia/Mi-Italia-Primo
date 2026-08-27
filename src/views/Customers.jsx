@@ -1,15 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import useLangStore from '../store/langStore'
 
 const API = import.meta.env.VITE_API_URL
-
-function tagFromSource(source) {
-  if (source === 'app')    return 'vip'
-  if (source === 'walkin') return 'repeat'
-  if (source === 'import') return 'new'
-  return 'new'
-}
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -23,6 +17,7 @@ function fmtSpend(val) {
 
 export default function Customers() {
   const { t } = useTranslation()
+  const lang  = useLangStore(s => s.lang)
 
   const [customers, setCustomers]         = useState([])
   const [selected, setSelected]           = useState(null)
@@ -30,6 +25,7 @@ export default function Customers() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [search, setSearch]               = useState('')
   const [filterTag, setFilterTag]         = useState('all')
+  const [stats, setStats]                 = useState({ totalCustomers:0, newThisMonth:0, repeatBuyers:0, avgLifetimeValue:0 })
 
   const [showAdd, setShowAdd]   = useState(false)
   const [newName, setNewName]   = useState('')
@@ -45,15 +41,17 @@ export default function Customers() {
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`${API}/boutique/customers`)
-      .then(r => r.json())
-      .then(res => {
-        const list = res.data.customers ?? []
-        setCustomers(list)
-        if (list.length > 0) fetchDetail(list[0].id)
-        setLoading(false)
-      })
-  }, [])
+    Promise.all([
+      apiFetch(`${API}/boutique/customers`).then(r => r.json()),
+      apiFetch(`${API}/boutique/customers/stats`).then(r => r.json()),
+    ]).then(([custRes, statsRes]) => {
+      const list = custRes.data?.customers ?? []
+      setCustomers(list)
+      if (list.length > 0) fetchDetail(list[0].id)
+      if (statsRes.success) setStats(statsRes.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [lang])
 
   function fetchDetail(id) {
     setDetailLoading(true)
@@ -80,6 +78,9 @@ export default function Customers() {
           setShowAdd(false)
           setNewName(''); setNewEmail(''); setNewPhone(''); setAddError('')
           setCreateSuccess(res.data)
+          // Refresh stats
+          apiFetch(`${API}/boutique/customers/stats`).then(r => r.json())
+            .then(r => { if (r.success) setStats(r.data) }).catch(() => {})
         } else {
           setAddError(res.message ?? t('customers.add_modal.error_generic'))
         }
@@ -113,6 +114,9 @@ export default function Customers() {
           setCustomers(prev => prev.filter(c => c.id !== id))
           setSelected(null)
           setDeleteConfirm(null)
+          // Refresh stats
+          apiFetch(`${API}/boutique/customers/stats`).then(r => r.json())
+            .then(r => { if (r.success) setStats(r.data) }).catch(() => {})
         }
       })
   }
@@ -120,8 +124,7 @@ export default function Customers() {
   const filteredCustomers = customers.filter(c => {
     const matchSearch = c.name?.toLowerCase().includes(search.toLowerCase()) ||
                         c.email?.toLowerCase().includes(search.toLowerCase())
-    const tag = tagFromSource(c.source)
-    const matchTag = filterTag === 'all' || tag === filterTag
+    const matchTag = filterTag === 'all' || c.segment === filterTag
     return matchSearch && matchTag
   })
 
@@ -153,9 +156,9 @@ export default function Customers() {
 
         {/* Stats */}
         <div className="stat-row col3 cu-stats">
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.total')}</div><div className="stat-val">{customers.length}</div></div>
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.walkin')}</div><div className="stat-val">{customers.filter(c => c.source === 'walkin').length}</div></div>
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.app_users')}</div><div className="stat-val">{customers.filter(c => c.source === 'app').length}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.total')}</div><div className="stat-val">{stats.totalCustomers}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.new_month')}</div><div className="stat-val">{stats.newThisMonth}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.repeat')}</div><div className="stat-val">{stats.repeatBuyers}</div></div>
         </div>
 
         <div className="card">
@@ -171,7 +174,7 @@ export default function Customers() {
           )}
 
           {!loading && filteredCustomers.map((c, i) => {
-            const tag = tagFromSource(c.source)
+            const tag = c.segment || 'new'
             return (
               <div
                 key={c.id}
@@ -186,8 +189,8 @@ export default function Customers() {
                   <div className="customer-email">{c.email} · {c.source}</div>
                 </div>
                 <div className="cu-row-spend">
-                  <div className="cu-spend-val">{fmtSpend(c.boutique_total_spend)}</div>
-                  <div className="cu-visit-count">{c.boutique_visit_count} {t('customers.detail.visits').toLowerCase()}</div>
+                  <div className="cu-spend-val">{fmtSpend(c.total_spend)}</div>
+                  <div className="cu-visit-count">{c.visit_count} {t('customers.detail.visits').toLowerCase()}</div>
                 </div>
                 <div className={`customer-tag ${tag}`}>{tag.toUpperCase()}</div>
               </div>
@@ -212,8 +215,8 @@ export default function Customers() {
               <div className="detail-panel-sub">{t('customers.detail.since')} {fmtDate(selected.created_at)} · {selected.source}</div>
             </div>
             <div className="cu-detail-hdr-actions">
-              <span className={`customer-tag ${tagFromSource(selected.source)}`}>
-                {tagFromSource(selected.source).toUpperCase()}
+              <span className={`customer-tag ${selected.segment || 'new'}`}>
+                {(selected.segment || 'new').toUpperCase()}
               </span>
               <button className="btn btn-sm btn-red" onClick={() => setDeleteConfirm(selected.id)}>
                 <span className="material-symbols-outlined">delete</span>
@@ -225,9 +228,9 @@ export default function Customers() {
             {/* Mini stats */}
             <div className="stat-row col3 cu-mini-stats">
               {[
-                { v: fmtSpend(selected.boutique_total_spend), l: t('customers.detail.lifetime_spend') },
-                { v: String(selected.boutique_visit_count),   l: t('customers.detail.visits') },
-                { v: selected.points_balance ?? '—',          l: t('customers.detail.points') },
+                { v: fmtSpend(selected.total_spend), l: t('customers.detail.lifetime_spend') },
+                { v: String(selected.visit_count ?? 0), l: t('customers.detail.visits') },
+                { v: selected.points_balance ?? '—',    l: t('customers.detail.points') },
               ].map(s => (
                 <div key={s.l} className="cu-mini-stat">
                   <div className="cu-mini-stat-val">{s.v}</div>
@@ -241,7 +244,7 @@ export default function Customers() {
             <div className="detail-row"><div className="detail-label">{t('customers.detail.source')}</div><div className="detail-value">{selected.source}</div></div>
             <div className="detail-row">
               <div className="detail-label">{t('customers.detail.last_visit')}</div>
-              <div className="detail-value">{selected.boutique_last_visit_at ? fmtDate(selected.boutique_last_visit_at) : t('customers.detail.never')}</div>
+              <div className="detail-value">{selected.last_visit_at ? fmtDate(selected.last_visit_at) : t('customers.detail.never')}</div>
             </div>
             <div className="detail-row">
               <div className="detail-label">{t('customers.detail.tier')}</div>
@@ -330,7 +333,14 @@ export default function Customers() {
 
             <div className="detail-divider" />
 
-            <button className="btn btn-whatsapp cu-whatsapp-btn">
+            <button className="btn btn-whatsapp cu-whatsapp-btn"
+              onClick={() => {
+                const phone = selected.phone?.replace(/\D/g, '')
+                if (!phone) return
+                const name = selected.name?.split(' ')[0] ?? ''
+                const msg = encodeURIComponent(`Ciao ${name}, `)
+                window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
+              }}>
               <span className="material-symbols-outlined">chat_bubble</span>
               {t('customers.detail.whatsapp', { name: selected.name?.split(' ')[0] })}
             </button>
@@ -371,8 +381,7 @@ export default function Customers() {
 
       {/* ── Delete Confirm Modal ── */}
       {deleteConfirm && (
-        <>
-          <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}></div>
+        <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-confirm-title">
               {t('customers.delete_modal.title')} <em className="modal-em-red">{t('customers.delete_modal.title_em')}</em>
@@ -383,20 +392,20 @@ export default function Customers() {
               <button onClick={() => deleteCustomer(deleteConfirm)} className="btn btn-red modal-confirm-btn">{t('common.delete')}</button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Create Success Modal ── */}
       {createSuccess && (
         <div className="modal-backdrop" onClick={() => setCreateSuccess(null)}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ textAlign:'center' }}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-success-emoji">✅</div>
             <div className="modal-success-title">
               {t('customers.add_success.title')} <em className="modal-em-red">{t('customers.add_success.title_em')}</em>
             </div>
             <div className="modal-success-msg">
               <strong>{createSuccess.name}</strong> {t('customers.add_success.msg', { name: '' }).replace(createSuccess.name, '').trim()}
-              {createSuccess.email && <><br />Email: <strong>{createSuccess.email}</strong></>}
+              {createSuccess.email && <><br />{t('customers.add_success.email_prefix')} <strong>{createSuccess.email}</strong></>}
             </div>
             <button onClick={() => setCreateSuccess(null)} className="btn btn-primary modal-success-btn">{t('common.done')}</button>
           </div>

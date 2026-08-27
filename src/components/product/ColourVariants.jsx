@@ -35,7 +35,9 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
   const [colourName, setColourName] = useState('')
   const [codeError, setCodeError]   = useState('')
   const [selectedId, setSelectedId] = useState(null)
+  const [selectedPresets, setSelectedPresets] = useState([])
   const pickerRef    = useRef()
+  const nameInputRef = useRef()
   const initialised  = useRef(false)
 
   // Seed colours from initialColours prop (edit mode)
@@ -79,13 +81,25 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
   function saveColour() {
     if (!colourName.trim()) return
     if (!isValidHex(pickerHex)) { setCodeError(t('colour_variants.hex_error')); return }
-    const newColour = { id: Date.now(), name: colourName.trim(), hex: pickerHex.toUpperCase() }
+    const trimmedName = colourName.trim()
+    if (colours.some(c => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      show(t('colour_variants.duplicate_name', { name: trimmedName }), 'warning')
+      return
+    }
+    const newColour = { id: Date.now(), name: trimmedName, hex: pickerHex.toUpperCase() }
     const updated   = [...colours, newColour]
     setColours(updated)
     setSelectedId(newColour.id)
     if (onColourChange)  onColourChange(newColour)
     if (onColoursChange) onColoursChange(updated)
-    setAdding(false)
+    // Reset for the next colour instead of closing — lets the user add several in a row
+    setColourName('')
+    setPickerHex('#B8955A'); setCodeInput('#B8955A'); setCodeError('')
+    nameInputRef.current?.focus()
+  }
+
+  function handleFieldKeyDown(e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveColour() }
   }
 
   function removeColour(id) {
@@ -103,9 +117,28 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
     if (onColourChange) onColourChange(c)
   }
 
-  function applyPreset(preset) {
-    setPickerHex(preset.hex); setCodeInput(preset.hex)
-    setColourName(preset.name); setCodeError('')
+  function togglePreset(preset) {
+    setSelectedPresets(prev =>
+      prev.includes(preset.hex) ? prev.filter(h => h !== preset.hex) : [...prev, preset.hex]
+    )
+  }
+
+  function addSelectedPresets() {
+    if (!selectedPresets.length) return
+    const existingNames = new Set(colours.map(c => c.name.toLowerCase()))
+    const toAdd = PRESET_COLOURS.filter(p =>
+      selectedPresets.includes(p.hex) && !existingNames.has(p.name.toLowerCase())
+    )
+    setSelectedPresets([])
+    if (!toAdd.length) { show(t('colour_variants.already_added'), 'warning'); return }
+    const newColours = toAdd.map((p, i) => ({ id: Date.now() + i, name: p.name, hex: p.hex }))
+    const updated = [...colours, ...newColours]
+    setColours(updated)
+    const last = newColours[newColours.length - 1]
+    setSelectedId(last.id)
+    if (onColourChange)  onColourChange(last)
+    if (onColoursChange) onColoursChange(updated)
+    show(t('colour_variants.presets_added', { count: newColours.length }), 'success')
   }
 
   return (
@@ -119,9 +152,9 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
             </button>
           ) : (
             <div className="cv-hdr-actions">
-              <button className="btn btn-sm btn-outline" onClick={() => setAdding(false)}>{t('common.cancel')}</button>
+              <button className="btn btn-sm btn-outline" onClick={() => setAdding(false)}>{t('colour_variants.done')}</button>
               <button className="btn btn-sm btn-primary" onClick={saveColour}>
-                <span className="material-symbols-outlined">check</span>{t('common.save')}
+                <span className="material-symbols-outlined">add</span>{t('colour_variants.add_colour_btn')}
               </button>
             </div>
           )}
@@ -158,13 +191,14 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
                 <div className="form-group ap-no-mb">
                   <label className="form-lbl">{t('colour_variants.hex_label')}</label>
                   <input className={`form-input cv-hex-input${codeError ? ' cv-input-error' : ''}`}
-                    value={codeInput} onChange={handleCodeInput} placeholder="#000000" />
+                    value={codeInput} onChange={handleCodeInput} onKeyDown={handleFieldKeyDown} placeholder="#000000" />
                   {codeError && <div className="cv-error">{codeError}</div>}
                 </div>
                 <div className="form-group ap-no-mb">
                   <label className="form-lbl">{t('colour_variants.name_label')}</label>
-                  <input className="form-input" value={colourName}
+                  <input ref={nameInputRef} className="form-input" value={colourName}
                     onChange={e => setColourName(e.target.value)}
+                    onKeyDown={handleFieldKeyDown}
                     placeholder={t('colour_variants.name_placeholder')} />
                 </div>
               </div>
@@ -178,14 +212,27 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
               </div>
             )}
 
-            <div className="cv-presets-lbl">{t('colour_variants.quick_presets')}</div>
+            <div className="cv-presets-hdr">
+              <div className="cv-presets-lbl">{t('colour_variants.quick_presets')}</div>
+              {selectedPresets.length > 0 && (
+                <button type="button" className="btn btn-sm btn-primary" onClick={addSelectedPresets}>
+                  <span className="material-symbols-outlined">check</span>
+                  {t('colour_variants.add_selected', { count: selectedPresets.length })}
+                </button>
+              )}
+            </div>
             <div className="cv-presets">
-              {PRESET_COLOURS.map(p => (
-                <div key={p.hex} onClick={() => applyPreset(p)} title={`${p.name} ${p.hex}`} className="cv-preset">
-                  <div className={`cv-preset-swatch${pickerHex.toUpperCase() === p.hex ? ' sel' : ''}`} style={{ background:p.hex }} />
-                  <span className="cv-preset-name">{p.name}</span>
-                </div>
-              ))}
+              {PRESET_COLOURS.map(p => {
+                const checked = selectedPresets.includes(p.hex)
+                return (
+                  <div key={p.hex} onClick={() => togglePreset(p)} title={`${p.name} ${p.hex}`} className={`cv-preset${checked ? ' sel' : ''}`}>
+                    <div className={`cv-preset-swatch${checked ? ' sel' : ''}`} style={{ background:p.hex }}>
+                      {checked && <span className="material-symbols-outlined cv-preset-check">check</span>}
+                    </div>
+                    <span className="cv-preset-name">{p.name}</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

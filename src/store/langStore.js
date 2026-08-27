@@ -48,6 +48,25 @@ const useLangStore = create((set) => ({
       console.error('fetchTranslations error:', err)
     }
   },
+
+  // No-auth translations for pre-login pages (Login, forgot/reset/set password) and StripeConnect
+  fetchLoginTranslations: async (locale) => {
+    try {
+      const loc = locale || localStorage.getItem('primo_lang') || 'en'
+      const res  = await fetch(`${BASE_URL}/auth/boutique/login-translations?locale=${loc}`)
+      const data = await res.json()
+      if (data.success) {
+        const bundle         = data.data.translatedData
+        const resolvedLocale = data.data.preferred_locale || loc
+        i18n.addResourceBundle(resolvedLocale, 'translation', bundle, true, true)
+        i18n.changeLanguage(resolvedLocale)
+        localStorage.setItem('primo_lang', resolvedLocale)
+        set({ lang: resolvedLocale })
+      }
+    } catch (err) {
+      console.error('fetchLoginTranslations error:', err)
+    }
+  },
 }))
 
 export default useLangStore

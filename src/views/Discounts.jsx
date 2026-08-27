@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import Toast, { useToast } from '../components/ui/Toast'
+import useLangStore from '../store/langStore'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -11,6 +12,35 @@ function calcDiscounted(retail, pct) {
   const discounted = parseFloat(retail) * (1 - n / 100)
   const saving     = parseFloat(retail) - discounted
   return { price: '€' + discounted.toFixed(2), save: '€' + Math.round(saving) }
+}
+
+/* ── Seasonal helpers ── */
+const MOCK_SALES = [
+  { id:'1', name:'Spring Collection Sale', description:'20% off all outerwear', status:'active', discount_type:'percentage', discount_value:20, applies_to:"Men's > Outerwear", start_date:'2026-07-01T00:00:00Z', end_date:'2026-09-01T00:00:00Z' },
+  { id:'2', name:'Autumn Preview', description:'Early access on new season arrivals', status:'scheduled', discount_type:'fixed', discount_value:50, applies_to:'All products', start_date:'2026-09-15T00:00:00Z', end_date:'2026-10-01T00:00:00Z' },
+  { id:'3', name:'Winter Clearance', description:"30% off · Women's > Knitwear", status:'ended', discount_type:'percentage', discount_value:30, applies_to:"Women's > Knitwear", start_date:'2026-01-10T00:00:00Z', end_date:'2026-03-01T00:00:00Z' },
+]
+
+function fmtSaleDate(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+}
+
+function daysUntil(iso) {
+  if (!iso) return 0
+  const diff = Math.ceil((new Date(iso) - new Date()) / (1000 * 60 * 60 * 24))
+  return diff > 0 ? diff : 0
+}
+
+function saleDiscountLabel(sale) {
+  return sale.discount_type === 'fixed' ? `€${sale.discount_value} off` : `${sale.discount_value}% off`
+}
+
+function saleBadge(status) {
+  if (status === 'active')    return { label:'RUNNING NOW', cls:'ss-badge-active' }
+  if (status === 'scheduled') return { label:'SCHEDULED',   cls:'ss-badge-scheduled' }
+  if (status === 'paused')    return { label:'PAUSED',      cls:'ss-badge-paused' }
+  return { label:'ENDED', cls:'ss-badge-ended' }
 }
 
 /* ── PromoList ── */
@@ -90,7 +120,7 @@ function CreatePromoModal({ onClose, onCreate }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-  <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-large-hdr">
           <div className="modal-large-title">{t('discounts.create_modal.title')} <em className="dc-gold">{t('discounts.create_modal.title_em')}</em></div>
           <button onClick={onClose} className="modal-close">
@@ -152,13 +182,14 @@ function CreatePromoModal({ onClose, onCreate }) {
           </button>
         </div>
       </div>
-  </div>
+    </div>
   )
 }
 
 /* ── Main Component ── */
 export default function Discounts() {
   const { t }                                 = useTranslation()
+  const lang                                  = useLangStore(s => s.lang)
   const [activeTab, setActiveTab]             = useState(0)
   const { toasts, show }                      = useToast()
 
@@ -175,6 +206,23 @@ export default function Discounts() {
   const [deleteConfirm, setDeleteConfirm]     = useState(null)
   const [extendConfirm, setExtendConfirm]     = useState(null)
   const [newExpiry, setNewExpiry]             = useState('')
+
+  // Seasonal state
+  const [sales, setSales]                     = useState(MOCK_SALES)
+  const [showSaleModal, setShowSaleModal]     = useState(false)
+  const [editSale, setEditSale]               = useState(null)
+  const [deleteSaleConfirm, setDeleteSaleConfirm] = useState(null)
+  const [saleFormName, setSaleFormName]       = useState('')
+  const [saleFormDesc, setSaleFormDesc]       = useState('')
+  const [saleFormType, setSaleFormType]       = useState('percentage')
+  const [saleFormVal, setSaleFormVal]         = useState('')
+  const [saleFormApplies, setSaleFormApplies] = useState('All products')
+  const [saleFormStart, setSaleFormStart]     = useState('')
+  const [saleFormEnd, setSaleFormEnd]         = useState('')
+
+  const activeSales  = sales.filter(s => s.status === 'active' || s.status === 'scheduled' || s.status === 'paused')
+  const pastSales    = sales.filter(s => s.status === 'ended')
+  const runningCount = sales.filter(s => s.status === 'active').length
 
   function loadPickup(search = '') {
     const q = search ? `&product_name=${encodeURIComponent(search)}` : ''
@@ -196,13 +244,13 @@ export default function Discounts() {
       .finally(() => setPromoLoading(false))
   }
 
-  useEffect(() => { loadPickup(); loadPromos() }, [])
+  useEffect(() => { loadPickup(); loadPromos() }, [lang])
 
   useEffect(() => {
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => loadPickup(prodSearch), 350)
     return () => clearTimeout(debounceRef.current)
-  }, [prodSearch])
+  }, [prodSearch, lang])
 
   async function saveStoreDiscount() {
     setSavingStore(true)
@@ -265,6 +313,54 @@ export default function Discounts() {
   function handlePromoCreated(newPromo) {
     setPromoCodes(prev => [newPromo, ...prev])
     show('Promo code created', 'success')
+  }
+
+  // ── Seasonal handlers ──
+  function openCreateSale() {
+    setEditSale(null)
+    setSaleFormName(''); setSaleFormDesc(''); setSaleFormType('percentage'); setSaleFormVal(''); setSaleFormApplies('All products'); setSaleFormStart(''); setSaleFormEnd('')
+    setShowSaleModal(true)
+  }
+
+  function openEditSale(sale) {
+    setEditSale(sale)
+    setSaleFormName(sale.name); setSaleFormDesc(sale.description); setSaleFormType(sale.discount_type); setSaleFormVal(String(sale.discount_value)); setSaleFormApplies(sale.applies_to); setSaleFormStart(sale.start_date?.slice(0,10) ?? ''); setSaleFormEnd(sale.end_date?.slice(0,10) ?? '')
+    setShowSaleModal(true)
+  }
+
+  function handleSaveSale() {
+    if (!saleFormName.trim() || !saleFormVal || !saleFormStart || !saleFormEnd) return
+    const saleData = { name:saleFormName, description:saleFormDesc, discount_type:saleFormType, discount_value:parseFloat(saleFormVal), applies_to:saleFormApplies, start_date:new Date(saleFormStart).toISOString(), end_date:new Date(saleFormEnd).toISOString() }
+    if (editSale) {
+      // TODO: PUT /boutique/discounts/seasonal/{id}
+      setSales(prev => prev.map(s => s.id === editSale.id ? { ...s, ...saleData } : s))
+      show(t('discounts.seasonal.toast.updated'), 'success')
+    } else {
+      // TODO: POST /boutique/discounts/seasonal
+      const newSale = { ...saleData, id:Date.now().toString(), status: new Date(saleFormStart) <= new Date() ? 'active' : 'scheduled' }
+      setSales(prev => [newSale, ...prev])
+      show(t('discounts.seasonal.toast.created'), 'success')
+    }
+    setShowSaleModal(false)
+  }
+
+  function handleDeleteSale(id) {
+    // TODO: DELETE /boutique/discounts/seasonal/{id}
+    setSales(prev => prev.filter(s => s.id !== id))
+    setDeleteSaleConfirm(null)
+    show(t('discounts.seasonal.toast.deleted'), 'success')
+  }
+
+  function handlePauseSale(sale) {
+    // TODO: PUT /boutique/discounts/seasonal/{id} { status }
+    const newStatus = sale.status === 'paused' ? 'active' : 'paused'
+    setSales(prev => prev.map(s => s.id === sale.id ? { ...s, status: newStatus } : s))
+    show(newStatus === 'paused' ? t('discounts.seasonal.toast.paused') : t('discounts.seasonal.toast.resumed'), 'success')
+  }
+
+  function handleDuplicateSale(sale) {
+    const dup = { ...sale, id:Date.now().toString(), name:`${sale.name} (copy)`, status:'scheduled', start_date:'', end_date:'' }
+    openEditSale(dup)
   }
 
   const TABS = [t('discounts.tabs.pickup'), t('discounts.tabs.promo'), t('discounts.tabs.seasonal')]
@@ -349,7 +445,7 @@ export default function Discounts() {
 
           <div>
             <div className="dc-promo-header">
-              <h3 className="dc-promo-title">Promo <em className="dc-gold">{t('discounts.promo.title_em')}</em></h3>
+              <h3 className="dc-promo-title">{t('discounts.promo.title')} <em className="dc-gold">{t('discounts.promo.title_em')}</em></h3>
               <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
                 <span className="material-symbols-outlined">add</span>{t('discounts.promo.new_btn')}
               </button>
@@ -377,11 +473,94 @@ export default function Discounts() {
 
       {/* ── Tab 2: Seasonal Sales ── */}
       {activeTab === 2 && (
-        <div className="card">
-          <div className="card-hdr">
-            <div className="card-title">{t('discounts.seasonal.title')} <em>{t('discounts.seasonal.title_em')}</em></div>
+        <div className="card ss-wrap">
+          <div className="ss-header">
+            <div>
+              <div className="ss-title">{t('discounts.seasonal.title')} <em>{t('discounts.seasonal.title_em')}</em></div>
+              <div className="ss-subtitle">{t('discounts.seasonal.summary', { total: sales.length, running: runningCount })}</div>
+            </div>
+            <button className="btn btn-primary" onClick={openCreateSale}>
+              <span className="material-symbols-outlined">add</span>{t('discounts.seasonal.new_sale')}
+            </button>
           </div>
-          <div className="dc-empty">{t('discounts.seasonal.empty')}</div>
+
+          {activeSales.length === 0 && pastSales.length === 0 && (
+            <div className="ss-empty">
+              <span className="material-symbols-outlined">sell</span>
+              <div className="ss-empty-title">{t('discounts.seasonal.empty_title')}</div>
+              <div className="ss-empty-sub">{t('discounts.seasonal.empty_sub')}</div>
+            </div>
+          )}
+
+          {activeSales.map(sale => {
+            const badge = saleBadge(sale.status)
+            const isRunning = sale.status === 'active'
+            const timeLabel = isRunning ? 'Ends in' : sale.status === 'paused' ? 'Paused' : 'Starts in'
+            const timeVal   = isRunning ? `${daysUntil(sale.end_date)} days` : sale.status === 'paused' ? '—' : `${daysUntil(sale.start_date)} days`
+            return (
+              <div key={sale.id} className="ss-card">
+                <div className="ss-card-top">
+                  <div className="ss-card-info">
+                    <div className="ss-card-name-row">
+                      <div className="ss-card-name">{sale.name}</div>
+                      <span className={`ss-badge ${badge.cls}`}>{badge.label}</span>
+                    </div>
+                    <div className="ss-card-desc">{sale.description}</div>
+                  </div>
+                  <div className="ss-card-actions">
+                    <button className="ss-action-btn" title="Edit" onClick={() => openEditSale(sale)}>
+                      <span className="material-symbols-outlined">edit</span>
+                    </button>
+                    <button className="ss-action-btn" title={sale.status === 'paused' ? 'Resume' : 'Pause'} onClick={() => handlePauseSale(sale)}>
+                      <span className="material-symbols-outlined">{sale.status === 'paused' ? 'play_arrow' : 'pause'}</span>
+                    </button>
+                    <button className="ss-action-btn ss-action-danger" title="Delete" onClick={() => setDeleteSaleConfirm(sale.id)}>
+                      <span className="material-symbols-outlined">delete</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="ss-card-divider" />
+                <div className="ss-card-details">
+                  <div className="ss-detail">
+                    <div className="ss-detail-lbl">{t('discounts.seasonal.col_discount')}</div>
+                    <div className="ss-detail-val ss-detail-discount">{saleDiscountLabel(sale)}</div>
+                  </div>
+                  <div className="ss-detail">
+                    <div className="ss-detail-lbl">{t('discounts.seasonal.col_applies')}</div>
+                    <div className="ss-detail-val">{sale.applies_to}</div>
+                  </div>
+                  <div className="ss-detail">
+                    <div className="ss-detail-lbl">{t('discounts.seasonal.col_runs')}</div>
+                    <div className="ss-detail-val">{fmtSaleDate(sale.start_date)} — {fmtSaleDate(sale.end_date)}</div>
+                  </div>
+                  <div className="ss-detail">
+                    <div className="ss-detail-lbl">{timeLabel}</div>
+                    <div className="ss-detail-val">{timeVal}</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {pastSales.length > 0 && (
+            <>
+              <div className="ss-past-divider"><span>{t('discounts.seasonal.past_sales', { count: pastSales.length })}</span></div>
+              {pastSales.map(sale => (
+                <div key={sale.id} className="ss-past-card">
+                  <div className="ss-past-info">
+                    <div className="ss-card-name-row">
+                      <div className="ss-card-name">{sale.name}</div>
+                      <span className="ss-badge ss-badge-ended">{t('discounts.seasonal.ended_badge')}</span>
+                    </div>
+                    <div className="ss-past-meta">{saleDiscountLabel(sale)} · {sale.applies_to} · ended {fmtSaleDate(sale.end_date)}</div>
+                  </div>
+                  <button className="ss-action-btn" title="Duplicate" onClick={() => handleDuplicateSale(sale)}>
+                    <span className="material-symbols-outlined">content_copy</span>
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 
@@ -390,11 +569,10 @@ export default function Discounts() {
         <CreatePromoModal onClose={() => setShowCreateModal(false)} onCreate={handlePromoCreated} />
       )}
 
-      {/* Delete confirmation modal */}
+      {/* Delete promo confirmation modal */}
       {deleteConfirm && (
-        <>
-          <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
-            <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-confirm-title">
               {t('discounts.delete_modal.title')} <em className="modal-em-red">{t('discounts.delete_modal.title_em')}</em>
             </div>
@@ -408,14 +586,12 @@ export default function Discounts() {
               </button>
             </div>
           </div>
-          </div>
-        </>
+        </div>
       )}
 
       {/* Extend & Activate modal */}
       {extendConfirm && (
-        <>
-          <div className="modal-backdrop" onClick={() => setExtendConfirm(null)}>
+        <div className="modal-backdrop" onClick={() => setExtendConfirm(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-confirm-title">
               {t('discounts.extend_modal.title')} <em className="dc-gold">{extendConfirm.code}</em>
@@ -432,8 +608,94 @@ export default function Discounts() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Seasonal: Create/Edit sale modal */}
+      {showSaleModal && (
+        <div className="modal-backdrop" onClick={() => setShowSaleModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">{editSale ? t('discounts.seasonal.modal.title_edit') : t('discounts.seasonal.modal.title_new')} <em>{t('discounts.seasonal.modal.title_em')}</em></div>
+              <div className="modal-close" onClick={() => setShowSaleModal(false)}>
+                <span className="material-symbols-outlined">close</span>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('discounts.seasonal.modal.name_label')} *</label>
+              <input className="form-input" value={saleFormName} onChange={e => setSaleFormName(e.target.value)} placeholder={t('discounts.seasonal.modal.name_placeholder')} />
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('discounts.seasonal.modal.desc_label')}</label>
+              <input className="form-input" value={saleFormDesc} onChange={e => setSaleFormDesc(e.target.value)} placeholder={t('discounts.seasonal.modal.desc_placeholder')} />
+            </div>
+            <div className="form-row2">
+              <div className="form-group">
+                <label className="form-lbl">{t('discounts.seasonal.modal.type_label')}</label>
+                <div className="select-wrap">
+                  <select className="form-select" value={saleFormType} onChange={e => setSaleFormType(e.target.value)}>
+                    <option value="percentage">{t('discounts.seasonal.modal.type_percent')}</option>
+                    <option value="fixed">{t('discounts.seasonal.modal.type_fixed')}</option>
+                  </select>
+                  <span className="material-symbols-outlined select-arrow">expand_more</span>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-lbl">{t('discounts.seasonal.modal.value_label')} *</label>
+                <input className="form-input" type="number" value={saleFormVal} onChange={e => setSaleFormVal(e.target.value)} placeholder={saleFormType === 'percentage' ? t('discounts.seasonal.modal.value_ph_pct') : t('discounts.seasonal.modal.value_ph_fixed')} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('discounts.seasonal.modal.applies_label')}</label>
+              <div className="select-wrap">
+                <select className="form-select" value={saleFormApplies} onChange={e => setSaleFormApplies(e.target.value)}>
+                  <option value="All products">{t('discounts.seasonal.modal.applies_all')}</option>
+                  <option>Men's &gt; Outerwear</option>
+                  <option>Men's &gt; Tops</option>
+                  <option>Men's &gt; Trousers</option>
+                  <option>Women's &gt; Dresses</option>
+                  <option>Women's &gt; Tops</option>
+                  <option>Women's &gt; Outerwear</option>
+                  <option>Women's &gt; Knitwear</option>
+                  <option>Women's &gt; Accessories</option>
+                  <option>Unisex &gt; Streetwear</option>
+                </select>
+                <span className="material-symbols-outlined select-arrow">expand_more</span>
+              </div>
+            </div>
+            <div className="form-row2">
+              <div className="form-group">
+                <label className="form-lbl">{t('discounts.seasonal.modal.start_label')} *</label>
+                <input className="form-input" type="date" value={saleFormStart} onChange={e => setSaleFormStart(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-lbl">{t('discounts.seasonal.modal.end_label')} *</label>
+                <input className="form-input" type="date" value={saleFormEnd} onChange={e => setSaleFormEnd(e.target.value)} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setShowSaleModal(false)}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" onClick={handleSaveSale}>
+                <span className="material-symbols-outlined">{editSale ? 'save' : 'add'}</span>
+                {editSale ? t('discounts.seasonal.modal.save_changes') : t('discounts.seasonal.modal.create_sale')}
+              </button>
+            </div>
           </div>
-        </>
+        </div>
+      )}
+
+      {/* Seasonal: Delete sale confirmation */}
+      {deleteSaleConfirm && (
+        <div className="modal-backdrop" onClick={() => setDeleteSaleConfirm(null)}>
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="modal-confirm-title">{t('discounts.seasonal.delete.title')} <em className="modal-em-red">{t('discounts.seasonal.delete.title_em')}</em></div>
+            <div className="modal-confirm-msg">{t('discounts.seasonal.delete.message')}</div>
+            <div className="modal-confirm-actions">
+              <button className="btn btn-outline modal-confirm-btn" onClick={() => setDeleteSaleConfirm(null)}>{t('common.cancel')}</button>
+              <button className="btn btn-red modal-confirm-btn" onClick={() => handleDeleteSale(deleteSaleConfirm)}>{t('discounts.seasonal.delete.confirm')}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Toast toasts={toasts} />

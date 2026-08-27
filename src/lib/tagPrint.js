@@ -9,10 +9,13 @@
 //
 // Exports:
 //   TAG_DIMS               — size registry
+//   isCondensedSize        — true for labels too small for the full layout
+//   getAvailableFields     — which `show.*` fields can render at a given size
+//   STYLE_PALETTES         — color palettes keyed by tag style
 //   encodeEAN13            — EAN-13 encoder (checksum + L/G/R patterns)
 //   buildBarcodeSvg        — inline SVG barcode
 //   buildQrSvg             — inline SVG QR code (uses `qrcode` npm)
-//   buildBoutiqueTagHtml   — rich hang-tag layout for PrintTagModal
+//   buildBoutiqueTagHtml   — rich hang-tag layout, shared by both consumers
 //   openPrintWindow        — spawns print window with self-hosted fonts
 
 import QRCode from 'qrcode'
@@ -35,6 +38,36 @@ export const TAG_DIMS = {
   '90x55':  { w: 270, h: 165, wMM: 90,  hMM: 55 },
   '100x70': { w: 300, h: 210, wMM: 100, hMM: 70 },
 }
+
+// ── Condensed-layout threshold ──────────────────────────────────────────────
+// Labels below this size can't fit the full boutique layout (header, product
+// name, size, origin, season, QR) — only a compact brand/price/sku/barcode
+// row fits. Same threshold the old PriceTags "isNarrow" branch used.
+export function isCondensedSize(sizeId) {
+  const d = TAG_DIMS[sizeId] || TAG_DIMS['57x32']
+  return d.w < 100 || d.h < 80
+}
+
+// Which `show.*` fields can render at a given size — the single source of
+// truth for both greying out UI toggles and masking the render itself.
+export function getAvailableFields(sizeId) {
+  if (!isCondensedSize(sizeId)) {
+    return { boutique: true, name: true, brand: true, price: true, size: true, sku: true, barcode: true, madeInFlag: true, season: true, qr: true }
+  }
+  return { boutique: false, name: false, brand: true, price: true, size: false, sku: true, barcode: true, madeInFlag: false, season: false, qr: false }
+}
+
+// ── Style palettes ──────────────────────────────────────────────────────────
+// `minimal` reproduces the original hardcoded boutique-tag colors exactly, so
+// callers that never set `style` (e.g. PrintTagModal) render unchanged.
+export const STYLE_PALETTES = {
+  minimal:  { bg: '#FFFFFF', text: '#1A1209', sub: '#8C7B6B', border: '#ddd', divider: '#eee', accent: '#1A1209', caption: '#555', faint: '#aaa' },
+  standard: { bg: '#FFFFFF', text: '#1A1209', sub: '#6E6E6E', border: '#DDDDDD', divider: 'rgba(0,0,0,.08)', accent: '#B3945A', caption: '#555', faint: '#aaa' },
+  kraft:    { bg: '#E8DCC8', text: '#3A2A10', sub: '#7A6040', border: '#C8B898', divider: 'rgba(0,0,0,.1)', accent: '#8A6A30', caption: '#5C4826', faint: '#9C8862' },
+  bold:     { bg: '#1A1209', text: '#FDFAF5', sub: 'rgba(255,255,255,.55)', border: 'transparent', divider: 'rgba(255,255,255,.15)', accent: '#B8955A', caption: 'rgba(255,255,255,.4)', faint: 'rgba(255,255,255,.3)' },
+}
+
+const PRICE_FONT_SIZES = { large: 16, medium: 13, small: 11 }
 
 // ── EAN-13 encoder ──────────────────────────────────────────────────────────
 // xmlns="http://www.w3.org/2000/svg" is the XML namespace identifier required
@@ -100,14 +133,14 @@ export function buildBarcodeSvg(value, format = 'ean13', { width = 200, height =
 }
 
 // ── QR SVG builder (async — qrcode lib is async) ────────────────────────────
-export async function buildQrSvg(url, { size = 72, margin = 0 } = {}) {
+export async function buildQrSvg(url, { size = 72, margin = 0, dark = '#1A1209', light = '#ffffff' } = {}) {
   try {
     const svg = await QRCode.toString(url ?? '', {
       type:                 'svg',
       errorCorrectionLevel: 'M',
       margin,
       width:                size,
-      color:                { dark: '#1A1209', light: '#ffffff' },
+      color:                { dark, light },
     })
     // Strip fixed width/height so it inherits from container.
     return svg
@@ -126,6 +159,8 @@ export async function buildQrSvg(url, { size = 72, margin = 0 } = {}) {
 export function buildBoutiqueTagHtml({
   sizeId       = '57x32',
   scale        = 1,
+  style        = 'minimal',
+  priceSize    = 'large',
   boutiqueName = '',
   boutiqueCity = '',
   productName  = '',
@@ -137,78 +172,145 @@ export function buildBoutiqueTagHtml({
   sku          = '',
   vendorSku    = '',
   madeIn       = 'Italy',
+  season       = '',
   barcodeSvg   = '',
   barcodeText  = '',
   qrSvg        = '',
   qrUrl        = '',
-  show = { boutique: true, product: true, price: true, barcode: true, madeInFlag: true, qr: true, sku: true },
+  show: callerShow = {},
 } = {}) {
-  const d  = TAG_DIMS[sizeId] || TAG_DIMS['57x32']
-  const w  = d.w * scale
-  const fs = scale
+  const d       = TAG_DIMS[sizeId] || TAG_DIMS['57x32']
+  const w       = d.w * scale
+  const fs      = scale
+  const palette = STYLE_PALETTES[style] || STYLE_PALETTES.minimal
+  // Legacy callers (PrintTagModal) pass a single `product` flag for both the
+  // name and brand lines — honor it before applying the rest of callerShow.
+  const legacyProduct = callerShow.product
+  const show = {
+    boutique: true, name: true, brand: true, price: true, size: true,
+    sku: true, barcode: true, madeInFlag: true, season: false, qr: true,
+    ...(legacyProduct !== undefined ? { name: legacyProduct, brand: legacyProduct } : {}),
+    ...callerShow,
+  }
+  const priceFontSize = PRICE_FONT_SIZES[priceSize] || PRICE_FONT_SIZES.large
 
-  const italyFlag = show.madeInFlag && madeIn === 'Italy'
+  if (isCondensedSize(sizeId)) {
+    return buildCondensedTagHtml({ w, fs, palette, show, productName, brand, category, price, currency, priceFontSize, sku, barcodeSvg, barcodeText })
+  }
+
+  const originText = madeIn === 'Italy'
     ? `<div style="display:flex;align-items:center;gap:${Math.round(3*fs)}px">
          <div style="width:${Math.round(13*fs)}px;height:${Math.round(9*fs)}px;background:linear-gradient(to right,#009246 33%,#fff 33%,#fff 66%,#ce2b37 66%);border-radius:1px"></div>
-         <div style="font-size:${Math.round(6*fs)}px;color:#8C7B6B;font-weight:600">Made in Italy</div>
+         <div style="font-size:${Math.round(6*fs)}px;color:${palette.sub};font-weight:600;line-height:1.1">Made in Italy</div>
        </div>`
-    : ''
+    : `<div style="font-size:${Math.round(6*fs)}px;color:${palette.sub};font-weight:600;line-height:1.1">Made in ${escapeHtml(madeIn)}</div>`
 
+  // When the boutique header is shown, origin sits inline in its top-right
+  // corner (matches the original layout). Otherwise it gets its own row
+  // further down, so the toggle still works independently of the header.
   const header = show.boutique
-    ? `<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:${Math.round(7*fs)}px;margin-bottom:${Math.round(8*fs)}px">
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid ${palette.divider};padding-bottom:${Math.round(7*fs)}px;margin-bottom:${Math.round(8*fs)}px">
          <div>
-           <div style="font-family:'Bodoni Moda',Georgia,serif;font-size:${Math.round(15*fs)}px;font-weight:600;color:#1A1209;letter-spacing:${Math.round(1*fs)}px">${escapeHtml(boutiqueName.toUpperCase())}</div>
-           ${boutiqueCity ? `<div style="font-size:${Math.round(7*fs)}px;color:#8C7B6B;letter-spacing:${Math.round(1.5*fs)}px;text-transform:uppercase">${escapeHtml(boutiqueCity)}</div>` : ''}
+           <div style="font-size:${Math.round(15*fs)}px;font-weight:600;color:${palette.text};letter-spacing:${Math.round(1*fs)}px;line-height:1.1">${escapeHtml(boutiqueName.toUpperCase())}</div>
+           ${boutiqueCity ? `<div style="font-size:${Math.round(7*fs)}px;color:${palette.sub};letter-spacing:${Math.round(1.5*fs)}px;text-transform:uppercase">${escapeHtml(boutiqueCity)}</div>` : ''}
          </div>
-         ${italyFlag}
+         ${show.madeInFlag ? originText : ''}
        </div>`
     : ''
 
-  const productBlock = show.product
-    ? `<div style="font-size:${Math.round(9*fs)}px;font-weight:700;color:#1A1209;margin-bottom:${Math.round(2*fs)}px">${escapeHtml(productName)}</div>
-       ${(brand || category) ? `<div style="font-size:${Math.round(8*fs)}px;color:#8C7B6B;margin-bottom:${Math.round(6*fs)}px">${[brand, category].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}`
+  const nameBlock = show.name
+    ? `<div style="font-size:${Math.round(9*fs)}px;font-weight:700;color:${palette.text};margin-bottom:${Math.round(2*fs)}px">${escapeHtml(productName)}</div>`
+    : ''
+
+  const brandBlock = show.brand && (brand || category)
+    ? `<div style="font-size:${Math.round(8*fs)}px;color:${palette.sub};margin-bottom:${Math.round(6*fs)}px">${[brand, category].filter(Boolean).map(escapeHtml).join(' · ')}</div>`
     : ''
 
   const priceBlock = show.price
     ? `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:${Math.round(8*fs)}px">
-         ${size ? `<div>
-           <div style="font-size:${Math.round(7*fs)}px;color:#8C7B6B;text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px">Size</div>
-           <div style="font-size:${Math.round(13*fs)}px;font-weight:700;color:#1A1209">${escapeHtml(size)}</div>
+         ${(show.size && size) ? `<div>
+           <div style="font-size:${Math.round(7*fs)}px;color:${palette.sub};text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px">Size</div>
+           <div style="font-size:${Math.round(13*fs)}px;font-weight:700;color:${palette.text}">${escapeHtml(size)}</div>
          </div>` : '<div></div>'}
          <div style="text-align:right">
-           <div style="font-size:${Math.round(7*fs)}px;color:#8C7B6B;text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px">Price</div>
-           <div style="font-size:${Math.round(16*fs)}px;font-weight:700;color:#1A1209;font-family:'Bodoni Moda',Georgia,serif">${escapeHtml(currency)}${formatPrice(price)}</div>
+           <div style="font-size:${Math.round(7*fs)}px;color:${palette.sub};text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px">Price</div>
+           <div style="font-size:${Math.round(priceFontSize*fs)}px;font-weight:700;color:${palette.text}">${escapeHtml(currency)}${formatPrice(price)}</div>
          </div>
        </div>`
     : ''
 
   const skuBlock = show.sku
-    ? `<div style="font-size:${Math.round(7*fs)}px;color:#8C7B6B;margin-bottom:${Math.round(6*fs)}px">SKU: ${escapeHtml(sku)}${vendorSku ? ` · Vendor: ${escapeHtml(vendorSku)}` : ''}</div>`
+    ? `<div style="font-size:${Math.round(7*fs)}px;color:${palette.sub};margin-bottom:${Math.round(6*fs)}px">SKU: ${escapeHtml(sku)}${vendorSku ? ` · Vendor: ${escapeHtml(vendorSku)}` : ''}</div>`
     : ''
 
   const barcodeBlock = show.barcode && barcodeSvg
     ? `<div style="text-align:center;margin-bottom:${Math.round(6*fs)}px">
          <div style="height:${Math.round(36*fs)}px;overflow:hidden">${barcodeSvg}</div>
-         <div style="font-size:${Math.round(7*fs)}px;color:#555;letter-spacing:${Math.round(1.5*fs)}px;margin-top:${Math.round(2*fs)}px">${escapeHtml(barcodeText)}</div>
+         <div style="font-size:${Math.round(7*fs)}px;color:${palette.caption};letter-spacing:${Math.round(1.5*fs)}px;margin-top:${Math.round(2*fs)}px">${escapeHtml(barcodeText)}</div>
        </div>`
+    : ''
+
+  // Already rendered inline in the header when show.boutique is true.
+  const originBlock = show.madeInFlag && !show.boutique
+    ? `<div style="margin-bottom:${Math.round(4*fs)}px">${originText}</div>`
+    : ''
+
+  const seasonBlock = show.season && season
+    ? `<div style="font-size:${Math.round(6.5*fs)}px;color:${palette.sub};margin-bottom:${Math.round(4*fs)}px">${escapeHtml(season)}</div>`
     : ''
 
   const qrSize = Math.round(36 * fs)
   const qrUrlDisplay = String(qrUrl ?? '').replace(/^https?:\/\//, '')
   const qrBlock = show.qr && qrSvg
-    ? `<div style="display:flex;align-items:center;gap:${Math.round(8*fs)}px;border-top:1px solid #eee;padding-top:${Math.round(7*fs)}px;margin-top:${Math.round(4*fs)}px;overflow:hidden">
+    ? `<div style="display:flex;align-items:center;gap:${Math.round(8*fs)}px;border-top:1px solid ${palette.divider};padding-top:${Math.round(7*fs)}px;margin-top:${Math.round(4*fs)}px;overflow:hidden">
          <div style="width:${qrSize}px;height:${qrSize}px;flex-shrink:0;overflow:hidden">
            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center">${qrSvg}</div>
          </div>
          <div style="flex:1;min-width:0;overflow:hidden">
-           <div style="font-size:${Math.round(6*fs)}px;color:#8C7B6B;font-weight:600;text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px;line-height:1.2">Scan to view on Mi Italia</div>
-           <div style="font-size:${Math.round(5.5*fs)}px;color:#aaa;margin-top:${Math.round(1*fs)}px;line-height:1.2;word-break:break-all;overflow:hidden">${escapeHtml(qrUrlDisplay)}</div>
+           <div style="font-size:${Math.round(6*fs)}px;color:${palette.sub};font-weight:600;text-transform:uppercase;letter-spacing:${Math.round(0.5*fs)}px;line-height:1.2">Scan to view on Mi Italia</div>
+           <div style="font-size:${Math.round(5.5*fs)}px;color:${palette.faint};margin-top:${Math.round(1*fs)}px;line-height:1.2;word-break:break-all;overflow:hidden">${escapeHtml(qrUrlDisplay)}</div>
          </div>
        </div>`
     : ''
 
-  return `<div style="width:${w}px;background:white;border:1.5px solid #ddd;border-radius:${Math.round(6*fs)}px;padding:${Math.round(12*fs)}px;font-family:'Jost',system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.08);box-sizing:border-box">
-    ${header}${productBlock}${priceBlock}${skuBlock}${barcodeBlock}${qrBlock}
+  const topAccent = style === 'standard' ? `border-top:3px solid ${palette.accent};` : ''
+
+  return `<div style="width:${w}px;background:${palette.bg};border:1.5px solid ${palette.border};${topAccent}border-radius:${Math.round(6*fs)}px;padding:${Math.round(12*fs)}px;font-family:'Jost',system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.08);box-sizing:border-box">
+    ${header}${nameBlock}${brandBlock}${priceBlock}${skuBlock}${barcodeBlock}${originBlock}${seasonBlock}${qrBlock}
+  </div>`
+}
+
+// ── Condensed layout ─────────────────────────────────────────────────────────
+// For labels too small to fit the full boutique layout: a brand/price row,
+// SKU, and (if room) a small barcode. Mirrors the legacy PriceTags narrow mode.
+function buildCondensedTagHtml({ w, fs, palette, show, productName, brand, category, price, currency, priceFontSize, sku, barcodeSvg, barcodeText }) {
+  const brandLabel = brand || category || productName || ''
+  // Stacked, not side-by-side: at these widths the price text alone can
+  // approach the tag's full inner width, so a flex row would starve the
+  // brand label of space no matter how it's told to shrink. Most condensed
+  // sizes are tall-narrow anyway (e.g. 19×51, 25×54), so vertical space is
+  // the more abundant axis here.
+  const brandBlock = show.brand && brandLabel
+    ? `<div style="font-size:${Math.round(8*fs)}px;letter-spacing:${Math.round(2*fs)}px;text-transform:uppercase;color:${palette.text};font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(brandLabel)}</div>`
+    : ''
+
+  const priceBlock = show.price
+    ? `<div style="font-size:${Math.round(Math.min(priceFontSize, 14)*fs)}px;font-weight:700;color:${palette.text};margin-top:${brandBlock ? Math.round(2*fs) : 0}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(currency)}${formatPrice(price)}</div>`
+    : ''
+
+  const skuBlock = show.sku && sku
+    ? `<div style="font-size:${Math.round(6.5*fs)}px;color:${palette.sub};margin-top:${Math.round(2*fs)}px">SKU: ${escapeHtml(sku)}</div>`
+    : ''
+
+  const barcodeBlock = show.barcode && barcodeSvg
+    ? `<div style="text-align:center;margin-top:${Math.round(4*fs)}px">
+         <div style="height:${Math.round(22*fs)}px;overflow:hidden">${barcodeSvg}</div>
+         <div style="font-size:${Math.round(6*fs)}px;color:${palette.caption};letter-spacing:${Math.round(1*fs)}px;margin-top:${Math.round(1*fs)}px">${escapeHtml(barcodeText)}</div>
+       </div>`
+    : ''
+
+  return `<div style="width:${w}px;background:${palette.bg};border:1px solid ${palette.border};border-radius:${Math.round(4*fs)}px;padding:${Math.round(7*fs)}px ${Math.round(9*fs)}px;font-family:'Jost',system-ui,sans-serif;box-sizing:border-box">
+    ${brandBlock}${priceBlock}${skuBlock}${barcodeBlock}
   </div>`
 }
 
@@ -226,10 +328,6 @@ export function openPrintWindow(tagsHtml, sizeId = '57x32') {
   pw.document.write(`<!DOCTYPE html><html><head>
     <meta charset="utf-8">
     <style>
-      @font-face { font-family: 'Bodoni Moda'; font-style: normal; font-weight: 400; font-display: swap; src: url('${origin}/fonts/bodoni-moda-400.woff2') format('woff2'); }
-      @font-face { font-family: 'Bodoni Moda'; font-style: italic; font-weight: 400; font-display: swap; src: url('${origin}/fonts/bodoni-moda-400-italic.woff2') format('woff2'); }
-      @font-face { font-family: 'Bodoni Moda'; font-style: normal; font-weight: 500; font-display: swap; src: url('${origin}/fonts/bodoni-moda-500.woff2') format('woff2'); }
-      @font-face { font-family: 'Bodoni Moda'; font-style: normal; font-weight: 600; font-display: swap; src: url('${origin}/fonts/bodoni-moda-600.woff2') format('woff2'); }
       @font-face { font-family: 'Jost'; font-style: normal; font-weight: 400; font-display: swap; src: url('${origin}/fonts/jost-400.woff2') format('woff2'); }
       @font-face { font-family: 'Jost'; font-style: normal; font-weight: 500; font-display: swap; src: url('${origin}/fonts/jost-500.woff2') format('woff2'); }
       @font-face { font-family: 'Jost'; font-style: normal; font-weight: 600; font-display: swap; src: url('${origin}/fonts/jost-600.woff2') format('woff2'); }

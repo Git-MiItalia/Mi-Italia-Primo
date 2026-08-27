@@ -14,7 +14,6 @@ function getNotifIcon(type) {
 export default function NotifToast() {
   const toastQueue   = useNotifStore(s => s.toastQueue)
   const dismissToast = useNotifStore(s => s.dismissToast)
-  console.log('[NotifToast] rendering, queue length:', toastQueue.length)
 
   useEffect(() => {
     if (toastQueue.length === 0) return
@@ -22,7 +21,6 @@ export default function NotifToast() {
     const timer  = setTimeout(() => dismissToast(latest._toastId), 5000)
     return () => clearTimeout(timer)
   }, [toastQueue])
-  console.log('Rendering NotifToast with queue>>>>>>:', toastQueue)
 
   if (toastQueue.length === 0) return null
 

@@ -9,6 +9,7 @@ import { apiFetch } from '../../lib/api'
 import { openNotificationStream, closeNotificationStream, subscribeToNotifications } from '../../lib/NotificationsStream'
 import useNotifStore from '../../store/notifStore'
 import NotifToast from '../ui/NotifToast'
+import useSidebarStore from '../../store/sidebarStore'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 const PLAN_EXEMPT = ['/subscription/return']
@@ -20,6 +21,7 @@ function Layout() {
   const [stripeConnected, setStripeConnected] = useState(true)
   const addNotification   = useNotifStore(s => s.addNotification)
   const setNotifications  = useNotifStore(s => s.setNotifications)
+  const sidebarCollapsed  = useSidebarStore(s => s.collapsed)
 
   useEffect(() => {
     const token = getToken()
@@ -41,7 +43,7 @@ function Layout() {
 
     // Subscribe to incoming notifications
     const unsub = subscribeToNotifications((payload) => {
-      console.log('[Layout subscriber] payload received', payload)
+     
       if (payload.kind !== 'notification') return
       addNotification(payload.notification)
     })
@@ -82,7 +84,7 @@ function Layout() {
         />
       )}
       <Sidebar />
-      <div className="main">
+      <div className={`main${sidebarCollapsed ? ' sb-collapsed' : ''}`}>
         <Header />
         <div className="content">
           <Outlet />

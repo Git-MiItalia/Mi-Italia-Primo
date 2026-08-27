@@ -9,8 +9,9 @@ import Orders from './views/Orders'
 import POS from './views/POS'
 import Messages from './views/Messages'
 import Customers from './views/Customers'
-import Marketing from './views/Marketing'
+import Engagement from './views/Engagement'
 import Discounts from './views/Discounts'
+import Promotions from './views/Promotions'
 import Analytics from './views/Analytics'
 import Financials from './views/Financials'
 import Reports from './views/Reports'
@@ -18,7 +19,6 @@ import Subscription from './views/Subscription'
 import SubscriptionSetup from './views/SubscriptionSetup'
 import SubscriptionReturn from './views/SubscriptionReturn'
 import StoreProfile from './views/StoreProfile'
-import Staff from './views/Staff'
 import Showroom from './views/Showroom'
 import Notifications from './views/Notifications'
 import Login from './views/Login'
@@ -27,11 +27,13 @@ import ResetPassword from './views/reset-password'
 import Support from './views/Support'
 import VoidCIL from './views/VoidCIL'
 import Locations from './views/Locations'
+import AddLocation from './views/AddLocation'
 import OroPoints from './views/OroPoints'
 import PriceTags from './views/PriceTags'
 import ViewProfile from './views/ViewProfile'
 import SetPassword from './views/set-password'
-import TryOn from './views/TryOn'
+import AIModelStudio from './views/AIModelStudio'
+import Integrations from './views/Integrations'
 
 
 function App() {
@@ -43,10 +45,13 @@ function App() {
         <Route path="/forgot-password"    element={<ForgotPassword />} />
         <Route path="/reset-password"     element={<ResetPassword />} />
         <Route path="/set-password"       element={<SetPassword />} />
-      
+
         <Route path="/subscription-setup" element={<SubscriptionSetup />} />
         {/* ── Stripe return — no sidebar ── */}
         <Route path="/subscription/return" element={<SubscriptionReturn />} />
+
+        {/* ── POS — no sidebar (staff-facing full-viewport screen) ── */}
+        <Route path="/pos"                element={<POS />} />
 
         {/* ── Protected routes (with sidebar/header) ── */}
         <Route element={<Layout />}>
@@ -58,26 +63,27 @@ function App() {
           <Route path="/inventory"           element={<Inventory />} />
           <Route path="/reservations"        element={<Reservations />} />
           <Route path="/orders"              element={<Orders />} />
-          <Route path="/pos"                 element={<POS />} />
           <Route path="/messages"            element={<Messages />} />
           <Route path="/customers"           element={<Customers />} />
-          <Route path="/marketing"           element={<Marketing />} />
+          <Route path="/engagement"          element={<Engagement />} />
           <Route path="/discounts"           element={<Discounts />} />
+          <Route path="/promotions"          element={<Promotions />} />
           <Route path="/analytics"           element={<Analytics />} />
           <Route path="/financials"          element={<Financials />} />
           <Route path="/reports"             element={<Reports />} />
           <Route path="/subscription"        element={<Subscription />} />
           <Route path="/store"               element={<StoreProfile />} />
-          <Route path="/staff"               element={<Staff />} />
+          <Route path="/integrations"        element={<Integrations />} />
           <Route path="/showroom"            element={<Showroom />} />
           <Route path="/notifications"       element={<Notifications />} />
           <Route path="/support"             element={<Support />} />
           <Route path="/void-cil"            element={<VoidCIL />} />
           <Route path="/locations"           element={<Locations />} />
+          <Route path="/locations/new"       element={<AddLocation />} />
           <Route path="/oro-points"          element={<OroPoints />} />
           <Route path="/price-tags"          element={<PriceTags />} />
           <Route path="/profile"             element={<ViewProfile />} />
-          <Route path="/tryon"               element={<TryOn />} />
+          <Route path="/tryon"               element={<AIModelStudio />} />
 
         </Route>
       </Routes>

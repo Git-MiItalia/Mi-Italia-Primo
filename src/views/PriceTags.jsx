@@ -1,7 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { apiFetch } from '../lib/api'
+import {
+  TAG_DIMS,
+  STYLE_PALETTES,
+  getAvailableFields,
+  buildBarcodeSvg,
+  buildQrSvg,
+  buildBoutiqueTagHtml,
+  openPrintWindow,
+} from '../lib/tagPrint'
 
-/* ── DATA ── */
+const API = import.meta.env.VITE_API_URL
+
+/* ── PRINTER DATA (static — no API needed) ── */
 const PRINTERS = {
   dymo: {
     name:'Dymo LabelWriter 550', connection:'USB / Wi-Fi · Thermal',
@@ -47,43 +59,14 @@ const PRINTERS = {
   },
 }
 
-const TAG_DIMS = {
-  '57x32':{w:171,h:96,wMM:57,hMM:32},'25x54':{w:75,h:162,wMM:25,hMM:54},
-  '19x51':{w:57,h:153,wMM:19,hMM:51},'89x28':{w:267,h:84,wMM:89,hMM:28},
-  '62x29':{w:186,h:87,wMM:62,hMM:29},'62x100':{w:186,h:300,wMM:62,hMM:100},
-  '29x90':{w:87,h:270,wMM:29,hMM:90},'51x25':{w:153,h:75,wMM:51,hMM:25},
-  '76x51':{w:228,h:153,wMM:76,hMM:51},'38x21':{w:114,h:63,wMM:38,hMM:21},
-  '70x37':{w:210,h:111,wMM:70,hMM:37},'35x35':{w:105,h:105,wMM:35,hMM:35},
-  '55x85':{w:165,h:255,wMM:55,hMM:85},
+// SCENES and STYLES moved inside component for t() access
+
+// Designer field keys → buildBoutiqueTagHtml's `show.*` keys.
+const FIELD_TO_SHOW = {
+  boutique: 'boutique', brand: 'brand', name: 'name', price: 'price',
+  size: 'size', sku: 'sku', barcode: 'barcode', origin: 'madeInFlag',
+  season: 'season', qr: 'qr',
 }
-
-const INIT_PRODUCTS = [
-  { id:1,  emoji:'🧥', name:'Cashmere Trench Coat — Camel',    cat:'Ready-to-Wear', price:1290, sku:'NEG-CTR-0008', size:'M',        checked:false, qty:1 },
-  { id:2,  emoji:'👗', name:'Silk Slip Dress — Ivory',          cat:'Ready-to-Wear', price:680,  sku:'NEG-DRS-0021', size:'S',        checked:false, qty:1 },
-  { id:3,  emoji:'🧥', name:'Velvet Evening Jacket — Midnight',  cat:'Ready-to-Wear', price:960,  sku:'NEG-JKT-0044', size:'M',        checked:false, qty:1 },
-  { id:4,  emoji:'👔', name:'Tailored Linen Blazer — Navy',      cat:'Menswear',      price:890,  sku:'NEG-BLZ-0012', size:'42',       checked:false, qty:1 },
-  { id:5,  emoji:'👕', name:'Wool Crewneck — Ivory',             cat:'Menswear',      price:340,  sku:'NEG-KNT-0033', size:'L',        checked:false, qty:2 },
-  { id:6,  emoji:'👡', name:'Leather Mule — Cognac',             cat:'Footwear',      price:420,  sku:'NEG-SHO-0029', size:'38',       checked:false, qty:1 },
-  { id:7,  emoji:'👢', name:'Suede Chelsea Boot — Tan',          cat:'Footwear',      price:520,  sku:'NEG-SHO-0031', size:'40',       checked:false, qty:1 },
-  { id:8,  emoji:'👜', name:'Leather Tote — Camel',              cat:'Accessories',   price:560,  sku:'NEG-BAG-0007', size:'One Size', checked:false, qty:1 },
-  { id:9,  emoji:'🧣', name:'Cashmere Scarf — Camel',            cat:'Accessories',   price:180,  sku:'NEG-ACC-0019', size:'One Size', checked:false, qty:3 },
-  { id:10, emoji:'📿', name:'Gold Pendant Necklace',             cat:'Jewellery',     price:220,  sku:'NEG-JWL-0003', size:'45cm',     checked:false, qty:1 },
-  { id:11, emoji:'💍', name:'Sterling Silver Cuff',              cat:'Jewellery',     price:180,  sku:'NEG-JWL-0006', size:'One Size', checked:false, qty:1 },
-]
-
-const SCENES = [
-  { key:'setup',    label:'1 · Printer Setup' },
-  { key:'designer', label:'2 · Tag Designer' },
-  { key:'select',   label:'3 · Select Products' },
-  { key:'preview',  label:'4 · Print Preview' },
-]
-
-const STYLES = [
-  { key:'minimal',  label:'Minimal',   bg:'#FFFFFF', border:'1px solid #DDD' },
-  { key:'standard', label:'Standard',  bg:'#FFFFFF', border:'1px solid #DDD' },
-  { key:'bold',     label:'Bold Dark', bg:'#1A1209', border:'none' },
-  { key:'kraft',    label:'Kraft',     bg:'#E8DCC8', border:'1px solid #C8B898' },
-]
 
 const PRINTER_CARDS = [
   { id:'dymo',    ico:'🖨️', name:'Dymo LabelWriter 550',  type:'Thermal · USB / Wireless',     badge:'⭐ Most popular',      badgeBg:'rgba(0,108,53,.09)',   badgeColor:'var(--green)', desc:'No ink needed. Fast, quiet. Direct Primo integration available.' },
@@ -91,53 +74,6 @@ const PRINTER_CARDS = [
   { id:'zebra',   ico:'🖨️', name:'Zebra ZD421',           type:'Thermal · USB / Ethernet',     badge:'Pro',                  badgeBg:'rgba(184,149,90,.1)', badgeColor:'#8A6A30',      desc:'Industry standard for multi-location retail. High volume, durable.' },
   { id:'avery',   ico:'🖳',  name:'Standard Printer',      type:'Laser / Inkjet · A4 Sheet',    badge:'No special hardware',  badgeBg:'var(--mist)',          badgeColor:'var(--stone)', desc:'Use Avery label sheets. Any office printer. Full colour available.' },
 ]
-
-/* ── Tag HTML builder — data-driven, inline styles kept intentionally ── */
-function buildTagHtml(prod, sizeId, style, fields, currency, priceSize, scale = 1) {
-  const d   = TAG_DIMS[sizeId] || TAG_DIMS['57x32']
-  const w   = d.w * scale, h = d.h * scale, fs = scale
-  const bg       = style==='bold'?'#1A1209':style==='kraft'?'#E8DCC8':'#FFFFFF'
-  const textMain = style==='bold'?'#FDFAF5':style==='kraft'?'#3A2A10':'#1A1209'
-  const textSub  = style==='bold'?'rgba(255,255,255,.55)':style==='kraft'?'#7A6040':'#8C7B6B'
-  const brandCol = style==='bold'?'#B8955A':style==='kraft'?'#8A6A30':'#1A1209'
-  const borderCol= style==='bold'?'transparent':style==='kraft'?'#C8B898':'#E0E0E0'
-  const divCol   = style==='bold'?'rgba(255,255,255,.15)':'rgba(0,0,0,.1)'
-  const pFSMap   = { large:Math.round(22*fs), medium:Math.round(17*fs), small:Math.round(13*fs) }
-  const pFS      = pFSMap[priceSize] || 22
-  const isNarrow = d.w < 100 || d.h < 80
-  const shortName= prod.name.length > 26 ? prod.name.substring(0,24)+'…' : prod.name
-  const bcPattern= '101110011010110011101101010110111010010101101100111'
-
-  let inner = ''
-  if (isNarrow) {
-    inner += `<div style="display:flex;align-items:center;justify-content:space-between">`
-    if (fields.brand) inner += `<div style="font-family:'Bodoni Moda',Georgia,serif;font-size:${Math.round(8*fs)}px;letter-spacing:${Math.round(2*fs)}px;text-transform:uppercase;color:${brandCol};font-weight:600">NEGLIA</div>`
-    if (fields.price) inner += `<div style="font-family:'Bodoni Moda',Georgia,serif;font-size:${Math.round(14*fs)}px;font-weight:300;color:${textMain}">${currency}${prod.price.toLocaleString()}</div>`
-    inner += `</div>`
-    if (fields.sku) inner += `<div style="font-size:${Math.round(6*fs)}px;color:${textSub}">${prod.sku}</div>`
-  } else {
-    if (fields.brand) {
-      inner += `<div style="font-family:'Bodoni Moda',Georgia,serif;font-size:${Math.round(9*fs)}px;letter-spacing:${Math.round(3*fs)}px;text-transform:uppercase;color:${brandCol};font-weight:600;margin-bottom:${Math.round(1*fs)}px">NEGLIA</div>`
-      inner += `<div style="height:1px;background:${divCol};margin-bottom:${Math.round(2*fs)}px"></div>`
-    }
-    if (fields.name)  inner += `<div style="font-size:${Math.round(8*fs)}px;font-weight:500;color:${textSub};margin-bottom:${Math.round(2*fs)}px;line-height:1.3;overflow:hidden">${shortName}</div>`
-    if (fields.price) inner += `<div style="font-family:'Bodoni Moda',Georgia,serif;font-size:${pFS}px;font-weight:300;color:${textMain};line-height:1;margin-bottom:${Math.round(2*fs)}px">${currency}${prod.price.toLocaleString()}</div>`
-    if (fields.sku || fields.size) {
-      inner += `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto">`
-      if (fields.sku)  inner += `<div style="font-size:${Math.round(7*fs)}px;color:${textSub}">${prod.sku}</div>`
-      if (fields.size) inner += `<div style="font-size:${Math.round(8*fs)}px;font-weight:700;color:${textMain}">${prod.size}</div>`
-      inner += `</div>`
-    }
-    if (fields.barcode) {
-      const bars = bcPattern.split('').map(b => `<div style="width:${Math.round(1.5*fs)}px;height:${Math.round(18*fs)}px;background:${b==='1'?textMain:'transparent'};display:inline-block;flex-shrink:0"></div>`).join('')
-      inner += `<div style="display:flex;align-items:flex-end;gap:0;margin-top:${Math.round(3*fs)}px;height:${Math.round(20*fs)}px;overflow:hidden">${bars}</div>`
-    }
-    if (fields.origin) inner += `<div style="font-size:${Math.round(6.5*fs)}px;color:${textSub};margin-top:${Math.round(1*fs)}px">Made in Italy</div>`
-    if (fields.season) inner += `<div style="font-size:${Math.round(6.5*fs)}px;color:${textSub}">SS 2026</div>`
-  }
-
-  return `<div style="width:${w}px;height:${h}px;background:${bg};border:1px solid ${borderCol};border-radius:0}px;padding:${Math.round(5*fs)}px ${Math.round(7*fs)}px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;box-sizing:border-box;font-family:'Jost',system-ui,sans-serif;position:relative;">${inner}</div>`
-}
 
 function SectionDivider({ label }) {
   return (
@@ -148,16 +84,33 @@ function SectionDivider({ label }) {
   )
 }
 
-function Toggle({ on, onToggle }) {
+function Toggle({ on, onToggle, disabled }) {
   return (
-    <div className={`toggle${on ? ' on' : ''}`} onClick={onToggle}>
+    <div
+      className={`toggle${on ? ' on' : ''}${disabled ? ' toggle-disabled' : ''}`}
+      onClick={disabled ? undefined : onToggle}
+    >
       <div className="toggle-knob" />
     </div>
   )
 }
 
 export default function PriceTags() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+
+  const SCENES = [
+    { key:'setup',    label: t('pt.scenes.setup')    },
+    { key:'designer', label: t('pt.scenes.designer') },
+    { key:'select',   label: t('pt.scenes.select')   },
+    { key:'preview',  label: t('pt.scenes.preview')  },
+  ]
+
+  const STYLES = [
+    { key:'minimal',  label: t('pt.styles.minimal')  },
+    { key:'standard', label: t('pt.styles.standard') },
+    { key:'bold',     label: t('pt.styles.bold')     },
+    { key:'kraft',    label: t('pt.styles.kraft')    },
+  ]
 
   const [scene, setScene]         = useState('setup')
   const [printer, setPrinter]     = useState('dymo')
@@ -165,44 +118,154 @@ export default function PriceTags() {
   const [style, setStyle]         = useState('minimal')
   const [currency, setCurrency]   = useState('€')
   const [priceSize, setPriceSize] = useState('large')
-  const [fields, setFields]       = useState({ brand:true, name:true, price:true, size:true, sku:true, barcode:false, origin:false, season:false })
-  const [products, setProducts]   = useState(INIT_PRODUCTS)
+  const [fields, setFields]       = useState({ boutique:true, brand:true, name:true, price:true, size:true, sku:true, barcode:false, origin:false, season:false, qr:false })
+  const [qrMap, setQrMap]         = useState({})
+  const [products, setProducts]   = useState([])
   const [search, setSearch]       = useState('')
-  const [catFilter, setCatFilter] = useState('')
+  const [brandFilter, setBrandFilter] = useState('')
+  const [loading, setLoading]     = useState(true)
+  const [boutiqueName, setBoutiqueName] = useState('')
+  const [boutiqueCity, setBoutiqueCity] = useState('')
+  const [brandList, setBrandList] = useState([])
 
   const printerData = PRINTERS[printer]
   const dim         = TAG_DIMS[labelSize] || TAG_DIMS['57x32']
-  const SAMPLE      = { name:'Cashmere Trench Coat — Camel', price:1290, sku:'NEG-CTR-0008', size:'M' }
+
+  // Fetch products + profile on mount
+  useEffect(() => {
+    Promise.all([
+      apiFetch(`${API}/boutique/products`).then(r => r.json()),
+      apiFetch(`${API}/boutique/profile`).then(r => r.json()),
+    ]).then(([prodRes, profRes]) => {
+      if (profRes.success) {
+        setBoutiqueName(profRes.data.name || '')
+        setBoutiqueCity(profRes.data.city || '')
+        if (profRes.data.currency === 'GBP') setCurrency('£')
+        else if (profRes.data.currency === 'USD') setCurrency('$')
+        else if (profRes.data.currency === 'CHF') setCurrency('CHF')
+      }
+
+      if (prodRes.success) {
+        const mapped = (prodRes.data.products || [])
+          .filter(p => p.status === 'active')
+          .map(p => ({
+            id:      p.id,
+            name:    p.name,
+            sku:     p.sku || '—',
+            price:   parseFloat(p.retail_price) || 0,
+            brand:   p.brand_name || '',
+            madeIn:  p.made_in || 'Italy',
+            barcodeValue:  p.barcode ?? '',
+            barcodeFormat: p.barcode_format ?? '',
+            photo:   p.main_photo || null,
+            stock:   parseInt(p.total_stock) || 0,
+            variants: parseInt(p.variant_count) || 1,
+            size:    '',
+            checked: false,
+            qty:     1,
+          }))
+        setProducts(mapped)
+
+        // Build unique brand list for filter
+        const brands = [...new Set(mapped.map(p => p.brand).filter(Boolean))].sort()
+        setBrandList(brands)
+      }
+    })
+    .catch(() => {})
+    .finally(() => setLoading(false))
+  }, [i18n.language])
+
+  const SAMPLE = products[0] || { id: null, name: boutiqueName || 'Sample Product', price: 890, sku: 'SKU-001', size: 'M', brand: boutiqueName, madeIn: 'Italy', barcodeValue: '', barcodeFormat: '' }
 
   const toggleField = key => setFields(f => ({ ...f, [key]: !f[key] }))
   const filtered    = products.filter(p =>
-    (!search || p.name.toLowerCase().includes(search.toLowerCase())) &&
-    (!catFilter || p.cat === catFilter)
+    (!search || p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())) &&
+    (!brandFilter || p.brand === brandFilter)
   )
 
   function toggleProd(id, checked) { setProducts(prev => prev.map(p => p.id===id ? {...p, checked} : p)) }
   function setQty(id, val)         { setProducts(prev => prev.map(p => p.id===id ? {...p, qty:Math.max(1,parseInt(val)||1)} : p)) }
-  function toggleAll(checked)      { setProducts(prev => prev.map(p => ({...p, checked}))) }
+  function toggleAll(checked)      { setProducts(prev => prev.map(p => filtered.some(f => f.id === p.id) ? {...p, checked} : p)) }
+  function clearAll()              { setProducts(prev => prev.map(p => ({...p, checked:false}))) }
 
   const selected  = products.filter(p => p.checked)
   const totalTags = selected.reduce((s, p) => s + p.qty, 0)
 
-  function printTags() {
+  const availableFields = getAvailableFields(labelSize)
+  const palette = STYLE_PALETTES[style] || STYLE_PALETTES.minimal
+
+  // Fetch/refresh QR codes for whichever products currently need one.
+  const qrTargets = fields.qr ? [SAMPLE, ...selected].filter(p => p && p.id != null) : []
+  const qrTargetKey = qrTargets.map(p => p.id).join(',')
+  useEffect(() => {
+    if (!qrTargets.length) return
+    let cancelled = false
+    const missing = qrTargets.filter(p => !qrMap[p.id])
+    if (!missing.length) return
+    Promise.all(missing.map(async p => {
+      const svg = await buildQrSvg(`https://miitalia.com/product/${p.id}`, { size: 72, dark: palette.text, light: palette.bg })
+      return [p.id, svg]
+    })).then(entries => {
+      if (cancelled) return
+      setQrMap(prev => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrTargetKey, style])
+
+  function buildShow() {
+    const show = {}
+    for (const [fieldKey, showKey] of Object.entries(FIELD_TO_SHOW)) {
+      show[showKey] = !!fields[fieldKey] && availableFields[showKey] !== false
+    }
+    return show
+  }
+
+  function buildTag(prod, scale, qrMapOverride = qrMap) {
+    const barcode = buildBarcodeSvg(prod.barcodeValue, (prod.barcodeFormat || 'ean13').toLowerCase(), { width: 200, height: 36, colour: palette.text })
+    return buildBoutiqueTagHtml({
+      sizeId:       labelSize,
+      scale,
+      style,
+      priceSize,
+      boutiqueName,
+      boutiqueCity,
+      productName:  prod.name,
+      brand:        prod.brand,
+      price:        prod.price,
+      currency,
+      size:         prod.size,
+      sku:          prod.sku,
+      madeIn:       prod.madeIn,
+      season:       'SS 2026',
+      barcodeSvg:   barcode.svg,
+      barcodeText:  barcode.humanReadable,
+      qrSvg:        prod.id != null ? (qrMapOverride[prod.id] || '') : '',
+      qrUrl:        prod.id != null ? `https://miitalia.com/product/${prod.id}` : 'https://miitalia.com',
+      show:         buildShow(),
+    })
+  }
+
+  async function printTags() {
     if (!selected.length) { alert(t('pt.no_products_alert')); return }
+
+    let freshQrMap = qrMap
+    if (fields.qr) {
+      const missing = selected.filter(p => p.id != null && !qrMap[p.id])
+      if (missing.length) {
+        const entries = await Promise.all(missing.map(async p => {
+          const svg = await buildQrSvg(`https://miitalia.com/product/${p.id}`, { size: 72, dark: palette.text, light: palette.bg })
+          return [p.id, svg]
+        }))
+        freshQrMap = { ...qrMap, ...Object.fromEntries(entries) }
+        setQrMap(freshQrMap)
+      }
+    }
+
     const tags = []
-    selected.forEach(p => { for (let i = 0; i < p.qty; i++) tags.push(buildTagHtml(p, labelSize, style, fields, currency, priceSize, 1)) })
-    const pw = window.open('', '_blank', 'width=800,height=600')
-    pw.document.write(`<!DOCTYPE html><html><head>
-      <style>
-        @page { size: ${dim.wMM}mm ${dim.hMM}mm; margin: 0; }
-        body { margin:0; padding:0; font-family:'Jost',system-ui,sans-serif; }
-        .tag-wrap { display:inline-block; page-break-after:always; }
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Montserrat:wght@300;400;500;600;700&display=swap');
-      </style></head><body>
-      ${tags.map(tg => `<div class="tag-wrap">${tg}</div>`).join('')}
-      <script>window.onload=()=>{window.print();}<\/script>
-      </body></html>`)
-    pw.document.close()
+    selected.forEach(p => { for (let i = 0; i < p.qty; i++) tags.push(buildTag(p, 1, freshQrMap)) })
+    const opened = openPrintWindow(tags, labelSize)
+    if (!opened) alert('Popup blocked — please allow popups for this site to print tags.')
   }
 
   return (
@@ -228,7 +291,6 @@ export default function PriceTags() {
       {scene === 'setup' && (
         <>
           <SectionDivider label={t('pt.setup.select_printer')} />
-
           <div className="pt-printer-grid">
             {PRINTER_CARDS.map(pc => (
               <div key={pc.id} onClick={() => { setPrinter(pc.id); setLabelSize(PRINTERS[pc.id].sizes[0].id) }}
@@ -302,37 +364,50 @@ export default function PriceTags() {
           <div>
             <SectionDivider label={t('pt.designer.tag_style')} />
             <div className="pt-styles-grid">
-              {STYLES.map(s => (
-                <div key={s.key} onClick={() => setStyle(s.key)} className={`pt-style-card${style===s.key?' sel':''}`}>
-                  <div className="pt-style-preview" style={{ background:s.bg, border:s.border }}>
-                    <div className="pt-style-preview-brand" style={{ color:s.key==='bold'?'#B8955A':s.key==='kraft'?'#7A6040':'#888' }}>NEGLIA</div>
-                    <div className="pt-style-preview-price" style={{ color:s.key==='bold'?'white':s.key==='kraft'?'#3A2A10':'black' }}>€890</div>
+              {STYLES.map(s => {
+                const p = STYLE_PALETTES[s.key]
+                return (
+                  <div key={s.key} onClick={() => setStyle(s.key)} className={`pt-style-card${style===s.key?' sel':''}`}>
+                    <div className="pt-style-preview" style={{
+                      background: p.bg,
+                      border: `1px solid ${p.border}`,
+                      borderTop: s.key === 'standard' ? `3px solid ${p.accent}` : undefined,
+                    }}>
+                      <div className="pt-style-preview-brand" style={{ color:p.sub }}>{boutiqueName || 'BOUTIQUE'}</div>
+                      <div className="pt-style-preview-price" style={{ color:p.text }}>{currency}890</div>
+                    </div>
+                    <div className="pt-style-label">{s.label}</div>
                   </div>
-                  <div className="pt-style-label">{s.label}</div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <SectionDivider label={t('pt.designer.fields')} />
             <div className="card pt-fields-card">
               {[
-                { key:'brand',   label:t('pt.fields.brand'),   sub:'NEGLIA · always recommended' },
-                { key:'name',    label:t('pt.fields.name'),    sub:'Cashmere Trench Coat — Camel' },
-                { key:'price',   label:t('pt.fields.price'),   sub:'Displayed prominently' },
-                { key:'size',    label:t('pt.fields.size'),    sub:'S · M · L · UK 8 etc.' },
-                { key:'sku',     label:t('pt.fields.sku'),     sub:'NEG-CTR-0008' },
-                { key:'barcode', label:t('pt.fields.barcode'), sub:'EAN-13 or Code 128 from SKU' },
-                { key:'origin',  label:t('pt.fields.origin'),  sub:'Country of origin' },
-                { key:'season',  label:t('pt.fields.season'),  sub:'Spring/Summer 2026' },
-              ].map((f, i, arr) => (
-                <div key={f.key} className={`pt-field-row${i < arr.length-1?' pt-field-border':''}`}>
-                  <div>
-                    <div className="pt-field-label">{f.label}</div>
-                    <div className="pt-field-sub">{f.sub}</div>
+                { key:'boutique', label:t('pt.fields.boutique', 'Boutique Name & City'), sub: t('pt.fields.boutique_sub', 'Shown as the tag header') },
+                { key:'brand',   label:t('pt.fields.brand'),   sub: boutiqueName ? `${boutiqueName} · ${t('pt.fields.brand_rec')}` : t('pt.fields.brand_sub') },
+                { key:'name',    label:t('pt.fields.name'),    sub: t('pt.fields.name_sub') },
+                { key:'price',   label:t('pt.fields.price'),   sub: t('pt.fields.price_sub') },
+                { key:'size',    label:t('pt.fields.size'),    sub: t('pt.fields.size_sub') },
+                { key:'sku',     label:t('pt.fields.sku'),     sub: t('pt.fields.sku_sub') },
+                { key:'barcode', label:t('pt.fields.barcode'), sub: t('pt.fields.barcode_sub') },
+                { key:'origin',  label:t('pt.fields.origin'),  sub: t('pt.fields.origin_sub') },
+                { key:'season',  label:t('pt.fields.season'),  sub: t('pt.fields.season_sub') },
+                { key:'qr',      label:t('pt.fields.qr', 'QR Code'),      sub: t('pt.fields.qr_sub', 'Links to this product on Mi Italia') },
+              ].map((f, i, arr) => {
+                const showKey    = FIELD_TO_SHOW[f.key]
+                const isAvailable = availableFields[showKey] !== false
+                return (
+                  <div key={f.key} className={`pt-field-row${i < arr.length-1?' pt-field-border':''}${isAvailable?'':' pt-field-disabled'}`}>
+                    <div>
+                      <div className="pt-field-label">{f.label}</div>
+                      <div className="pt-field-sub">{isAvailable ? f.sub : t('pt.fields.unavailable_at_size', 'Not available at this label size')}</div>
+                    </div>
+                    <Toggle on={fields[f.key]} onToggle={() => toggleField(f.key)} disabled={!isAvailable} />
                   </div>
-                  <Toggle on={fields[f.key]} onToggle={() => toggleField(f.key)} />
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <SectionDivider label={t('pt.designer.price_display')} />
@@ -361,7 +436,7 @@ export default function PriceTags() {
           <div>
             <SectionDivider label={`${t('pt.designer.preview')} — ${dim.wMM}mm × ${dim.hMM}mm`} />
             <div className="pt-preview-bg">
-              <div dangerouslySetInnerHTML={{ __html: buildTagHtml(SAMPLE, labelSize, style, fields, currency, priceSize, 3) }} />
+              <div dangerouslySetInnerHTML={{ __html: buildTag(SAMPLE, 3) }} />
               <div className="pt-preview-scale-note">{t('pt.designer.scale_note')}</div>
             </div>
             <div className="pt-preview-caption">{t('pt.designer.preview_caption')}</div>
@@ -393,58 +468,66 @@ export default function PriceTags() {
         <>
           <div className="pt-select-toolbar">
             <input className="pt-select-search" placeholder={t('pt.select.search')} value={search} onChange={e => setSearch(e.target.value)} />
-            <select className="form-select pt-select-cat" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-              <option value="">{t('pt.select.all_cats')}</option>
-              <option value="Ready-to-Wear">Ready-to-Wear</option>
-              <option value="Menswear">Menswear</option>
-              <option value="Footwear">Footwear</option>
-              <option value="Accessories">Accessories</option>
-              <option value="Jewellery">Jewellery</option>
+            <select className="form-select pt-select-cat" value={brandFilter} onChange={e => setBrandFilter(e.target.value)}>
+              <option value="">{t('pt.select.all_brands')}</option>
+              {brandList.map(b => <option key={b} value={b}>{b}</option>)}
+              <option value="__own">{t('pt.select.own_label')}</option>
             </select>
             <div className="pt-select-actions">
               <button className="btn btn-outline btn-sm" onClick={() => toggleAll(true)}>{t('pt.select.select_all')}</button>
-              <button className="btn btn-outline btn-sm" onClick={() => toggleAll(false)}>{t('common.clear')}</button>
+              <button className="btn btn-outline btn-sm" onClick={clearAll}>{t('common.clear')}</button>
               <div className="pt-select-count">{selected.length} {t('pt.select.selected')} · {totalTags} {t('pt.select.tags')}</div>
             </div>
           </div>
 
-          <div className="card pt-product-table">
-            <div className="pt-table-hdr">
-              <input type="checkbox" className="pt-checkbox" onChange={e => toggleAll(e.target.checked)} />
-              <div />
-              {[t('pt.select.col_product'), t('pt.select.col_category'), t('pt.select.col_price'), t('pt.select.col_tags'), ''].map((h, i) => (
-                <div key={i} className={`pt-th${h===t('pt.select.col_price') ? ' pt-th-right' : h===t('pt.select.col_tags') ? ' pt-th-center' : ''}`}>{h}</div>
+          {loading ? (
+            <div className="pt-loading">{t('common.loading')}</div>
+          ) : filtered.length === 0 ? (
+            <div className="pt-loading">{t('pt.select.no_products')}{search ? ` "${search}"` : ''}</div>
+          ) : (
+            <div className="card pt-product-table">
+              <div className="pt-table-hdr">
+                <input type="checkbox" className="pt-checkbox" onChange={e => toggleAll(e.target.checked)} />
+                <div />
+                {[t('pt.select.col_product'), t('pt.select.col_brand'), t('pt.select.col_price'), t('pt.select.col_tags'), ''].map((h, i) => (
+                  <div key={i} className={`pt-th${h===t('pt.select.col_price') ? ' pt-th-right' : h===t('pt.select.col_tags') ? ' pt-th-center' : ''}`}>{h}</div>
+                ))}
+              </div>
+
+              {filtered.map(p => (
+                <div key={p.id} className={`pt-product-row${p.checked?' sel':''}`}>
+                  <input type="checkbox" checked={p.checked} className="pt-checkbox" onChange={e => toggleProd(p.id, e.target.checked)} />
+                  <div className="pt-product-emoji">
+                    {p.photo
+                      ? <img src={p.photo} alt="" className="pt-product-thumb" />
+                      : <span className="material-symbols-outlined pt-product-thumb-icon">inventory_2</span>
+                    }
+                  </div>
+                  <div>
+                    <div className="pt-product-name">{p.name}</div>
+                    <div className="pt-product-meta">{p.sku} · {p.stock} {t('pt.select.in_stock')}</div>
+                  </div>
+                  <div className="pt-product-cat">{p.brand || t('pt.select.own_label_short')}</div>
+                  <div className="pt-product-price">{currency}{p.price.toLocaleString()}</div>
+                  <div className="pt-product-qty-wrap">
+                    <input type="number" value={p.qty} min="1" max="99" disabled={!p.checked}
+                      onChange={e => setQty(p.id, e.target.value)}
+                      className={`pt-qty-input${!p.checked?' disabled':''}`}
+                      onWheel={e => e.target.blur()}
+                    />
+                  </div>
+                  <div>
+                    <button className="btn btn-outline btn-xs" onClick={() => { toggleProd(p.id, true); setScene('preview') }}>{t('common.preview')}</button>
+                  </div>
+                </div>
               ))}
             </div>
-
-            {filtered.map(p => (
-              <div key={p.id} className={`pt-product-row${p.checked?' sel':''}`}>
-                <input type="checkbox" checked={p.checked} className="pt-checkbox" onChange={e => toggleProd(p.id, e.target.checked)} />
-                <div className="pt-product-emoji">{p.emoji}</div>
-                <div>
-                  <div className="pt-product-name">{p.name}</div>
-                  <div className="pt-product-meta">{p.sku} · {p.size}</div>
-                </div>
-                <div className="pt-product-cat">{p.cat}</div>
-                <div className="pt-product-price">{currency}{p.price.toLocaleString()}</div>
-                <div className="pt-product-qty-wrap">
-                  <input type="number" value={p.qty} min="1" max="99" disabled={!p.checked}
-                    onChange={e => setQty(p.id, e.target.value)}
-                    className={`pt-qty-input${!p.checked?' disabled':''}`}
-                    onWheel={e => e.target.blur()}
-                  />
-                </div>
-                <div>
-                  <button className="btn btn-outline btn-xs" onClick={() => setScene('preview')}>{t('common.preview')}</button>
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
 
           <div className="pt-select-footer">
             <div>
               <div className="pt-select-footer-title">
-                {selected.length} {t('pt.select.products')}{selected.length!==1?'s':''} · {totalTags} {t('pt.select.tag')}{totalTags!==1?'s':''}
+                {t('pt.select.footer_count', { products: selected.length, tags: totalTags })}
               </div>
               <div className="pt-select-footer-sub">{printerData.name} · {dim.wMM}×{dim.hMM}mm · {style.charAt(0).toUpperCase()+style.slice(1)}</div>
             </div>
@@ -460,7 +543,7 @@ export default function PriceTags() {
         <>
           <div className="pt-preview-topbar">
             <div>
-              <div className="pt-preview-title">{selected.length} {t('pt.preview.products')} · {totalTags} {t('pt.preview.tags')}</div>
+              <div className="pt-preview-title">{t('pt.select.footer_count', { products: selected.length, tags: totalTags })}</div>
               <div className="pt-preview-subtitle">{printerData.name} · {dim.wMM}mm × {dim.hMM}mm</div>
             </div>
             <button className="btn btn-outline btn-sm" onClick={() => setScene('select')}>
@@ -479,7 +562,7 @@ export default function PriceTags() {
           </div>
 
           <div className="pt-preview-sheet">
-            <div className="pt-preview-sheet-lbl">{t('pt.preview.sheet_label')} — {totalTags} {t('pt.preview.tag')}{totalTags!==1?'s':''}</div>
+            <div className="pt-preview-sheet-lbl">{t('pt.preview.sheet_label')} — {t('pt.preview.tag_count', { count: totalTags })}</div>
             <div className="pt-preview-tags">
               {selected.length === 0 ? (
                 <div className="pt-preview-empty">{t('pt.preview.empty')}</div>
@@ -487,7 +570,7 @@ export default function PriceTags() {
                 selected.flatMap(p =>
                   Array.from({ length: p.qty }, (_, i) => (
                     <div key={`${p.id}-${i}`} className="pt-preview-tag-wrap"
-                      dangerouslySetInnerHTML={{ __html: buildTagHtml(p, labelSize, style, fields, currency, priceSize, 2.5) }}
+                      dangerouslySetInnerHTML={{ __html: buildTag(p, 2.5) }}
                     />
                   ))
                 )

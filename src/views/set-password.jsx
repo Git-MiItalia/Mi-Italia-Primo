@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import boutiqueBg from '../assets/pexels-rachel-claire-5531541.jpg'
 import PrimoLogo from '../assets/PrimoLogo.svg'
+import useLangStore from '../store/langStore'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -9,6 +11,8 @@ export default function SetPassword() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const URL_token = searchParams.get('token')
+  const { t } = useTranslation()
+  const fetchLoginTranslations = useLangStore(s => s.fetchLoginTranslations)
 
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
@@ -17,11 +21,13 @@ export default function SetPassword() {
   const [error, setError]       = useState('')
   const [success, setSuccess]   = useState(false)
 
+  useEffect(() => { fetchLoginTranslations() }, [])
+
   function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
-    if (password !== confirm)  { setError('Passwords do not match.'); return }
+    if (password.length < 6) { setError(t('reset_password.error_min', 'Password must be at least 6 characters.')); return }
+    if (password !== confirm)  { setError(t('reset_password.error_match', 'Passwords do not match.')); return }
 
     fetch(`${API}/auth/boutique/reset-password`, {
       method: 'POST',
@@ -34,7 +40,7 @@ export default function SetPassword() {
           setSuccess(true)
           setTimeout(() => navigate('/login'), 2000)
         } else {
-          setError(res.message)
+          setError(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
         }
       })
   }
@@ -52,20 +58,20 @@ export default function SetPassword() {
           </div>
 
           <h2 className="auth-title">
-            Set <em className="auth-title-em">New Password</em>
+            {t('reset_password.title', 'Set')} <em className="auth-title-em">{t('reset_password.title_em', 'Password')}</em>
           </h2>
-          <p className="auth-subtitle">Create a password to finish setting things up</p>
+          <p className="auth-subtitle">{t('reset_password.subtitle', 'Choose a secure password for your account')}</p>
 
           {error   && <div className="alert alert-urgent auth-alert">{error}</div>}
-          {success && <div className="alert alert-success auth-alert">Redirecting to login…</div>}
+          {success && <div className="alert alert-success auth-alert">{t('reset_password.success', 'Password set! Redirecting to login…')}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-lbl">Password</label>
+              <label className="form-lbl">{t('reset_password.new_password', 'New Password')}</label>
               <div className="pw-input-wrap">
                 <input className="form-input pw-input" type={showPw ? 'text' : 'password'}
                   value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder="Password" />
+                  placeholder={t('reset_password.new_password_placeholder', 'Min. 6 characters')} />
                 <span className="pw-eye" onClick={() => setShowPw(v => !v)}>
                   <span className="material-symbols-outlined">{showPw ? 'visibility_off' : 'visibility'}</span>
                 </span>
@@ -73,22 +79,22 @@ export default function SetPassword() {
             </div>
 
             <div className="form-group">
-              <label className="form-lbl">Confirm Password</label>
+              <label className="form-lbl">{t('reset_password.confirm_password', 'Confirm Password')}</label>
               <div className="pw-input-wrap">
                 <input className="form-input pw-input" type={showCfm ? 'text' : 'password'}
                   value={confirm} onChange={e => setConfirm(e.target.value)}
-                  placeholder="Confirm Password" />
+                  placeholder={t('reset_password.confirm_placeholder', 'Repeat password')} />
                 <span className="pw-eye" onClick={() => setShowCfm(v => !v)}>
                   <span className="material-symbols-outlined">{showCfm ? 'visibility_off' : 'visibility'}</span>
                 </span>
               </div>
             </div>
 
-            <button className="btn btn-primary auth-submit-btn" type="submit">Submit</button>
+            <button className="btn btn-primary auth-submit-btn" type="submit">{t('reset_password.submit', 'Set Password')}</button>
           </form>
 
-          <div className="auth-back-link" onClick={() => window.location.href = 'https://primodev.revoltution.com/login'}>
-            ← Back to login
+          <div className="auth-back-link" onClick={() => navigate('/login')}>
+            ← {t('reset_password.back', 'Back to login')}
           </div>
         </div>
       </div>

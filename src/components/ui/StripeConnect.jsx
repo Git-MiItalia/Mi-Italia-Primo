@@ -1,31 +1,40 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
+import useLangStore from '../../store/langStore'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
-const TX = {
-  title:         'Connect Your',
-  title_em:      'Stripe Account',
-  body:          'To receive payments from orders and reservations, you need to connect a Stripe account. This takes just a few minutes and keeps your earnings secure.',
-  features: [
-    'Receive payments from Mi Italia orders',
-    'Automatic payouts to your bank account',
-    'Powered by Stripe — bank-level security',
-  ],
-  connect_btn:   'Connect Stripe Account',
-  connecting:    'Opening Stripe...',
-  refresh_btn:   "I've Connected — Refresh Status",
-  checking:      'Checking...',
-  skip:          'Skip for now',
-  skip_note:     'You can connect Stripe later from the Financials page. Some features will be limited until connected.',
-  note:          "You'll be redirected to Stripe in a new tab. Return here and click Refresh when done.",
-  err_link:      'Failed to generate Stripe link.',
-  err_refresh:   'Failed to refresh Stripe link.',
-  err_network:   'Unable to reach server. Please try again.',
-  err_pending:   'Stripe not fully connected yet. Complete setup on Stripe then refresh again.',
-}
+const FEATURE_KEYS = ['orders', 'payouts', 'security']
 
 export default function StripeConnect({ onConnected, onSkip }) {
+  const { t } = useTranslation()
+  const fetchLoginTranslations = useLangStore(s => s.fetchLoginTranslations)
+
+  useEffect(() => { fetchLoginTranslations() }, [])
+
+  const TX = {
+    title:         t('stripe_connect.title', 'Connect Your'),
+    title_em:      t('stripe_connect.title_em', 'Stripe Account'),
+    body:          t('stripe_connect.body', 'To receive payments from orders and reservations, you need to connect a Stripe account. This takes just a few minutes and keeps your earnings secure.'),
+    connect_btn:   t('stripe_connect.connect_btn', 'Connect Stripe Account'),
+    connecting:    t('stripe_connect.connecting', 'Opening Stripe...'),
+    refresh_btn:   t('stripe_connect.refresh_btn', "I've Connected — Refresh Status"),
+    checking:      t('stripe_connect.checking', 'Checking...'),
+    skip:          t('stripe_connect.skip', 'Skip for now'),
+    skip_note:     t('stripe_connect.skip_note', 'You can connect Stripe later from the Financials page. Some features will be limited until connected.'),
+    note:          t('stripe_connect.note', "You'll be redirected to Stripe in a new tab. Return here and click Refresh when done."),
+    continue_btn:  t('stripe_connect.continue_btn', 'Continue without Stripe'),
+    err_link:      t('stripe_connect.err_link', 'Failed to generate Stripe link.'),
+    err_refresh:   t('stripe_connect.err_refresh', 'Failed to refresh Stripe link.'),
+    err_network:   t('stripe_connect.err_network', 'Unable to reach server. Please try again.'),
+    err_pending:   t('stripe_connect.err_pending', 'Stripe not fully connected yet. Complete setup on Stripe then refresh again.'),
+  }
+  const FEATURES = {
+    orders:   t('stripe_connect.feature.orders', 'Receive payments from Mi Italia orders'),
+    payouts:  t('stripe_connect.feature.payouts', 'Automatic payouts to your bank account'),
+    security: t('stripe_connect.feature.security', 'Powered by Stripe — bank-level security'),
+  }
   const [loading, setLoading]           = useState(false)
   const [refreshing, setRefreshing]     = useState(false)
   const [error, setError]               = useState('')
@@ -67,8 +76,11 @@ export default function StripeConnect({ onConnected, onSkip }) {
         onConnected(); return
       }
 
-      // Not connected yet — refresh the onboard link and open it
-      const refreshRes  = await apiFetch(`${BASE_URL}/boutique/stripe/onboard/refresh`)
+      // Not connected yet — request a fresh onboard link and open it
+      const refreshRes  = await apiFetch(`${BASE_URL}/boutique/stripe/onboard`, {
+        method: 'POST',
+        body: JSON.stringify({ email: getEmail() }),
+      })
       const refreshData = await refreshRes.json()
 
       if (refreshData.success) {
@@ -95,10 +107,10 @@ export default function StripeConnect({ onConnected, onSkip }) {
         <p className="sc-body">{TX.body}</p>
 
         <div className="sc-features">
-          {TX.features.map(feat => (
-            <div key={feat} className="sc-feature-row">
+          {FEATURE_KEYS.map(key => (
+            <div key={key} className="sc-feature-row">
               <span className="material-symbols-outlined sc-check">check_circle</span>
-              <span>{feat}</span>
+              <span>{FEATURES[key]}</span>
             </div>
           ))}
         </div>
@@ -131,7 +143,7 @@ export default function StripeConnect({ onConnected, onSkip }) {
             <div className="sc-skip-confirm">
               <p className="sc-skip-note">{TX.skip_note}</p>
               <button className="btn btn-dark sc-btn-skip" onClick={onSkip}>
-                Continue without Stripe
+                {TX.continue_btn}
               </button>
             </div>
           )}

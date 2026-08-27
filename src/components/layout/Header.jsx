@@ -13,23 +13,32 @@ const titleKeys = {
   '/pos':               'sidebar.pos',
   '/messages':          'sidebar.messages',
   '/customers':         'sidebar.customers',
-  '/marketing':         'sidebar.marketing',
+  '/engagement':        'sidebar.engagement',
   '/discounts':         'sidebar.discounts',
+  '/promotions':        'sidebar.promotions',
   '/analytics':         'sidebar.analytics',
   '/financials':        'sidebar.financials',
   '/reports':           'sidebar.reports',
   '/subscription':      'sidebar.subscription',
   '/store':             'sidebar.store_profile',
+  '/tryon':             'sidebar.ai_model_studio',
+  '/integrations':      'sidebar.integrations',
   '/staff':             'sidebar.staff',
   '/showroom':          'sidebar.showroom',
   '/notifications':     'sidebar.notifications',
-  '/tryon':             'sidebar.tryon',
   '/support':           'sidebar.support',
   '/void-cil':          'sidebar.void_cil',
   '/locations':         'sidebar.locations',
+  '/locations/new':     'locations.wizard.title',
   '/oro-points':        'sidebar.oro_royalty',
   '/price-tags':        'sidebar.price_tags',
   '/products/edit/:id': 'header.edit_product',
+}
+
+const titleDefaults = {
+  '/tryon':             'AI Model Studio',
+  '/integrations':      'Integrations',
+  '/locations/new':     'Add a Location',
 }
 
 const LANGUAGES = [
@@ -52,7 +61,7 @@ function Header() {
   return (
     <div className="main-hdr">
       <div className="main-hdr-left">
-        <h2 className="main-title">{t(titleKey)}</h2>
+        <h2 className="main-title">{t(titleKey, titleDefaults[pathname])}</h2>
       </div>
       <div className="main-hdr-actions">
         <div className="search-box">

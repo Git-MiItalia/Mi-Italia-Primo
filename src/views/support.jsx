@@ -58,7 +58,7 @@ function initials(name) {
 }
 
 export default function Support() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // ── Form state ─────────────────────────────────────────
   const [selectedSubj, setSelectedSubj] = useState(0)
@@ -101,7 +101,7 @@ export default function Support() {
       .finally(() => setLoadingHelp(false))
 
     fetchTickets()
-  }, [])
+  }, [i18n.language])
 
   function fetchTickets() {
     setLoadingTickets(true)
