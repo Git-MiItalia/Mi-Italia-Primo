@@ -749,6 +749,15 @@ export default function Subscription() {
       .finally(() => setLoading(false))
   }, [i18n.language])
 
+  // Clicking "Upgrade to connect" full-page-navigates to Stripe; if the user hits
+  // the browser back button, the page can be restored from bfcache with the
+  // spinner still stuck in its pre-navigation "loading" state — reset it here.
+  useEffect(() => {
+    const handlePageShow = (e) => { if (e.persisted) setConnectLoading(false) }
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [])
+
   const handleUpgradeConnect = async () => {
     setConnectLoading(true); setPortalError('')
     try {

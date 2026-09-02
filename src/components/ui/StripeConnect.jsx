@@ -14,7 +14,7 @@ export default function StripeConnect({ onConnected, onSkip }) {
   useEffect(() => { fetchLoginTranslations() }, [])
 
   const TX = {
-    title:         t('stripe_connect.title', 'Connect Your'),
+    title:         t('stripe_connect.title', 'You need to create a'),
     title_em:      t('stripe_connect.title_em', 'Stripe Account'),
     body:          t('stripe_connect.body', 'To receive payments from orders and reservations, you need to connect a Stripe account. This takes just a few minutes and keeps your earnings secure.'),
     connect_btn:   t('stripe_connect.connect_btn', 'Connect Stripe Account'),

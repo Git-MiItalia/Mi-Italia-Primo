@@ -123,6 +123,21 @@ export async function applyMapping(connectionId) {
   return toData(res) // { imported, stats, rows }
 }
 
+export async function importCustomers(connectionId) {
+  const res = await apiFetch(`${BASE}/connections/${connectionId}/customers/import`, { method: 'POST', body: EMPTY_BODY })
+  return toData(res) // { merged, created }
+}
+
+export async function syncOrders(connectionId) {
+  const res = await apiFetch(`${BASE}/connections/${connectionId}/orders/sync`, { method: 'POST', body: EMPTY_BODY })
+  return toData(res) // { rows }
+}
+
+export async function getOrders(connectionId) {
+  const res = await apiFetch(`${BASE}/connections/${connectionId}/orders`)
+  return toData(res) // { rows }
+}
+
 export function isMapped(row) { return row.status !== 'review' }
 
 export function mappingTotals(rows) {

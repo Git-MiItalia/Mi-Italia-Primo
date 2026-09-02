@@ -15,6 +15,17 @@ function fmtSpend(val) {
   return `€${parseFloat(val).toLocaleString('en', { minimumFractionDigits:0, maximumFractionDigits:0 })}`
 }
 
+// Backend field names don't match the UI's — map explicitly instead of trusting the raw shape.
+// repeatBuyers has no backend equivalent yet (no repeat-purchase count in the stats endpoint).
+function mapStats(data) {
+  return {
+    totalCustomers:   data.totalCustomers ?? 0,
+    newThisMonth:     data.newLast30d ?? 0,
+    repeatBuyers:     data.repeatBuyers ?? 0,
+    avgLifetimeValue: data.avgSpend ?? 0,
+  }
+}
+
 export default function Customers() {
   const { t } = useTranslation()
   const lang  = useLangStore(s => s.lang)
@@ -48,7 +59,7 @@ export default function Customers() {
       const list = custRes.data?.customers ?? []
       setCustomers(list)
       if (list.length > 0) fetchDetail(list[0].id)
-      if (statsRes.success) setStats(statsRes.data)
+      if (statsRes.success) setStats(mapStats(statsRes.data))
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [lang])
@@ -78,9 +89,10 @@ export default function Customers() {
           setShowAdd(false)
           setNewName(''); setNewEmail(''); setNewPhone(''); setAddError('')
           setCreateSuccess(res.data)
+          fetchDetail(res.data.id)
           // Refresh stats
           apiFetch(`${API}/boutique/customers/stats`).then(r => r.json())
-            .then(r => { if (r.success) setStats(r.data) }).catch(() => {})
+            .then(r => { if (r.success) setStats(mapStats(r.data)) }).catch(() => {})
         } else {
           setAddError(res.message ?? t('customers.add_modal.error_generic'))
         }
@@ -111,12 +123,16 @@ export default function Customers() {
       .then(r => r.json())
       .then(res => {
         if (res.success) {
-          setCustomers(prev => prev.filter(c => c.id !== id))
-          setSelected(null)
+          setCustomers(prev => {
+            const next = prev.filter(c => c.id !== id)
+            if (next.length > 0) fetchDetail(next[0].id)
+            else setSelected(null)
+            return next
+          })
           setDeleteConfirm(null)
           // Refresh stats
           apiFetch(`${API}/boutique/customers/stats`).then(r => r.json())
-            .then(r => { if (r.success) setStats(r.data) }).catch(() => {})
+            .then(r => { if (r.success) setStats(mapStats(r.data)) }).catch(() => {})
         }
       })
   }
@@ -155,10 +171,11 @@ export default function Customers() {
         </div>
 
         {/* Stats */}
-        <div className="stat-row col3 cu-stats">
+        <div className="stat-row cu-stats">
           <div className="stat-card"><div className="stat-lbl">{t('customers.stats.total')}</div><div className="stat-val">{stats.totalCustomers}</div></div>
           <div className="stat-card"><div className="stat-lbl">{t('customers.stats.new_month')}</div><div className="stat-val">{stats.newThisMonth}</div></div>
           <div className="stat-card"><div className="stat-lbl">{t('customers.stats.repeat')}</div><div className="stat-val">{stats.repeatBuyers}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.avg_lifetime')}</div><div className="stat-val">{fmtSpend(stats.avgLifetimeValue)}</div></div>
         </div>
 
         <div className="card">
@@ -404,7 +421,7 @@ export default function Customers() {
               {t('customers.add_success.title')} <em className="modal-em-red">{t('customers.add_success.title_em')}</em>
             </div>
             <div className="modal-success-msg">
-              <strong>{createSuccess.name}</strong> {t('customers.add_success.msg', { name: '' }).replace(createSuccess.name, '').trim()}
+              {t('customers.add_success.msg', { name: createSuccess.name })}
               {createSuccess.email && <><br />{t('customers.add_success.email_prefix')} <strong>{createSuccess.email}</strong></>}
             </div>
             <button onClick={() => setCreateSuccess(null)} className="btn btn-primary modal-success-btn">{t('common.done')}</button>
