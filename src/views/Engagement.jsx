@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import RangeBar from '../components/ui/RangeBar'
-import { PR_TODAY, fmtDate } from '../lib/dateHelpers'
+import { PR_TODAY } from '../lib/dateHelpers'
 
 const API = import.meta.env.VITE_API_URL
 const LANG_MAP = {
@@ -46,15 +46,13 @@ function timeAgo(iso, t) {
   return t('eng.time.years_ago', { count: Math.floor(days/365), defaultValue: '{{count}} year(s) ago' })
 }
 
-const ANALYTICS_DATA = {
-  mtd:    { period:'1 May — 21 May 2026 · month to date',           idrate:'34', idrateDelta:'+3pt',  revenue:'3,460',  revenueDelta:'+9%',   roi:'836',   roiDelta:'+62pt',  engaged:'1,184', engagedDelta:'+48',  ltv:'483', ltvDelta:'+€26' },
-  ytd:    { period:'1 Jan — 21 May 2026 · year to date',            idrate:'34', idrateDelta:'+18pt', revenue:'22,840', revenueDelta:'+142%', roi:'1,024', roiDelta:'+382pt', engaged:'1,184', engagedDelta:'+524', ltv:'474', ltvDelta:'+€198' },
-  '7d':   { period:'15 May — 21 May 2026 · vs prev. 7 days',        idrate:'34', idrateDelta:'+1pt',  revenue:'1,140',  revenueDelta:'+8%',   roi:'724',   roiDelta:'+12pt',  engaged:'1,184', engagedDelta:'+18',  ltv:'483', ltvDelta:'+€6' },
-  '30d':  { period:'21 Apr — 21 May 2026 · vs prev. 30 days',       idrate:'34', idrateDelta:'+4pt',  revenue:'4,820',  revenueDelta:'+12%',  roi:'847',   roiDelta:'+89pt',  engaged:'1,184', engagedDelta:'+68',  ltv:'483', ltvDelta:'+€38' },
-  '90d':  { period:'21 Feb — 21 May 2026 · vs prev. 90 days',       idrate:'33', idrateDelta:'+7pt',  revenue:'13,640', revenueDelta:'+24%',  roi:'912',   roiDelta:'+142pt', engaged:'1,184', engagedDelta:'+184', ltv:'471', ltvDelta:'+€52' },
-  '12m':  { period:'21 May 2025 — 21 May 2026 · vs prev. 12 months',idrate:'34', idrateDelta:'+22pt', revenue:'51,920', revenueDelta:'+186%', roi:'1,148', roiDelta:'+520pt', engaged:'1,184', engagedDelta:'+712', ltv:'483', ltvDelta:'+€241' },
-  custom: { period:'Custom range applied',                          idrate:'34', idrateDelta:'—',     revenue:'4,820',  revenueDelta:'—',     roi:'847',   roiDelta:'—',      engaged:'1,184', engagedDelta:'—',    ltv:'483', ltvDelta:'—' },
+function activityStatusColor(status) {
+  const s = (status || '').toLowerCase()
+  if (['collected', 'completed', 'delivered', 'paid', 'confirmed'].includes(s)) return 'var(--green)'
+  if (['cancelled', 'canceled', 'failed', 'refunded', 'expired'].includes(s)) return 'var(--red)'
+  return 'var(--stone)'
 }
+
 const LANG_META = {
   it: { flag:'🇮🇹', code:null, name:'Italian'  },
   en: { flag:null,  code:'EN',  name:'English'  },
@@ -68,132 +66,22 @@ const LANG_META = {
   pt: { flag:'🇵🇹', code:null, name:'Portuguese' },
 }
 
-const CAMP_DETAIL = {
-  'spring-new': {
-    name:'Spring Collection — New Arrivals', channel:'email', icon:'mail',
-    date:'3 May 2026', segments:['New','Returning','VIP'],
-    sent:416, delivered:408, opens:341, clicks:128, visits:22, purchases:8, revenue:1840, cost:0,
-    template:'New Arrivals · localized',
-    langs:{ it:152, en:184, fr:48, de:32 },
-    miniTrend:[12,14,18,22,28,31,34,38,42,40,38,35,32,28,24],
-    segPerf:[
-      { name:'VIP',       open:96, click:54, color:'var(--gold)' },
-      { name:'Returning', open:84, click:38, color:'var(--gold-light)' },
-      { name:'New',       open:72, click:24, color:'var(--gold-soft)' },
-    ],
-    linkClicks:[
-      { label:'SHOP NOW button',    clicks:84, pct:66 },
-      { label:'View collection',    clicks:28, pct:22 },
-      { label:'View lookbook (PDF)',clicks:11, pct:9  },
-      { label:'Unsubscribe',        clicks:5,  pct:4  },
-    ],
-  },
-  'brera-vips': {
-    name:'Brera shop visit — returning VIPs', channel:'wa', icon:'chat',
-    date:'22 March 2026', segments:['VIP'],
-    sent:86, delivered:86, opens:70, clicks:34, visits:11, purchases:6, revenue:1860, cost:8.60,
-    template:'In-store visit invitation',
-    langs:{ it:62, en:24 },
-    miniTrend:[8,12,18,22,28,32,34,33,28,22,16,11,7,4,2],
-    segPerf:[{ name:'VIP', open:81, click:40, color:'var(--gold)' }],
-    linkClicks:null,
-  },
-  'vip-capsule': {
-    name:'VIP Early Access — Capsule Drop', channel:'wa', icon:'chat',
-    date:'14 April 2026', segments:['VIP'],
-    sent:48, delivered:48, opens:45, clicks:20, visits:8, purchases:5, revenue:1120, cost:4.80,
-    template:'VIP Early Access',
-    langs:{ it:32, en:16 },
-    miniTrend:[10,18,28,38,42,40,32,24,18,14,10,8,6,4,2],
-    segPerf:[{ name:'VIP', open:94, click:42, color:'var(--gold)' }],
-    linkClicks:null,
-  },
-  'ss26-bordeaux': {
-    name:'SS26 · Bordeaux silk drop', channel:'email', icon:'mail',
-    date:'9 April 2026', segments:['Returning','VIP'],
-    sent:352, delivered:344, opens:250, clicks:67, visits:14, purchases:5, revenue:420, cost:0,
-    template:'Limited drop notification',
-    langs:{ it:148, en:142, fr:38, de:24 },
-    miniTrend:[18,22,28,32,38,42,46,42,36,28,22,16,12,8,5],
-    segPerf:[
-      { name:'VIP',       open:88, click:32, color:'var(--gold)' },
-      { name:'Returning', open:67, click:18, color:'var(--gold-light)' },
-    ],
-    linkClicks:[
-      { label:'View Bordeaux silk', clicks:48, pct:72 },
-      { label:'Reserve in store',   clicks:14, pct:21 },
-      { label:'Unsubscribe',        clicks:5,  pct:7  },
-    ],
-  },
-  'res-reminder': {
-    name:'Reservation expiring · 24h reminder', channel:'wa', icon:'chat',
-    date:'Recurring · daily', segments:['Anyone with active reservation'],
-    sent:52, delivered:52, opens:50, clicks:35, visits:18, purchases:11, revenue:680, cost:5.20,
-    template:'Automated · transactional',
-    langs:{ it:36, en:14, fr:2 },
-    miniTrend:null,
-    segPerf:[{ name:'All', open:96, click:68, color:'var(--gold)' }],
-    linkClicks:null,
-  },
-  'winback': {
-    name:'Win Back — 60-Day Lapsed Customers', channel:'email', icon:'mail',
-    date:'28 April 2026', segments:['Lapsed'],
-    sent:186, delivered:178, opens:78, clicks:15, visits:3, purchases:1, revenue:180, cost:0,
-    template:'Win-Back · 10% gift',
-    langs:{ it:84, en:78, fr:18, de:6 },
-    miniTrend:[14,18,22,24,22,18,14,10,8,6,4,3,2,1,1],
-    segPerf:[{ name:'Lapsed', open:42, click:8, color:'var(--stone)' }],
-    linkClicks:[
-      { label:'Claim 10% gift',   clicks:11, pct:73 },
-      { label:'See new arrivals', clicks:3,  pct:20 },
-      { label:'Unsubscribe',      clicks:1,  pct:7  },
-    ],
-  },
-  'spring-lookbook': {
-    name:'Spring lookbook · in-store insert', channel:'print', icon:'description',
-    date:'12 April 2026', segments:['All recent purchasers'],
-    sent:68, delivered:68, opens:null, clicks:10, visits:6, purchases:4, revenue:450, cost:12.24,
-    template:'Printed insert · QR-driven',
-    langs:{ it:38, en:24, fr:6 },
-    miniTrend:null, segPerf:null, linkClicks:null,
-  },
-  'ramadan': {
-    name:'Ramadan Gifting — Curated Selection', channel:'wa', icon:'chat',
-    date:'19 March 2026', segments:['Active customers'],
-    sent:112, delivered:112, opens:76, clicks:13, visits:1, purchases:0, revenue:0, cost:11.20,
-    template:'Seasonal · gifting',
-    langs:{ it:34, en:48, ar:30 },
-    miniTrend:[16,22,28,24,18,14,10,8,6,4,3,2,1,1,1],
-    segPerf:[{ name:'Active', open:68, click:12, color:'var(--gold-light)' }],
-    linkClicks:null,
-  },
+
+
+function langSrcLabel(src, t) {
+  return src === 'user_set'  ? t('eng.ct.lang_src_user_set', 'User-set')
+       : src === 'staff_set' ? t('eng.ct.lang_src_staff_set', 'Staff-set')
+       : src === 'detected'  ? t('eng.ct.lang_src_detected', 'Detected')
+       : src === 'unknown' || !src ? t('eng.ct.lang_src_fallback', 'Fallback · EN')
+       : src
 }
-
-
-const COMPARE_DELTAS_PREVYEAR = {
-  mtd:    { idrateDelta:'+22pt', revenueDelta:'+148%', roiDelta:'+412pt', engagedDelta:'+478', ltvDelta:'+€186' },
-  ytd:    { idrateDelta:'+24pt', revenueDelta:'+184%', roiDelta:'+541pt', engagedDelta:'+612', ltvDelta:'+€224' },
-  '7d':   { idrateDelta:'+19pt', revenueDelta:'+96%',  roiDelta:'+312pt', engagedDelta:'+186', ltvDelta:'+€132' },
-  '30d':  { idrateDelta:'+22pt', revenueDelta:'+142%', roiDelta:'+438pt', engagedDelta:'+392', ltvDelta:'+€198' },
-  '90d':  { idrateDelta:'+25pt', revenueDelta:'+168%', roiDelta:'+520pt', engagedDelta:'+546', ltvDelta:'+€215' },
-  '12m':  { idrateDelta:'+28pt', revenueDelta:'+212%', roiDelta:'+684pt', engagedDelta:'+892', ltvDelta:'+€286' },
-  custom: { idrateDelta:'+20pt', revenueDelta:'+140%', roiDelta:'+420pt', engagedDelta:'+380', ltvDelta:'+€185' },
-}
-
-
-
-
 
 function mapCustomer(c, t) {
   const name = (c.name || '').trim() || t('eng.ct.unnamed', 'Unnamed')
   const code = c.language?.code
   const langInfo = code ? { flag: LANG_MAP[code]?.flag ?? code.toUpperCase(), name: langDisplayName(code, t) } : null
   const src = c.language?.source
-  const langSrc =
-    src === 'user_set' ? t('eng.ct.lang_src_user_set', 'User-set') :
-    src === 'detected' ? t('eng.ct.lang_src_detected', 'Detected') :
-    src === 'unknown' || !src ? t('eng.ct.lang_src_fallback', 'Fallback · EN') :
-    src
+  const langSrc = langSrcLabel(src, t)
   const av = SEG_AVATAR[c.segment] || SEG_AVATAR.new
   const cn = c.consent || {}
   const yn = (b) => b ? 'yes' : 'no'
@@ -209,6 +97,7 @@ function mapCustomer(c, t) {
     initBg:       av.bg,
     initColor:    av.color,
     seg:          c.segment || 'new',
+    langCode:     code || 'unknown',
     lang:         langInfo ? langInfo.flag : '?',
     langName:     langInfo ? langInfo.name : t('eng.ct.unknown', 'Unknown'),
     langSrc,
@@ -266,14 +155,23 @@ const templateApi = {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(data),
                           }).then(r => r.json()),
-  translate: (id) => apiFetch(`${API}/boutique/email-templates/${id}/translate`, {
+  translate: (id, lang) => apiFetch(`${API}/boutique/email-templates/${id}/translate`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({}),
+                      body: JSON.stringify(lang ? { lang } : {}),
                     }).then(r => r.json()),
   delete:    (id)       => apiFetch(`${API}/boutique/email-templates/${id}`, {
                             method: 'DELETE',
                           }).then(r => r.json()),
+  performance:   (id)       => apiFetch(`${API}/boutique/email-templates/${id}/performance`).then(r => r.json()),
+  versions:      (id)       => apiFetch(`${API}/boutique/email-templates/${id}/versions`).then(r => r.json()),
+  changeRequests: (id)      => apiFetch(`${API}/boutique/email-templates/${id}/change-requests`).then(r => r.json()),
+  submitChangeRequest: (id, requestText) => apiFetch(`${API}/boutique/email-templates/${id}/change-requests`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ request_text: requestText }),
+                          }).then(r => r.json()),
+  variables: () => apiFetch(`${API}/boutique/marketing/template-variables`).then(r => r.json()),
 }
 
 const emailSettingsApi = {
@@ -329,6 +227,17 @@ const favoritesApi = {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ message: msg }),
+                                      }).then(r => r.json()),
+  contacts:      (params)          => apiFetch(`${API}/boutique/marketing/favorites/contacts?${new URLSearchParams(params)}`).then(r => r.json()),
+  alertLowStock: (productId)       => apiFetch(`${API}/boutique/marketing/favorites/alert-low-stock`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(productId ? { productId } : {}),
+                                      }).then(r => r.json()),
+  campaignToSavers: (data)         => apiFetch(`${API}/boutique/marketing/favorites/campaign-to-savers`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(data),
                                       }).then(r => r.json()),
 }
 
@@ -565,6 +474,18 @@ function ChBar({ icon, iconColor, label, val, pct, barColor, soon }) {
 // ── OVERVIEW ─────────────────────────────────────────────
 function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageContacts, onManageAutomations, onViewAllCampaigns}) {
   const { t } = useTranslation()
+  const [automations, setAutomations] = useState([])
+  useEffect(() => {
+    automationApi.list().then(res => { if (res?.success) setAutomations(res.data?.automations ?? []) }).catch(() => {})
+  }, [])
+  const [ovKpis, setOvKpis] = useState([])
+  useEffect(() => {
+    apiFetch(`${API}/boutique/marketing/analytics?range=30d&compare=previous_period`)
+      .then(r => r.json())
+      .then(res => { if (res?.success) setOvKpis(res.data?.kpis ?? []) })
+      .catch(() => {})
+  }, [])
+  const ovDelta = (key) => ovKpis.find(k => k.key === key)?.delta_pct
   const segsArr = Array.isArray(segments) ? segments : []
   const total   = segsArr.reduce((s, sg) => s + (sg.customers ?? 0), 0)
   const emailR  = dashboard?.email_reach  ?? '—'
@@ -584,11 +505,10 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
     : kind.replace(/_/g, ' ')
   const liveActivity = dashboard?.activity_feed ?? []
 
-  const autoRunning = [
-    { icon:'bolt',     iconColor:'var(--gold)',  name:'Welcome — First Purchase', sent:'143 sent', status:'on' },
-    { icon:'favorite', iconColor:'var(--gold)',  name:'Back in Stock Alerts',     sent:'67 sent',  status:'on' },
-    { icon:'schedule', iconColor:'var(--stone)', name:'Lapsed Re-engagement Flow',sent:null,       status:'paused' },
-  ]
+  const autoRunning = automations.slice(0, 3).map(a => {
+    const ic = automationIcon(a.trigger_type)
+    return { icon: ic.icon, iconColor: ic.color, name: a.name, sent: null, status: a.enabled ? 'on' : 'paused' }
+  })
   const segLabels = {
     vip: t('eng.camp.seg_vip', 'VIP'), loyal: t('eng.camp.seg_loyal', 'Loyal'), new: t('eng.camp.seg_new', 'New'),
     warm: t('eng.camp.seg_warm', 'Warm'), lapsed: t('eng.camp.seg_lapsed', 'Lapsed'), all: t('eng.camp.seg_all', 'All contacts'),
@@ -615,33 +535,41 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
         <div className="stat-card">
           <div className="stat-lbl">{t('eng.ov.total_contacts', 'Total Contacts')}</div>
           <div className="stat-val">{total || '—'}</div>
-          <div className="stat-change up">{t('eng.ov.contacts_delta', '↑ +34 this month')}</div>
+          {ovDelta('new_contacts') != null && (
+            <div className={`stat-change ${ovDelta('new_contacts') < 0 ? 'down' : 'up'}`}>
+              {ovDelta('new_contacts') >= 0 ? '↑ +' : '↓ '}{ovDelta('new_contacts')}% {t('eng.ov.vs_last_30d', 'vs prior 30 days')}
+            </div>
+          )}
         </div>
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-email">mail</span>{t('eng.ov.email_reach', 'Email Reach')}
           </div>
           <div className="stat-val">{emailR}</div>
-          <div className="stat-sub">{t('eng.ov.email_sub', '72% opted in · Avg open 44%')}</div>
+          <div className="stat-sub">{t('eng.ov.email_sub_real', { rate: chVal('email', 'open_rate'), defaultValue: 'Avg open {{rate}}' })}</div>
         </div>
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-wa">chat</span>{t('eng.ov.wa_reach', 'WhatsApp Reach')}
           </div>
           <div className="stat-val">{waR}</div>
-          <div className="stat-sub">{t('eng.ov.wa_sub', '46% opted in · Avg read 78%')}</div>
+          <div className="stat-sub">{t('eng.ov.wa_sub_real', { rate: chVal('wa', 'open_rate'), defaultValue: 'Avg read {{rate}}' })}</div>
         </div>
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-print">description</span>{t('eng.ov.print_insert', 'Printed insert')}
           </div>
           <div className="stat-val">{printR}</div>
-          <div className="stat-sub">{t('eng.ov.print_sub', 'Addresses on file · 15% QR scan rate')}</div>
+          <div className="stat-sub">{t('eng.ov.print_sub_real', { rate: chVal('print', 'click_rate'), defaultValue: 'QR scan rate {{rate}}' })}</div>
         </div>
         <div className="stat-card">
           <div className="stat-lbl">{t('eng.ov.revenue_attr', 'Revenue Attributed')}</div>
           <div className="stat-val">{revenue !== '—' ? `€${revenue}` : '—'}</div>
-          <div className="stat-change up">{t('eng.ov.revenue_delta', '↑ +12% this month')}</div>
+          {ovDelta('attributed_revenue') != null && (
+            <div className={`stat-change ${ovDelta('attributed_revenue') < 0 ? 'down' : 'up'}`}>
+              {ovDelta('attributed_revenue') >= 0 ? '↑ +' : '↓ '}{ovDelta('attributed_revenue')}% {t('eng.ov.vs_last_30d', 'vs prior 30 days')}
+            </div>
+          )}
         </div>
       </div>
 
@@ -691,14 +619,14 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
                     <td className="tbl-num-bold">{s.customers ?? 0}</td>
                     <td className={engCls}>{engPct}%</td>
                     <td><LangBar languages={s.languages} /></td>
-                    <td className="tbl-meta">{s.lastCampaign ?? '—'}</td>
+                    <td className="tbl-meta">{s.lastCampaign ? `${s.lastCampaign.name}${s.lastCampaign.sentAt ? ` · ${formatDate(s.lastCampaign.sentAt)}` : ''}` : '—'}</td>
                     <td>
                       <button
                         className={`btn btn-xs ${
                           s.key === 'lapsed' ? 'btn-red' :
                           i === 0            ? 'btn-primary' : 'btn-outline'
                         }`}
-                        onClick={onNewCampaign}
+                        onClick={() => onNewCampaign(s.key)}
                       >
                         {s.key === 'lapsed' ? t('eng.ov.reengage', 'Re-engage') : t('eng.ov.send', 'Send')}
                       </button>
@@ -781,6 +709,7 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
               <div className="card-title">{t('eng.ov.auto_running', 'Automations')} <em>{t('eng.ov.auto_running_em', 'Running')}</em></div>
               <span className="material-symbols-outlined auto-running-fwd" onClick={onManageAutomations}>arrow_forward</span>
             </div>
+            {autoRunning.length === 0 && <div className="eng-loading">{t('eng.auto.empty', 'No automations yet — create one to get started.')}</div>}
             {autoRunning.map((a, i) => (
               <div key={i} className="auto-running-row">
                 <span className="material-symbols-outlined auto-running-icon" style={{color:a.iconColor}}>{a.icon}</span>
@@ -797,11 +726,17 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
 }
 
 // ── CONTACTS ─────────────────────────────────────────────
-function ContactsView() {
+function ContactsView({ onContactsChanged, segments }) {
   const { t, i18n } = useTranslation()
   const [contacts,       setContacts]       = useState([])
   const [loadingList,    setLoadingList]    = useState(true)
   const [showImport,     setShowImport]     = useState(false)
+  const [importFile,     setImportFile]     = useState(null)
+  const [importDragOver, setImportDragOver] = useState(false)
+  const [importing,      setImporting]      = useState(false)
+  const [importResult,   setImportResult]   = useState(null)
+  const [importError,    setImportError]    = useState('')
+  const importInputRef = useRef(null)
   const [showAddContact, setShowAddContact] = useState(false)
   const [showPanel,      setShowPanel]      = useState(false)
   const [panelContact,   setPanelContact]   = useState(null)
@@ -809,6 +744,11 @@ function ContactsView() {
   const [panelLoading,   setPanelLoading]   = useState(false)
   const [panelFavorites,        setPanelFavorites]        = useState([])
   const [panelFavoritesLoading, setPanelFavoritesLoading] = useState(false)
+  const [panelFavoritesError,   setPanelFavoritesError]   = useState('')
+  const [langEditing,   setLangEditing]   = useState(false)
+  const [langCode,      setLangCode]      = useState('')
+  const [langSaving,    setLangSaving]    = useState(false)
+  const [langSaveError, setLangSaveError] = useState('')
   const [addFirst, setAddFirst]     = useState('')
   const [addLast, setAddLast]       = useState('')
   const [addEmail, setAddEmail]     = useState('')
@@ -820,6 +760,9 @@ function ContactsView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [segFilter,   setSegFilter]   = useState(null)
   const [langFilter,  setLangFilter]  = useState(null)
+  const [page,        setPage]        = useState(1)
+  const [hasNextPage, setHasNextPage] = useState(false)
+  const [total,       setTotal]       = useState(0)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkNote,    setBulkNote]    = useState('')
   const [bulkBusy,    setBulkBusy]    = useState(false)
@@ -828,15 +771,11 @@ function ContactsView() {
   const [bulkMsgSubject,  setBulkMsgSubject]  = useState('')
   const [bulkMsgBody,     setBulkMsgBody]     = useState('')
   const [bulkMsgResult,   setBulkMsgResult]   = useState(null)
+  const [messageContactIds, setMessageContactIds] = useState([])
 
-  const langOptions = Array.from(new Set(contacts.map(c => c.langName))).sort()
+  const langOptions = Array.from(new Map(contacts.map(c => [c.langCode, c.langName])).entries())
 
-  const filteredContacts = contacts.filter(c => {
-    if (searchQuery.trim() && !c.name.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false
-    if (segFilter && c.seg !== segFilter) return false
-    if (langFilter && c.langName !== langFilter) return false
-    return true
-  })
+  const filteredContacts = contacts // filtering now happens server-side
 
   const allFilteredSelected = filteredContacts.length > 0 && filteredContacts.every(c => selectedIds.has(c.id))
   function toggleSelectAll() {
@@ -849,15 +788,32 @@ function ContactsView() {
       return next
     })
   }
-  const refetchContacts = () => {
+  const CONTACTS_PAGE_SIZE = 20
+  const refetchContacts = (targetPage = page) => {
     setLoadingList(true)
-    apiFetch(`${API}/boutique/customers?page=1&limit=20`)
+    const params = new URLSearchParams({ page: String(targetPage), limit: String(CONTACTS_PAGE_SIZE) })
+    if (searchQuery.trim()) params.set('search', searchQuery.trim())
+    if (segFilter) params.set('segment', segFilter)
+    if (langFilter) params.set('language', langFilter)
+    apiFetch(`${API}/boutique/customers?${params.toString()}`)
       .then(r => r.json())
       .then(res => {
-        if (res.success) setContacts((res.data?.customers ?? []).map(c => mapCustomer(c, t)))
+        if (res.success) {
+          const list = res.data?.customers ?? []
+          setContacts(list.map(c => mapCustomer(c, t)))
+          setPage(targetPage)
+          const pg = res.data?.pagination
+          setHasNextPage(pg ? !!pg.has_more : list.length === CONTACTS_PAGE_SIZE)
+          setTotal(pg?.total ?? list.length)
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingList(false))
+  }
+  const goToPage = (targetPage) => {
+    if (targetPage < 1 || loadingList) return
+    setSelectedIds(new Set())
+    refetchContacts(targetPage)
   }
 
   const bulkAction = (action, extra = {}) =>
@@ -873,7 +829,7 @@ function ContactsView() {
     bulkAction('add_to_segment', { segment })
       .then(res => {
         setBulkNote(res?.message || (res?.success ? t('eng.ct.bulk_segment_done', 'Contacts updated.') : t('eng.ct.bulk_failed', 'Bulk action failed.')))
-        if (res?.success) refetchContacts()
+        if (res?.success)  { refetchContacts(); onContactsChanged?.() }
       })
       .catch(() => setBulkNote(t('eng.ct.err_network', 'Network error')))
       .finally(() => { setBulkBusy(false); setBulkSegment(''); setTimeout(() => setBulkNote(''), 4000) })
@@ -907,16 +863,48 @@ function ContactsView() {
       .finally(() => { setBulkBusy(false); setTimeout(() => setBulkNote(''), 4000) })
   }
 
+  const sendMessage = (ids, extra = {}) =>
+    apiFetch(`${API}/boutique/marketing/contacts/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'message', contact_ids: ids, ...extra }),
+    }).then(r => r.json())
+
   const handleBulkMessage = () => {
     if (!bulkMsgBody.trim()) return
     setBulkBusy(true)
-    bulkAction('message', { subject: bulkMsgSubject, message: bulkMsgBody })
+    sendMessage(messageContactIds, { subject: bulkMsgSubject, message: bulkMsgBody })
       .then(res => {
         if (res?.success) setBulkMsgResult(res.data)
         else setBulkNote(res?.message || t('eng.ct.bulk_failed', 'Bulk action failed.'))
       })
       .catch(() => setBulkNote(t('eng.ct.err_network', 'Network error')))
       .finally(() => setBulkBusy(false))
+  }
+
+  const closeImportModal = () => {
+    setShowImport(false); setImportFile(null); setImportResult(null); setImportError(''); setImportDragOver(false)
+  }
+
+  const pickImportFile = (file) => {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) { setImportError(t('eng.ct.err_csv_only', 'Please choose a .csv file.')); return }
+    setImportError(''); setImportResult(null); setImportFile(file)
+  }
+
+  const handleImportSubmit = () => {
+    if (!importFile) return
+    setImporting(true); setImportError(''); setImportResult(null)
+    const formData = new FormData()
+    formData.append('file', importFile)
+    apiFetch(`${API}/boutique/marketing/contacts/import`, { method: 'POST', body: formData })
+      .then(r => r.json())
+      .then(res => {
+        if (res?.success) { setImportResult(res.data); refetchContacts(); onContactsChanged?.() }
+        else setImportError(res?.message || t('eng.ct.err_import_failed', 'Import failed.'))
+      })
+      .catch(() => setImportError(t('eng.ct.err_network', 'Network error')))
+      .finally(() => setImporting(false))
   }
 
   function handleAddContact() {
@@ -928,18 +916,61 @@ function ContactsView() {
     }).then(r => r.json()).then(res => {
       if (res.success) {
         setShowAddContact(false); setAddFirst(''); setAddLast(''); setAddEmail(''); setAddPhone(''); setAddSegment('new'); setAddNotes(''); setAddError('')
-        refetchContacts()
+        refetchContacts(); onContactsChanged?.()
       } else setAddError(res.message ?? t('eng.ct.err_add_failed', 'Failed to add contact'))
     }).catch(() => setAddError(t('eng.ct.err_network', 'Network error')))
   }
 
-  // Fetch contact list on mount
+  const openLangEditor = () => {
+    setLangCode(panelDetail?.language?.code || '')
+    setLangSaveError('')
+    setLangEditing(true)
+  }
+
+  const saveLangChange = () => {
+    if (!panelContact?.id) return
+    setLangSaving(true)
+    setLangSaveError('')
+    apiFetch(`${API}/boutique/customers/${panelContact.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: langCode ? { code: langCode, source: 'staff_set' } : null }),
+    }).then(r => r.json()).then(res => {
+      if (res?.success) {
+        const lang = res.data?.language ?? { code: null, source: 'unknown' }
+        const langInfo = lang.code ? { flag: LANG_MAP[lang.code]?.flag ?? lang.code.toUpperCase(), name: langDisplayName(lang.code, t) } : null
+        setPanelContact(prev => prev && ({
+          ...prev,
+          lang:     langInfo ? langInfo.flag : '?',
+          langName: langInfo ? langInfo.name : t('eng.ct.unknown', 'Unknown'),
+          langSrc:  langSrcLabel(lang.source, t),
+        }))
+        setPanelDetail(prev => prev && ({ ...prev, language: lang }))
+        setLangEditing(false)
+        refetchContacts()
+      } else {
+        setLangSaveError(res?.message || t('eng.ct.err_lang_save', 'Failed to update language.'))
+      }
+    }).catch(() => setLangSaveError(t('eng.ct.err_network', 'Network error')))
+      .finally(() => setLangSaving(false))
+  }
+
+  // Fetch contact list on mount, language change, or segment/language filter change
   useEffect(() => {
-    refetchContacts()
-  }, [i18n.language])
+    refetchContacts(1)
+  }, [i18n.language, segFilter, langFilter])
+
+  // Search is debounced so we don't fire a request on every keystroke
+  const isFirstSearch = useRef(true)
+  useEffect(() => {
+    if (isFirstSearch.current) { isFirstSearch.current = false; return }
+    const timer = setTimeout(() => refetchContacts(1), 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   // Fetch full profile whenever the panel opens
   useEffect(() => {
+    setLangEditing(false); setLangSaveError('')
     if (!showPanel || !panelContact?.id) { setPanelDetail(null); return }
     setPanelLoading(true)
     apiFetch(`${API}/boutique/customers/${panelContact.id}`)
@@ -951,11 +982,15 @@ function ContactsView() {
 
   // Fetch this customer's saved products whenever the panel opens
   useEffect(() => {
+    setPanelFavoritesError('')
     if (!showPanel || !panelContact?.id) { setPanelFavorites([]); return }
     setPanelFavoritesLoading(true)
     favoritesApi.customer(panelContact.id)
-      .then(res => { if (res?.success) setPanelFavorites(res.data?.favorites ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res?.success) setPanelFavorites(res.data?.favorites ?? [])
+        else setPanelFavoritesError(res?.message || t('eng.ct.err_favorites', 'Failed to load saved items.'))
+      })
+      .catch(() => setPanelFavoritesError(t('eng.ct.err_network', 'Network error')))
       .finally(() => setPanelFavoritesLoading(false))
   }, [showPanel, panelContact?.id])
 
@@ -977,7 +1012,7 @@ function ContactsView() {
             <span key={s.key} className={`seg ${s.cls} ct-seg-btn`}
               style={{ cursor:'pointer', boxShadow: segFilter === s.key ? 'inset 0 0 0 1.5px var(--deep)' : 'none' }}
               onClick={() => setSegFilter(prev => prev === s.key ? null : s.key)}>
-              {s.icon} {s.label} ({contacts.filter(c => c.seg === s.key).length})
+              {s.icon} {s.label} ({(segments ?? []).find(sg => sg.key === s.key)?.customers ?? 0})
             </span>
           ))}
           <span className="ct-lang-btn" style={{ display:'inline-flex', alignItems:'center' }}>
@@ -985,7 +1020,7 @@ function ContactsView() {
             <select value={langFilter || ''} onChange={e => setLangFilter(e.target.value || null)}
               style={{ border:'none', background:'transparent', font:'inherit', color:'inherit', cursor:'pointer', outline:'none' }}>
               <option value="">{t('eng.ct.language', 'Language')}</option>
-              {langOptions.map(l => <option key={l} value={l}>{l}</option>)}
+              {langOptions.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
             </select>
             <span className="material-symbols-outlined ct-lang-chevron">expand_more</span>
           </span>
@@ -1015,7 +1050,7 @@ function ContactsView() {
             </select>
           </div>
           <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={handleBulkExport}>{t('common.export', 'Export')}</button>
-          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={() => { setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message', 'Message')}</button>
+          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={() => { setMessageContactIds(Array.from(selectedIds)); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message', 'Message')}</button>
           <button className="btn btn-outline btn-xs" onClick={() => setSelectedIds(new Set())}>{t('common.clear', 'Clear')}</button>
         </div>
       )}
@@ -1081,8 +1116,14 @@ function ContactsView() {
                   {[c.email, c.wa, c.print].filter(v => v === 'yes').length === 0
                     ? <button className="btn btn-outline btn-xs" disabled>{t('common.pending', 'Pending')}</button>
                     : c.seg === 'lapsed'
-                    ? <button className="btn btn-primary btn-xs">{t('eng.ov.reengage', 'Re-engage')}</button>
-                    : <button className="btn btn-outline btn-xs">{t('eng.ct.message', 'Message')}</button>
+                    ? <button className="btn btn-primary btn-xs" onClick={() => {
+                        setMessageContactIds([c.id])
+                        setBulkMsgSubject(t('eng.ct.reengage_subject', 'We miss you, {{name}}!', { name: c.name?.split(' ')[0] || '' }))
+                        setBulkMsgBody(t('eng.ct.reengage_body', "It's been a while — come see what's new at Mi Italia. We'd love to have you back!"))
+                        setBulkMsgResult(null)
+                        setShowBulkMessage(true)
+                      }}>{t('eng.ov.reengage', 'Re-engage')}</button>
+                    : <button className="btn btn-outline btn-xs" onClick={() => { setMessageContactIds([c.id]); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message', 'Message')}</button>
                   }
                 </td>
               </tr>
@@ -1090,64 +1131,73 @@ function ContactsView() {
           </tbody>
         </table>
         <div className="ct-table-footer">
-          <span>{t('eng.ct.showing_loaded', { shown: filteredContacts.length, total: contacts.length, defaultValue: 'Showing {{shown}} of {{total}} loaded contacts' })}</span>
+          <span>{t('eng.ct.showing_loaded', { shown: filteredContacts.length, total, defaultValue: 'Showing {{shown}} of {{total}} contacts' })}</span>
           <div className="ct-footer-btns">
-            <button className="btn btn-outline btn-xs" disabled>{t('eng.ct.prev', '← Prev')}</button>
-            <button className="btn btn-outline btn-xs">{t('eng.ct.next', 'Next →')}</button>
+            <button className="btn btn-outline btn-xs" disabled={page <= 1 || loadingList} onClick={() => goToPage(page - 1)}>{t('eng.ct.prev', '← Prev')}</button>
+            <span>{t('eng.ct.page_n', { page, defaultValue: 'Page {{page}}' })}</span>
+            <button className="btn btn-outline btn-xs" disabled={!hasNextPage || loadingList} onClick={() => goToPage(page + 1)}>{t('eng.ct.next', 'Next →')}</button>
           </div>
         </div>
       </div>
       {/* Import CSV Modal */}
       {showImport && (
-        <div className="modal-backdrop" onClick={() => setShowImport(false)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">{t('eng.ct.import_title', 'Import')} <em>{t('eng.ct.import_title_em', 'Contacts')}</em></div>
-              <div className="modal-close" onClick={() => setShowImport(false)}>
+              <div className="modal-close" onClick={closeImportModal}>
                 <span className="material-symbols-outlined">close</span>
               </div>
             </div>
-            <div className="ct-drop-zone">
-              <span className="material-symbols-outlined ct-drop-icon">upload_file</span>
-              <div className="ct-drop-title">{t('eng.ct.drop_title', 'Drop your CSV here or click to browse')}</div>
-              <div className="ct-drop-sub">{t('eng.ct.drop_sub', 'Required columns: First Name, Last Name, Email. Optional: Phone, Segment')}</div>
-            </div>
-            <div className="form-group">
-              <label className="form-lbl">{t('eng.ct.assign_import_label', 'Assign imported contacts to segment')}</label>
-              <div className="select-wrap">
-                <select className="form-select">
-                  <option>{t('eng.ct.csv_auto', 'Auto-detect from CSV')}</option>
-                  <option>✦ {t('eng.camp.seg_new', 'New')}</option>
-                  <option>🔥 {t('eng.camp.seg_warm', 'Warm')}</option>
-                  <option>⭐ {t('eng.camp.seg_vip', 'VIP')}</option>
-                </select>
-                <span className="material-symbols-outlined select-arrow">expand_more</span>
-              </div>
-            </div>
-            <div className="ct-consent-toggle-row">
-              <Toggle on={true} onToggle={() => {}} />
-              <div>
-                <div className="ct-consent-toggle-title">{t('eng.ct.import_consent_title', 'Send GDPR consent request to all imported contacts')}</div>
-                <div className="ct-consent-toggle-sub">{t('eng.ct.import_consent_sub', 'Contacts will receive an opt-in email before any marketing is sent')}</div>
-              </div>
-            </div>
-            <div className="alert-gdpr-blue">
-              <span className="material-symbols-outlined">verified_user</span>
-              <div dangerouslySetInnerHTML={{ __html: t('eng.ct.import_note', 'Imported contacts are added in <strong>pending consent</strong> status. They cannot be messaged until they opt in. Duplicate emails are automatically merged with existing contacts.') }} />
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowImport(false)}>{t('common.cancel', 'Cancel')}</button>
-              <button className="btn btn-primary">
-                <span className="material-symbols-outlined">upload</span>{t('eng.ct.import_send_btn', 'Import & Send Consent Requests')}
-              </button>
-            </div>
+            {importResult ? (
+              <>
+                <div className="eng-success">
+                  {t('eng.ct.import_result', {
+                    imported: importResult.imported ?? 0, merged: importResult.merged_duplicates ?? 0,
+                    pending: importResult.pending_consent ?? 0, skipped: importResult.skipped ?? 0,
+                    defaultValue: 'Imported {{imported}} · merged {{merged}} duplicate(s) · {{pending}} pending consent · {{skipped}} skipped',
+                  })}
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-primary" onClick={closeImportModal}>{t('common.done', 'Done')}</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {importError && <div className="eng-error">{importError}</div>}
+                <input ref={importInputRef} type="file" accept=".csv" style={{ display:'none' }}
+                  onChange={e => pickImportFile(e.target.files?.[0])} />
+                <div className={`ct-drop-zone${importDragOver ? ' ct-drop-zone-over' : ''}`}
+                  style={{ cursor:'pointer' }}
+                  onClick={() => importInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setImportDragOver(true) }}
+                  onDragLeave={() => setImportDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setImportDragOver(false); pickImportFile(e.dataTransfer.files?.[0]) }}>
+                  <span className="material-symbols-outlined ct-drop-icon">upload_file</span>
+                  <div className="ct-drop-title">
+                    {importFile ? importFile.name : t('eng.ct.drop_title', 'Drop your CSV here or click to browse')}
+                  </div>
+                  <div className="ct-drop-sub">{t('eng.ct.drop_sub', 'Required columns: First Name, Last Name, Email. Optional: Phone, Segment')}</div>
+                </div>
+                <div className="alert-gdpr-blue">
+                  <span className="material-symbols-outlined">verified_user</span>
+                  <div dangerouslySetInnerHTML={{ __html: t('eng.ct.import_note', 'Imported contacts are added in <strong>pending consent</strong> status. They cannot be messaged until they opt in. Duplicate emails are automatically merged with existing contacts.') }} />
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-outline" onClick={closeImportModal} disabled={importing}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-primary" onClick={handleImportSubmit} disabled={!importFile || importing}>
+                    <span className="material-symbols-outlined">upload</span>{importing ? t('eng.ct.importing', 'Importing…') : t('eng.ct.import_send_btn', 'Import Contacts')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* Add Contact Modal */}
       {showAddContact && (
-        <div className="modal-backdrop" onClick={() => setShowAddContact(false)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">{t('eng.ct.add_title', 'Add')} <em>{t('eng.ct.add_title_em', 'Contact')}</em></div>
@@ -1206,7 +1256,7 @@ function ContactsView() {
       )}
 
       {showBulkMessage && (
-        <div className="modal-backdrop" onClick={() => setShowBulkMessage(false)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">{t('eng.ct.bulk_message_title', 'Message')} <em>{t('eng.ct.bulk_message_title_em', 'Selected')}</em></div>
@@ -1261,7 +1311,7 @@ function ContactsView() {
                 <span className="material-symbols-outlined">arrow_back</span>
               </button>
               <div className="ct-panel-title">{t('eng.ct.panel_title', 'Contact Profile')}</div>
-              <button className="btn btn-primary btn-sm">
+              <button className="btn btn-primary btn-sm" onClick={() => { setMessageContactIds([panelContact.id]); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null); setShowBulkMessage(true) }}>
                 <span className="material-symbols-outlined">campaign</span>{t('eng.ct.message', 'Message')}
               </button>
             </div>
@@ -1303,6 +1353,8 @@ function ContactsView() {
               <div className="ct-panel-section-lbl">{t('eng.ct.saved_items_section', 'Saved Items')}</div>
               {panelFavoritesLoading ? (
                 <div className="eng-loading-sm">{t('eng.fav.loading', 'Loading favorites…')}</div>
+              ) : panelFavoritesError ? (
+                <div className="eng-error">{panelFavoritesError}</div>
               ) : panelFavorites.length === 0 ? (
                 <div className="eng-loading-sm">{t('eng.ct.no_saved_items', 'No saved items yet.')}</div>
               ) : (
@@ -1316,32 +1368,48 @@ function ContactsView() {
 
               {/* Spend by Category */}
               <div className="ct-panel-section-lbl">{t('eng.ct.spend_by_category', 'Spend by Category')}</div>
-              {[
-                {label:t('eng.ct.cat_rtw', 'Ready-to-wear'), val:'€868', pct:70},
-                {label:t('eng.ct.cat_accessories', 'Accessories'),   val:'€248', pct:20},
-                {label:t('eng.ct.cat_other', 'Other'),         val:'€124', pct:10},
-              ].map(s => (
-                <div key={s.label} className="ct-panel-spend-row">
-                  <div className="ct-panel-spend-lbl">{s.label}</div>
-                  <div className="ct-panel-spend-bar-wrap">
-                    <div className="ct-panel-spend-bar" style={{width:`${s.pct}%`}} />
+              {(() => {
+                const cats = panelDetail?.spend_by_category ?? []
+                if (cats.length === 0) {
+                  return <div className="eng-loading-sm">{t('eng.ct.spend_by_category_unavailable', 'Category breakdown not available yet.')}</div>
+                }
+                return cats.map(s => (
+                  <div key={s.category} className="ct-panel-spend-row">
+                    <div className="ct-panel-spend-lbl">{s.category}</div>
+                    <div className="ct-panel-spend-bar-wrap">
+                      <div className="ct-panel-spend-bar" style={{width:`${s.pct}%`}} />
+                    </div>
+                    <div className="ct-panel-spend-val">{s.amount != null ? `€${s.amount}` : ''}</div>
                   </div>
-                  <div className="ct-panel-spend-val">{s.val}</div>
-                </div>
-              ))}
+                ))
+              })()}
 
               {/* Language */}
               <div className="ct-panel-section-lbl">{t('eng.ct.lang_section', 'Language & Localization')}</div>
-              <div className="ct-panel-lang-row">
-                <span className="ct-panel-lang-flag">{panelContact.lang}</span>
-                <div>
-                  <div className="ct-panel-lang-name">{panelContact.langName}</div>
-                  <div className="ct-panel-lang-src">{panelContact.langSrc}</div>
+              {langEditing ? (
+                <div className="ct-panel-lang-row">
+                  <div className="select-wrap" style={{ flex:1 }}>
+                    <select className="form-select" value={langCode} onChange={e => setLangCode(e.target.value)} disabled={langSaving}>
+                      <option value="">{t('eng.ct.lang_clear_override', 'No override (use detected)')}</option>
+                      {Object.keys(LANG_MAP).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
+                    </select>
+                  </div>
+                  <button className="btn btn-outline btn-xs" onClick={() => setLangEditing(false)} disabled={langSaving}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-primary btn-xs" onClick={saveLangChange} disabled={langSaving}>{langSaving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}</button>
                 </div>
-                <button className="btn btn-outline btn-xs ct-panel-lang-change">
-                  <span className="material-symbols-outlined">edit</span>{t('common.change', 'Change')}
-                </button>
-              </div>
+              ) : (
+                <div className="ct-panel-lang-row">
+                  <span className="ct-panel-lang-flag">{panelContact.lang}</span>
+                  <div>
+                    <div className="ct-panel-lang-name">{panelContact.langName}</div>
+                    <div className="ct-panel-lang-src">{panelContact.langSrc}</div>
+                  </div>
+                  <button className="btn btn-outline btn-xs ct-panel-lang-change" onClick={openLangEditor}>
+                    <span className="material-symbols-outlined">edit</span>{t('common.change', 'Change')}
+                  </button>
+                </div>
+              )}
+              {langSaveError && <div className="eng-error">{langSaveError}</div>}
                             <div className="ct-panel-lang-note">{t('eng.ct.lang_note', 'All campaign translations target this language. Set explicitly by customer or staff.')}</div>
 
               {/* GDPR Consent */}
@@ -1377,7 +1445,38 @@ function ContactsView() {
                 if (orders.length === 0 && reservs.length === 0) {
                   return <div className="eng-loading-sm">{t('eng.ct.no_activity', 'No recent activity yet.')}</div>
                 }
-                return <div className="eng-loading-sm">{t('eng.ct.activity_shape_tbd', { count: orders.length + reservs.length, defaultValue: '{{count}} recent item(s) — shape TBD' })}</div>
+                const items = [
+                  ...reservs.map(r => ({
+                    key: `r-${r.id}`,
+                    icon: 'event',
+                    title: r.product_name || t('eng.ct.reservation_label', 'Reservation'),
+                    status: r.status,
+                    price: r.pickup_price,
+                    date: r.confirmed_at,
+                  })),
+                  // recent_orders has always been empty in every real response we've seen so far,
+                  // so this field mapping is inferred, not confirmed — re-check once a populated one exists.
+                  ...orders.map((o, i) => ({
+                    key: o.id ?? `o-${i}`,
+                    icon: 'shopping_bag',
+                    title: o.product_name || o.items?.[0]?.name || t('eng.ct.order_label', 'Order'),
+                    status: o.status,
+                    price: o.total ?? o.total_amount ?? o.amount,
+                    date: o.created_at ?? o.ordered_at ?? o.date,
+                  })),
+                ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+                return items.map(it => (
+                  <div key={it.key} className="ct-panel-row">
+                    <span>
+                      <span className="material-symbols-outlined" style={{ fontSize:16, verticalAlign:'middle', marginRight:6 }}>{it.icon}</span>
+                      {it.title}
+                      {it.status && <span style={{ color: activityStatusColor(it.status), marginLeft:6 }}>· {it.status}</span>}
+                    </span>
+                    <span>
+                      {it.price != null ? `€${Number(it.price).toLocaleString()} · ` : ''}{it.date ? timeAgo(it.date, t) : '—'}
+                    </span>
+                  </div>
+                ))
               })()}
             </div>
           </div>
@@ -1388,9 +1487,12 @@ function ContactsView() {
 }
 
 // ── CAMPAIGNS — HUB ──────────────────────────────────────
-function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCampaigns, campaignsLoading, emailSettings, initialSub = 'hub' }) {
+function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCampaigns, campaignsLoading, emailSettings, initialSub = 'hub', initialSegment = null, initialTemplate = null, initialChannel = null }) {
   const { t } = useTranslation()
   const [campSub,        setCampSub]        = useState(initialSub || 'hub')
+  const [presetSegment,  setPresetSegment]  = useState(initialSegment ?? null)
+  const [presetTemplate, setPresetTemplate] = useState(initialTemplate ?? null)
+  const [presetChannel,  setPresetChannel]  = useState(initialChannel ?? null)
   const [channelFilter,  setChannelFilter]  = useState('all')
   const [editingId,      setEditingId]      = useState(null)
   const [analyticsModalId, setAnalyticsModalId] = useState(null)
@@ -1404,9 +1506,12 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
   if (campSub === 'builder') return (
     <CampaignBuilder
       campaignId={editingId}
+      initialSegment={editingId ? null : presetSegment}
+      initialTemplate={editingId ? null : presetTemplate}
+      initialChannel={editingId ? null : presetChannel}
       segments={segments}
       emailSettings={emailSettings}
-      onBack={() => { refetchCampaigns(); setEditingId(null); setCampSub('hub') }}
+      onBack={() => { refetchCampaigns(); setEditingId(null); setPresetSegment(null); setPresetTemplate(null); setPresetChannel(null); setCampSub('hub') }}
       onReview={(savedId) => { setEditingId(savedId); setCampSub('review') }}
     />
   )
@@ -1415,7 +1520,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
       campaignId={editingId}
       segments={segments}
       onBack={() => setCampSub('builder')}
-      onSubmit={() => { refetchCampaigns(); setEditingId(null); setCampSub('hub') }}
+      onSubmit={() => { refetchCampaigns(); setEditingId(null); setPresetSegment(null); setPresetTemplate(null); setPresetChannel(null); setCampSub('hub') }}
     />
   )
 
@@ -1473,7 +1578,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
           <div className="camp-info-title">{t('eng.camp.info_title', 'Mi Italia reviews all campaigns before sending')}</div>
           <div className="camp-info-sub">{t('eng.camp.info_sub', 'Choose a channel & language → write your content → translations auto-generate → review and submit. Mi Italia approves for brand standards within 4 hours Mon–Fri.')}</div>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditingId(null); setCampSub('builder') }}>
+        <button className="btn btn-primary" onClick={() => { setEditingId(null); setPresetSegment(null); setPresetTemplate(null); setPresetChannel(null); setCampSub('builder') }}>
           <span className="material-symbols-outlined">add</span>{t('eng.camp.new_campaign', 'New Campaign')}
         </button>
       </div>
@@ -1592,16 +1697,16 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
 
 
 // ── CAMPAIGNS — BUILDER (5-step) ─────────────────────────
-function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSettings, onBack, onReview }) {
+function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSettings, onBack, onReview, initialSegment = null, initialTemplate = null, initialChannel = null }) {
   const { t, i18n } = useTranslation()
   const [campaignId,      setCampaignId]      = useState(initialId || null)
   const [campaignName,    setCampaignName]    = useState(t('eng.camp.untitled', 'Untitled draft'))
-  const [channel,         setChannel]         = useState('email')
-  const [template,        setTemplate]        = useState(null)
+  const [channel,         setChannel]         = useState(initialChannel === 'whatsapp' ? 'wa' : 'email')
+  const [template,        setTemplate]        = useState(initialTemplate || null)
   const [subject,         setSubject]         = useState('')
-  const [previewText,     setPreviewText]     = useState('')                     // UI-only, no API field
+  const [previewText,     setPreviewText]     = useState('')
   const [body,            setBody]            = useState('')
-  const [segment,         setSegment]         = useState('all')
+  const [segment,         setSegment]         = useState(initialSegment || 'all')
   const [sendMode,        setSendMode]        = useState('immediate')            // 'immediate' | 'scheduled'
   const [scheduledLocal,  setScheduledLocal]  = useState('')                     // raw <input type="datetime-local"> value, wall-clock in `timezone`
   const [timezone,        setTimezone]        = useState(() => {
@@ -1639,6 +1744,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
           setCampaignName(c.campaign_name || t('eng.camp.untitled', 'Untitled draft'))
           setChannel(channelKey(c.channel))
           setSubject(c.subject || '')
+          setPreviewText(c.preview_text || '')
           setBody(c.message || '')
           setSegment(c.target_segment || 'all')
           setTemplate(c.template_id || null)
@@ -1671,9 +1777,10 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         send_mode:      sendMode,
         timezone,
       }
-      if (template)         payload.template_id = template
-      if (subject.trim())   payload.subject     = subject
-      if (body.trim())      payload.message     = body
+      payload.template_id = template || null
+      if (subject.trim())     payload.subject      = subject
+      if (previewText.trim()) payload.preview_text = previewText
+      if (body.trim())        payload.message      = body
       if (sendMode === 'scheduled' && scheduledLocal) {
         payload.scheduled_at = zonedTimeToUtcISO(scheduledLocal, timezone)
       }
@@ -1865,6 +1972,12 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
           {/* Step 4: Content */}
           <div className="camp-step">
             <div className="form-lbl">{t('eng.camp.step4_label', 'Step 4 — Content · Italian (source)')}</div>
+            {template && (
+              <div className="alert alert-info">
+                <span className="material-symbols-outlined">info</span>
+                <div>{t('eng.camp.step4_template_override', { name: templateDisplayName(apiTemplates.find(tpl => tpl.id === template)?.template_key, t), defaultValue: 'This campaign uses "{{name}}"\'s content — Subject and Body below won\'t be sent. Edit the actual content in Step 5, or clear the template in Step 3 to write custom content here instead.' })}</div>
+              </div>
+            )}
             <div className="form-row2">
               <div className="form-group">
                 <label className="form-lbl">{t('eng.camp.subject', 'Subject Line')}</label>
@@ -2002,7 +2115,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
   const [template,        setTemplate]              = useState(null)
   const [campaignTranslations, setCampaignTranslations] = useState({})   // { [langCode]: {subject, body, confirmed, ...} } — real per-campaign overrides
   const [loadingTpl,      setLoadingTpl]            = useState(true)
-  const [retranslating,   setRetranslating]         = useState(null)   // holds the template id while in flight
+  const [retranslating,   setRetranslating]         = useState(null)   // holds the lang code currently being retranslated
   const [editedContent,   setEditedContent]         = useState({})     // { [langCode]: {subject, text} } — local edit buffer
   const [dirtyLangs,      setDirtyLangs]            = useState(() => new Set())
   const [savingLang,      setSavingLang]            = useState(null)
@@ -2077,24 +2190,24 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
     }
   }
 
-  const handleRetranslate = async () => {
+  const handleRetranslate = async (lang) => {
     if (!template?.id) {
       setErrorMsg(t('eng.rev.err_no_template', 'No template attached — translations can only be regenerated from a template.'))
       return
     }
-    setRetranslating(template.id)
+    setRetranslating(lang)
     setErrorMsg(null)
     try {
-      const res = await templateApi.translate(template.id)
+      const res = await templateApi.translate(template.id, lang)
       if (res?.success) {
-        setSuccessMsg(t('eng.rev.retranslate_queued', { count: res.data?.targets?.length || 0, defaultValue: 'Translation queued for {{count}} language(s).' }))
+        setSuccessMsg(t('eng.rev.retranslate_queued_lang', { lang: langDisplayName(lang, t), defaultValue: 'Translation queued for {{lang}}.' }))
         // Refresh template to pick up new translations_pending state
         const tres = await templateApi.get(template.id)
         if (tres?.success) setTemplate(tres.data?.template)
       } else {
         setErrorMsg(res?.message || t('eng.rev.err_retranslate', 'Re-translate failed.'))
       }
-    } catch (e) {
+    } catch {
       setErrorMsg(t('eng.rev.err_retranslate_network', 'Re-translate failed — check your connection.'))
     } finally {
       setRetranslating(null)
@@ -2247,8 +2360,8 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
                             <span className="material-symbols-outlined">check</span>{savingLang === lang ? t('eng.rev.saving', 'Saving…') : t('eng.rev.confirm_changes', 'Confirm changes')}
                           </button>
                       }
-                      <button className="btn btn-outline btn-xs" onClick={handleRetranslate} disabled={retranslating === template?.id}>
-                        <span className="material-symbols-outlined">refresh</span>{retranslating === template?.id ? t('eng.rev.queuing', 'Queuing…') : t('eng.rev.retranslate', 'Re-translate')}
+                      <button className="btn btn-outline btn-xs" onClick={() => handleRetranslate(lang)} disabled={!!retranslating}>
+                        <span className="material-symbols-outlined">refresh</span>{retranslating === lang ? t('eng.rev.queuing', 'Queuing…') : t('eng.rev.retranslate', 'Re-translate')}
                       </button>
                     </div>
                   </div>
@@ -2729,6 +2842,41 @@ function CampaignDetailPanel({ campaignId, onClose }) {
     { label:t('eng.an.funnel_clicked', 'Clicked'),    val:counts.clicked,    cls:'cdp-fnl-green' },
   ].filter(s => s.val != null)
 
+  const handleExportDetail = () => {
+    const rows = [
+      ['campaign_name', camp.campaign_name ?? ''],
+      ['channel', camp.channel ?? ''],
+      ['target_segment', camp.target_segment ?? ''],
+      ['status', camp.status ?? ''],
+      ['sent_at', camp.sent_at ?? ''],
+      ['recipients', counts.recipients ?? ''],
+      ['sent', counts.sent ?? ''],
+      ['delivered', counts.delivered ?? ''],
+      ['opened', counts.opened ?? ''],
+      ['clicked', counts.clicked ?? ''],
+      ['unsubscribed', counts.unsubscribed ?? ''],
+      ['bounced', counts.bounced ?? ''],
+      ['complained', counts.complained ?? ''],
+      ['failed', counts.failed ?? ''],
+      ['skipped', counts.skipped ?? ''],
+      ['open_rate_pct', rates.open ?? ''],
+      ['click_rate_pct', rates.click ?? ''],
+      ['delivery_rate_pct', rates.delivery ?? ''],
+      ['bounce_rate_pct', rates.bounce ?? ''],
+      ['complaint_rate_pct', rates.complaint ?? ''],
+    ]
+    const csv = ['metric,value'].concat(rows.map(([k, v]) => `"${k}","${String(v).replace(/"/g, '""')}"`)).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(camp.campaign_name || 'campaign').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-analytics.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <div className="cdpanel-overlay" onClick={onClose} />
@@ -2744,7 +2892,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
               {camp.sent_at ? ` · ${t('eng.an.sent_on', { date: new Date(camp.sent_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }), defaultValue: 'Sent {{date}}' })}` : ''}
             </div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={e => e.stopPropagation()}>
+          <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); handleExportDetail() }}>
             <span className="material-symbols-outlined">download</span>{t('common.export', 'Export')}
           </button>
           <button className="cdpanel-close" onClick={onClose}>
@@ -2842,73 +2990,99 @@ function CampaignDetailPanel({ campaignId, onClose }) {
   )
 }
 
-// ─── MAIN: AnalyticsView ─────────────────────────────────────
+// ─── MAIN: AnalyticsView (real data) ─────────────────────────
 
-// Per-recipient channel cost — matches the real pricing shown in CampaignBuilder step 1 (email is free).
-const CHANNEL_UNIT_COST = { email: 0, wa: 0.10, print: 0.18, insta: 0 }
-const fmtROI = (revenue, cost) => {
-  if (cost <= 0) return revenue > 0 ? '∞' : '—'
-  const pct = ((revenue - cost) / cost) * 100
-  return `${pct >= 0 ? '+' : ''}${pct.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`
+const AN_RANGE_TO_API = { ytd: 'ytd', '7d': '7d', '30d': '30d', '90d': '90d', '12m': '12m' }
+const AN_COMPARE_TO_API = { none: 'none', prev: 'previous_period', prevyear: 'previous_year' }
+const AN_KPI_UNIT = { currency: '€', percent: '', count: '' }
+const AN_KPI_SUFFIX = { currency: '', percent: '%', count: '' }
+
+function sparklinePoints(sparkline) {
+  const values = (sparkline ?? []).map(p => Number(p.value) || 0)
+  if (values.length === 0) return ''
+  const max = Math.max(1, ...values)
+  const min = Math.min(0, ...values)
+  const range = max - min || 1
+  const step = values.length > 1 ? 64 / (values.length - 1) : 0
+  return values.map((v, i) => `${(i * step).toFixed(1)},${(28 - ((v - min) / range) * 26 - 1).toFixed(1)}`).join(' ')
 }
 
 function AnalyticsView() {
-  const { t, i18n } = useTranslation()
-  const [range,         setRange]         = useState('30d')
-  const [compare,       setCompare]       = useState('none')
-  const [customRange,   setCustomRange]   = useState(null)
-  const [detailId, setDetailId] = useState(null)
-  const [topCampaigns,        setTopCampaigns]        = useState([])
-  const [topCampaignsLoading, setTopCampaignsLoading] = useState(true)
+  const { t } = useTranslation()
+  const [range,       setRange]       = useState('30d')
+  const [compare,     setCompare]     = useState('none')
+  const [customRange, setCustomRange] = useState(null)
+  const [detailId,    setDetailId]    = useState(null)
+  const [data,        setData]        = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [errorMsg,    setErrorMsg]    = useState('')
 
   useEffect(() => {
-    setTopCampaignsLoading(true)
-    apiFetch(`${API}/boutique/marketing/campaigns/top-performers?limit=10`)
+    if (range === 'custom') return
+    setLoading(true); setErrorMsg('')
+    const apiRange = AN_RANGE_TO_API[range] ?? '30d'
+    const apiCompare = AN_COMPARE_TO_API[compare] ?? 'none'
+    apiFetch(`${API}/boutique/marketing/analytics?range=${apiRange}&compare=${apiCompare}`)
       .then(r => r.json())
-      .then(res => { if (res?.success) setTopCampaigns(res.data?.campaigns ?? []) })
-      .catch(() => {})
-      .finally(() => setTopCampaignsLoading(false))
-  }, [i18n.language])
+      .then(res => {
+        if (res?.success) setData(res.data)
+        else setErrorMsg(res?.message || t('eng.an.err_load', 'Failed to load analytics.'))
+      })
+      .catch(() => setErrorMsg(t('eng.an.err_network', 'Network error.')))
+      .finally(() => setLoading(false))
+  }, [range, compare])
 
-  const roiRows = topCampaigns.map(c => {
-    const ch   = channelKey(c.channel)
-    const cost = (c.recipients ?? 0) * (CHANNEL_UNIT_COST[ch] ?? 0)
-    return {
-      id: c.id, ch, name: c.campaign_name,
-      date: c.sent_at ? formatDate(c.sent_at) : '—',
-      sent: c.recipients ?? 0,
-      open: c.open_rate != null ? `${c.open_rate}%` : '—',
-      click: c.click_rate != null ? `${c.click_rate}%` : '—',
-      rev: `€${(c.revenue ?? 0).toLocaleString()}`,
-      cost: `€${cost.toFixed(2)}`,
-      roi: fmtROI(c.revenue ?? 0, cost),
-      revenue: c.revenue ?? 0, costVal: cost,
-      pos: (c.revenue ?? 0) >= cost,
-    }
-  })
-  const roiTotals = roiRows.reduce((a, r) => ({ revenue: a.revenue + r.revenue, cost: a.cost + r.costVal, profitable: a.profitable + (r.pos ? 1 : 0) }), { revenue: 0, cost: 0, profitable: 0 })
-
-  const data       = ANALYTICS_DATA[range] || ANALYTICS_DATA['30d']
-  const cmpDeltas  = compare === 'prevyear' ? COMPARE_DELTAS_PREVYEAR[range] : null
-  const prevYear   = PR_TODAY.getFullYear() - 1
-
-  // Custom range overrides the period label dynamically
   const periodLabel = (() => {
-    let base = data.period
-    if (range === 'custom' && customRange) base = `${fmtDate(customRange.start)} — ${fmtDate(customRange.end)} · custom range`
-    if (compare === 'prev')     return `${base} · vs prev period`
-    if (compare === 'prevyear') return `${base} · vs ${prevYear}`
+    if (range === 'custom') return t('eng.an.custom_not_supported', 'Custom ranges aren\'t supported yet — pick a preset above')
+    if (!data?.range) return ''
+    const base = `${formatDate(data.range.from)} — ${formatDate(data.range.to)}`
+    if (compare === 'prev') return `${base} · ${t('eng.an.vs_prev_period', 'vs prev period')}`
+    if (compare === 'prevyear') return `${base} · ${t('eng.an.vs_prev_year', { year: PR_TODAY.getFullYear() - 1, defaultValue: 'vs {{year}}' })}`
     return base
   })()
 
-  const kpiCards = [
-    { lbl:t('eng.an.kpi_idrate', 'Identification rate'), num:data.idrate,  prefix:'',  suffix:'%', delta:cmpDeltas?.idrateDelta  ?? data.idrateDelta,  spark:'0,22 10,20 21,16 32,11 43,8 54,6 64,4' },
-    { lbl:t('eng.an.kpi_revenue', 'Revenue attributed'),  num:data.revenue, prefix:'€', suffix:'',  delta:cmpDeltas?.revenueDelta ?? data.revenueDelta, spark:'0,21 10,19 21,17 32,14 43,9 54,7 64,5' },
-    { lbl:t('eng.an.campaign_roi', 'Campaign ROI'),        num:data.roi,     prefix:'',  suffix:'%', delta:cmpDeltas?.roiDelta     ?? data.roiDelta,     spark:'0,20 10,18 21,17 32,13 43,11 54,7 64,5' },
-    { lbl:t('eng.an.engaged', 'Engaged Contacts'),    num:data.engaged, prefix:'',  suffix:'',  delta:cmpDeltas?.engagedDelta ?? data.engagedDelta, spark:'0,18 10,16 21,15 32,12 43,11 54,8 64,6' },
-    { lbl:t('eng.an.kpi_avg_ltv', 'Avg LTV · 12mo'),      num:data.ltv,     prefix:'€', suffix:'',  delta:cmpDeltas?.ltvDelta     ?? data.ltvDelta,     spark:'0,20 10,17 21,16 32,13 43,12 54,9 64,7' },
-  ]
   const onOpenCampaignDetail = (id) => setDetailId(id)
+
+  const kpis = data?.kpis ?? []
+  const idr = data?.id_rate
+  const revByChannel = data?.revenue_by_channel ?? []
+  const funnel = data?.engagement_funnel
+  const roiRows = data?.campaign_roi ?? []
+  const handleExportRoi = () => {
+    if (roiRows.length === 0) return
+    const headers = ['campaign_name', 'channel', 'sent_at', 'recipients', 'open_rate', 'click_rate', 'orders', 'revenue', 'revenue_per_recipient']
+    const csv = [headers.join(',')]
+      .concat(roiRows.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `campaign-performance-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+  const segHealth = data?.segment_health ?? []
+  const cohorts = data?.cohort_retention?.cohorts ?? []
+  const trackMonths = data?.cohort_retention?.track_months ?? 6
+
+  const SALES_CHANNEL_META = {
+    pos:    { label: t('eng.an.channel_pos', 'In-store (POS)'), icon: 'storefront' },
+    ship:   { label: t('eng.an.channel_ship', 'Shipped'),        icon: 'local_shipping' },
+    pickup: { label: t('eng.an.channel_pickup', 'Pickup'),       icon: 'inventory_2' },
+  }
+  const maxChannelRevenue = Math.max(1, ...revByChannel.map(r => Number(r.revenue) || 0))
+
+  const funnelStages = funnel ? [
+    { key:'sent',      icon:'campaign',      label:t('eng.an.funnel_sent', 'Sent'),       val: funnel.sent },
+    { key:'delivered',  icon:'mark_email_read', label:t('eng.an.funnel_delivered', 'Delivered'), val: funnel.delivered },
+    { key:'opened',     icon:'drafts',        label:t('eng.an.opened_read', 'Opened / read'), val: funnel.opened },
+    { key:'clicked',    icon:'touch_app',     label:t('eng.an.clicked_replied', 'Clicked / replied'), val: funnel.clicked },
+    { key:'purchased',  icon:'check_circle',  label:t('eng.an.action_purchased', 'Purchased'), val: funnel.purchased, success:true },
+  ] : []
+  const funnelTop = funnelStages[0]?.val || 1
 
   return (
     <div>
@@ -2918,387 +3092,297 @@ function AnalyticsView() {
         compare={compare}
         customRange={customRange}
         periodLabel={periodLabel}
+        presetKeys={['ytd', '7d', '30d', '90d', '12m']}
         onRangeChange={setRange}
         onCompareChange={setCompare}
         onCustomApply={r => { setCustomRange(r); setRange('custom') }}
-        onExport={() => {}}
+        onExport={handleExportRoi}
       />
 
-      {/* ── KPI hero strip ── */}
-      <div className="an-kpi-grid">
-        {kpiCards.map(k => {
-          const isFlat = k.delta === '—'
-          return (
-            <div key={k.lbl} className="kpi-an">
-              <div className="kpi-an-lbl">{k.lbl}</div>
-              <div className="kpi-an-val">{k.prefix}<em>{k.num}</em>{k.suffix}</div>
-              <div className={`kpi-an-delta ${isFlat ? 'flat' : 'up'}`}>
-                <span className="material-symbols-outlined">{isFlat ? 'remove' : 'trending_up'}</span>{k.delta}
-              </div>
-              <svg className="kpi-an-spark" width="64" height="28" viewBox="0 0 64 28">
-                <polyline points={k.spark} fill="none" stroke="var(--gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-          )
-        })}
-      </div>
+      {errorMsg && <div className="eng-error eng-mb18">{errorMsg}</div>}
 
-      {/* ── Identification Rate trend hero chart ── */}
-      <div className="chart-card eng-mb18">
-        <div className="chart-hd">
-          <div className="chart-hd-l">
-            <span className="material-symbols-outlined">monitoring</span>
-            <div>
-              <div className="chart-hd-ttl">{t('eng.an.id_trend', 'Identification')} <em>{t('eng.an.id_trend_em', 'rate trend')}</em></div>
-              <div className="chart-hd-sub">{t('eng.an.id_trend_sub', 'Your commission tier depends on this. Each tier crossing earns Atelier Bianchi a lower rate on Connect plan.')}</div>
-            </div>
-          </div>
-          <div className="chart-hd-rt">
-            <div className="chart-legend">
-              <div className="chart-legend-itm"><div className="chart-legend-sw" style={{ background:'var(--gold)' }} /><span>{t('eng.an.your_rate', 'Your rate')}</span></div>
-              <div className="chart-legend-itm"><div className="chart-legend-sw" style={{ background:'rgba(184,149,90,0.13)' }} /><span>{t('eng.an.platinum_zone', 'Platinum tier zone')}</span></div>
-            </div>
-            <button className="btn btn-ghost btn-xs"><span className="material-symbols-outlined">download</span></button>
-          </div>
-        </div>
-
-        <div className="idr-chart">
-          <svg viewBox="0 0 800 280" preserveAspectRatio="none" className="idr-chart-svg">
-            <defs>
-              <linearGradient id="idrGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor="var(--gold)" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="var(--gold)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-
-            {/* Tier zone bands */}
-            <rect className="idr-band-platinum" x="60" y="20"  width="720" height="77" />
-            <rect className="idr-band-gold"     x="60" y="97"  width="720" height="35" />
-            <rect className="idr-band-silver"   x="60" y="132" width="720" height="46" />
-            <rect className="idr-band-base"     x="60" y="178" width="720" height="62" />
-
-            {/* Tier labels */}
-            <text className="idr-tier-lbl" x="68" y="50">Platinum · 5%</text>
-            <text className="idr-tier-lbl" x="68" y="116">Gold · 6%</text>
-            <text className="idr-tier-lbl" x="68" y="157">Silver · 7%</text>
-            <text className="idr-tier-lbl" x="68" y="198">Base · 8%</text>
-
-            {/* Floor + grid */}
-            <line className="idr-grid" x1="60" y1="205" x2="780" y2="205" strokeDasharray="4,4" />
-            <text className="idr-axis" x="775" y="201" textAnchor="end">Floor · 15%</text>
-            <line className="idr-grid" x1="60" y1="185" x2="780" y2="185" />
-            <line className="idr-grid" x1="60" y1="130" x2="780" y2="130" />
-            <line className="idr-grid" x1="60" y1="75"  x2="780" y2="75"  />
-
-            {/* Y axis labels */}
-            <text className="idr-axis" x="55" y="244" textAnchor="end">0%</text>
-            <text className="idr-axis" x="55" y="189" textAnchor="end">25%</text>
-            <text className="idr-axis" x="55" y="134" textAnchor="end">50%</text>
-            <text className="idr-axis" x="55" y="79"  textAnchor="end">75%</text>
-            <text className="idr-axis" x="55" y="24"  textAnchor="end">100%</text>
-
-            {/* Filled area + line + dots */}
-            <path className="idr-fill" d="M 60 213 L 125 209 L 190 200 L 255 191 L 320 183 L 385 178 L 450 174 L 515 170 L 580 167 L 645 167 L 710 165 L 775 165 L 775 240 L 60 240 Z" />
-            <polyline className="idr-line" points="60,213 125,209 190,200 255,191 320,183 385,178 450,174 515,170 580,167 645,167 710,165 775,165" />
-            {[[60,213],[125,209],[190,200],[255,191],[320,183],[385,178],[450,174],[515,170],[580,167],[645,167],[710,165]].map(([x,y],i) => (
-              <circle key={i} className="idr-dot" cx={x} cy={y} r="3.5" />
-            ))}
-            <circle className="idr-current-dot" cx="775" cy="165" r="5" />
-
-            {/* Tier-crossing annotation */}
-            <line className="idr-anno-arrow" x1="255" y1="191" x2="255" y2="158" strokeDasharray="2,2" />
-            <text className="idr-anno" x="259" y="155">Silver · saved €504/yr</text>
-
-            {/* Current value callout */}
-            <rect x="710" y="138" width="68" height="22" rx="5" fill="var(--gold)" />
-            <text x="744" y="153" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="Jost, sans-serif">34% · Silver</text>
-
-            {/* X axis labels */}
-            {['Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May'].map((m, i) => (
-              <text key={m} className="idr-axis" x={60 + i*65} y="260" textAnchor="middle">{m}</text>
-            ))}
-          </svg>
-        </div>
-
-        <div className="eng-card-footer-row">
-          <div className="an-tier-item">
-            <span className="material-symbols-outlined eng-icon-sm eng-green">arrow_upward</span>
-            <strong className="eng-strong">{t('eng.an.pts_to_gold', { count: 11, defaultValue: '{{count}}pt to Gold tier' })}</strong>
-            <span> · {t('eng.an.would_save_at_current', { amount: '€1,008/yr', defaultValue: 'would save {{amount}} at current revenue' })}</span>
-          </div>
-          <div className="an-tier-item eng-ml-auto">
-            <span className="material-symbols-outlined eng-icon-sm">timeline</span>
-            <span>{t('eng.an.month_trend', { count: 3, defaultValue: '{{count}}-month trend:' })} </span><strong className="eng-green">+5pt</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Row 1: Revenue by channel + Funnel ── */}
-      <div className="an-grid2">
-        <div className="chart-card">
-          <div className="chart-hd">
-            <div className="chart-hd-l">
-              <span className="material-symbols-outlined">euro</span>
-              <div>
-                <div className="chart-hd-ttl">{t('eng.an.rev_channel', 'Revenue by')} <em>{t('eng.an.rev_channel_em', 'channel')}</em></div>
-                <div className="chart-hd-sub">{t('eng.an.rev_channel_sub', 'App-attributed revenue from campaign touches. Cost shown as net after channel fees.')}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rev-chan">
-            {[
-              { name:t('eng.channels.email', 'Email'),     ch:'email', icon:'mail',         iconColor:'var(--gold-dk)', pct:'100%',  label:'58.3%', val:'€2,810', fee:t('eng.camp.free', 'FREE')         },
-              { name:t('eng.channels.wa', 'WhatsApp'),  ch:'wa',    icon:'chat',         iconColor:'#1a9e4d',         pct:'55.5%', label:'32.4%', val:'€1,560', fee:t('eng.an.fee_amount', { amount: '31', defaultValue: '−€{{amount}} fees' })    },
-              { name:t('eng.channels.print', 'Print'),     ch:'print', icon:'description',  iconColor:'var(--stone)',    pct:'16%',   label:'9.3%',  val:'€450',   fee:t('eng.an.print_fee_amount', { amount: '12', defaultValue: '−€{{amount}} print' })   },
-            ].map(r => (
-              <div key={r.name} className="rev-chan-row">
-                <div className="rev-chan-name">
-                  <span className="material-symbols-outlined" style={{ color:r.iconColor }}>{r.icon}</span>
-                  <span>{r.name}</span>
-                </div>
-                <div className="rev-chan-bar"><div className={`rev-chan-fill ${r.ch}`} style={{ width:r.pct }}>{r.label}</div></div>
-                <div className="rev-chan-val">{r.val}<span className="sub">{r.fee}</span></div>
-              </div>
-            ))}
-            <div className="rev-chan-row eng-row-muted">
-              <div className="rev-chan-name">
-                <span className="material-symbols-outlined" style={{color:'#DD2A7B'}}>photo_camera</span>
-                <span>{t('eng.channels.insta', 'Instagram')}</span>
-              </div>
-              <div className="rev-chan-bar"><div className="rev-chan-fill insta" style={{ width:'4%' }} /></div>
-              <div className="rev-chan-val eng-soon-val">{t('eng.an.soon', 'Soon')}</div>
-            </div>
-          </div>
-
-          <div className="eng-card-footer">
-            <strong className="eng-strong">{t('eng.an.email_highest_roi', 'Email is your highest ROI channel')}</strong>
-            <span> — {t('eng.an.email_highest_roi_sub', '58% of attributed revenue at zero cost. Consider running more email-led campaigns to VIPs.')}</span>
-          </div>
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-hd">
-            <div className="chart-hd-l">
-              <span className="material-symbols-outlined">filter_alt</span>
-              <div>
-                <div className="chart-hd-ttl">{t('eng.an.eng_funnel', 'Engagement')} <em>{t('eng.an.eng_funnel_em', 'funnel')}</em></div>
-                <div className="chart-hd-sub">{t('eng.an.eng_funnel_sub', 'From contact to purchase. Drop-off rates between stages — where to focus next.')}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="funnel">
-            {[
-              { icon:'groups',     label:t('eng.an.funnel_engaged', 'Engaged contacts'), pct:100,  val:'1,184', sub:t('eng.an.in_audience', 'in audience') },
-              { drop:'−22%',       text:t('eng.an.drop_no_open', "didn't open") },
-              { icon:'drafts',     label:t('eng.an.opened_read', 'Opened / read'),    pct:78,   val:'921',   sub:t('eng.an.of_count', { count: '1,184', defaultValue: 'of {{count}}' }) },
-              { drop:'−71%',       text:t('eng.an.drop_no_click', "opened but didn't click") },
-              { icon:'touch_app',  label:t('eng.an.clicked_replied', 'Clicked / replied'), pct:22.3, val:'264',   sub:t('eng.an.of_count', { count: 921, defaultValue: 'of {{count}}' }) },
-              { drop:'−68%',       text:t('eng.an.drop_no_visit', "clicked but didn't visit store") },
-              { icon:'store',      label:t('eng.an.visited_store', 'Visited store'),     pct:7.1,  val:'84',    sub:t('eng.an.of_count', { count: 264, defaultValue: 'of {{count}}' }) },
-              { drop:'−55%',       text:t('eng.an.drop_no_buy', "visited but didn't buy") },
-              { icon:'check_circle', label:t('eng.an.action_purchased', 'Purchased'),       pct:3.2,  val:'38',    sub:t('eng.an.of_visits', { count: 84, defaultValue: 'of {{count}} visits' }), success:true },
-            ].map((r, i) => {
-              if (r.drop) {
-                return (
-                  <div key={i} className="funnel-drop">
-                    <span className="material-symbols-outlined eng-icon-xs">south</span>
-                    <strong>{r.drop}</strong>&nbsp;<span>{r.text}</span>
-                  </div>
-                )
-              }
+      {range === 'custom' ? (
+        <div className="eng-loading eng-mb18">{t('eng.an.custom_not_supported', 'Custom ranges aren\'t supported yet — pick a preset above')}</div>
+      ) : loading ? (
+        <div className="eng-loading eng-mb18">{t('eng.an.loading', 'Loading analytics…')}</div>
+      ) : (
+        <>
+          {/* ── KPI hero strip ── */}
+          <div className="an-kpi-grid">
+            {kpis.map(k => {
+              const isFlat = k.delta_pct == null || k.delta_pct === 0
+              const isDown = (k.delta_pct ?? 0) < 0
               return (
-                <div key={i} className="funnel-step">
-                  <div className="funnel-lbl">
-                    <span className="material-symbols-outlined" style={r.success ? { color:'var(--green)' } : undefined}>{r.icon}</span>
-                    <span>{r.label}</span>
+                <div key={k.key} className="kpi-an">
+                  <div className="kpi-an-lbl">{k.label}</div>
+                  <div className="kpi-an-val">{AN_KPI_UNIT[k.unit] ?? ''}<em>{(k.value ?? 0).toLocaleString()}</em>{AN_KPI_SUFFIX[k.unit] ?? ''}</div>
+                  <div className={`kpi-an-delta ${isFlat ? 'flat' : isDown ? 'down' : 'up'}`}>
+                    <span className="material-symbols-outlined">{isFlat ? 'remove' : isDown ? 'trending_down' : 'trending_up'}</span>
+                    {isFlat ? '—' : `${k.delta_pct > 0 ? '+' : ''}${k.delta_pct}%`}
                   </div>
-                  <div className="funnel-bar-wrap">
-                    <div className={`funnel-bar${r.success ? ' funnel-bar-success' : ''}`} style={{ width:`${r.pct}%` }}>{r.pct}%</div>
-                  </div>
-                  <div className="funnel-val" style={r.success ? { color:'var(--green)' } : undefined}>
-                    {r.val}<span className="sub" style={r.success ? { color:'var(--green)' } : undefined}>{r.sub}</span>
-                  </div>
+                  <svg className="kpi-an-spark" width="64" height="28" viewBox="0 0 64 28">
+                    <polyline points={sparklinePoints(k.sparkline)} fill="none" stroke="var(--gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </div>
               )
             })}
           </div>
 
-          <div className="eng-card-footer">
-            <strong className="eng-strong">{t('eng.an.biggest_drop', 'Biggest drop: opened → clicked (71%).')}</strong>
-            <span> {t('eng.an.biggest_drop_sub', 'A/B test stronger calls-to-action or more visual previews in your next campaign.')}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Campaign ROI table ── */}
-      <div className="chart-card eng-mb18">
-        <div className="chart-hd">
-          <div className="chart-hd-l">
-            <span className="material-symbols-outlined">leaderboard</span>
-            <div>
-              <div className="chart-hd-ttl">{t('eng.an.campaign_roi_title', 'Campaign')} <em>{t('eng.an.col_roi', 'ROI')}</em></div>
-              <div className="chart-hd-sub">{t('eng.an.roi_table_sub', 'Every campaign in the selected range, ranked by ROI. Cost includes channel fees only — not your time.')}</div>
-            </div>
-          </div>
-          <div className="chart-hd-rt">
-            <button className="btn btn-ghost btn-xs"><span className="material-symbols-outlined">download</span>{t('common.export', 'Export')}</button>
-          </div>
-        </div>
-
-        {topCampaignsLoading ? (
-          <div className="eng-loading">{t('eng.an.loading_top', 'Loading top campaigns…')}</div>
-        ) : roiRows.length === 0 ? (
-          <div className="eng-loading">{t('eng.an.no_sent_campaigns', 'No sent campaigns yet.')}</div>
-        ) : (
-          <>
-            <table className="croi-tbl">
-              <thead>
-                <tr>
-                  <th>{t('eng.an.col_campaign', 'Campaign')}</th><th>{t('eng.an.col_date', 'Date')}</th>
-                  <th className="num">{t('eng.an.col_sent', 'Sent')}</th><th className="num">{t('eng.an.col_open_short', 'Open')}</th><th className="num">{t('eng.an.col_click', 'Click')}</th>
-                  <th className="num">{t('eng.an.col_revenue', 'Revenue')}</th><th className="num">{t('eng.an.col_cost', 'Cost')}</th><th className="num">{t('eng.an.col_roi', 'ROI')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roiRows.map(c => (
-                  <tr key={c.id} onClick={() => onOpenCampaignDetail(c.id)}>
-                    <td>
-                      <div className="croi-name">
-                        <div className={`cn-ico ${c.ch}`}><span className="material-symbols-outlined">{c.ch === 'wa' ? 'chat' : c.ch === 'print' ? 'description' : 'mail'}</span></div>
-                        <span>{c.name}</span>
-                      </div>
-                    </td>
-                    <td className="eng-meta-sm">{c.date}</td>
-                    <td className="num">{c.sent}</td>
-                    <td className="num">{c.open}</td>
-                    <td className="num">{c.click}</td>
-                    <td className="num"><strong>{c.rev}</strong></td>
-                    <td className="num">{c.cost}</td>
-                    <td className={`num croi-roi ${c.pos ? 'pos' : 'neg'}`}>{c.roi}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="eng-card-footer-row">
-              <div>
-                <strong className="eng-strong">{t('eng.an.profitable_count', { count: roiTotals.profitable, total: roiRows.length, defaultValue: '{{count}} of {{total}} campaigns profitable.' })}</strong>
-              </div>
-              <div className="eng-ml-auto eng-tnum">
-                <span>{t('eng.an.total_label', 'Total:')} </span>
-                <strong className="eng-strong">€{roiTotals.revenue.toLocaleString()}</strong><span> {t('eng.an.attributed', 'attributed')} · </span>
-                <strong className="eng-strong">€{roiTotals.cost.toFixed(2)}</strong><span> {t('eng.an.cost_label', 'cost')} · </span>
-                <strong className="eng-green">{fmtROI(roiTotals.revenue, roiTotals.cost)}<span> {t('eng.an.col_roi', 'ROI')}</span></strong>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── Row 2: Segment health stacked + Cohort retention ── */}
-      <div className="an-grid2-even">
-        <div className="chart-card">
-          <div className="chart-hd">
-            <div className="chart-hd-l">
-              <span className="material-symbols-outlined">stacked_bar_chart</span>
-              <div>
-                <div className="chart-hd-ttl">{t('eng.an.seg_health', 'Segment')} <em>{t('eng.an.seg_health_em', 'health')}</em></div>
-                <div className="chart-hd-sub">{t('eng.an.seg_health_sub', 'How your customer mix has shifted over the last 6 months.')}</div>
-              </div>
-            </div>
-            <div className="chart-hd-rt">
-              <div className="chart-legend">
-                {[
-                  { sw:'var(--gold)',                 label:t('eng.camp.seg_vip', 'VIP') },
-                  { sw:'var(--gold-light)',           label:t('eng.an.seg_returning', 'Returning') },
-                  { sw:'var(--gold-soft)',            label:t('eng.camp.seg_new', 'New') },
-                  { sw:'rgba(140,123,107,0.4)',       label:t('eng.camp.seg_lapsed', 'Lapsed') },
-                ].map(l => (
-                  <div key={l.label} className="chart-legend-itm">
-                    <div className="chart-legend-sw" style={{ background:l.sw }} />
-                    <span>{l.label}</span>
+          {/* ── Identification rate + commission ── */}
+          {idr && (
+            <div className="chart-card eng-mb18">
+              <div className="chart-hd">
+                <div className="chart-hd-l">
+                  <span className="material-symbols-outlined">monitoring</span>
+                  <div>
+                    <div className="chart-hd-ttl">{t('eng.an.id_trend', 'Identification')} <em>{t('eng.an.id_trend_em', 'rate trend')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.id_trend_sub_real', '% of orders where the buyer was identified, vs an anonymous POS sale.')}</div>
                   </div>
-                ))}
+                </div>
               </div>
+
+              <div className="idr-chart">
+                <svg viewBox="0 0 800 280" preserveAspectRatio="none" className="idr-chart-svg">
+                  <line className="idr-grid" x1="60" y1="240" x2="780" y2="240" />
+                  <line className="idr-grid" x1="60" y1="185" x2="780" y2="185" />
+                  <line className="idr-grid" x1="60" y1="130" x2="780" y2="130" />
+                  <line className="idr-grid" x1="60" y1="75"  x2="780" y2="75"  />
+                  <line className="idr-grid" x1="60" y1="20"  x2="780" y2="20"  />
+                  <text className="idr-axis" x="55" y="244" textAnchor="end">0%</text>
+                  <text className="idr-axis" x="55" y="189" textAnchor="end">25%</text>
+                  <text className="idr-axis" x="55" y="134" textAnchor="end">50%</text>
+                  <text className="idr-axis" x="55" y="79"  textAnchor="end">75%</text>
+                  <text className="idr-axis" x="55" y="24"  textAnchor="end">100%</text>
+
+                  {(() => {
+                    const trend = idr.trend ?? []
+                    if (trend.length === 0) return null
+                    const step = trend.length > 1 ? 720 / (trend.length - 1) : 0
+                    const pts = trend.map((pt, i) => [60 + i * step, 240 - (Math.min(100, Math.max(0, pt.id_rate_pct ?? 0)) / 100) * 220])
+                    const pointsStr = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+                    const fillD = `M ${pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(' L ')} L ${pts[pts.length - 1][0].toFixed(1)} 240 L 60 240 Z`
+                    return (
+                      <>
+                        <path className="idr-fill" d={fillD} />
+                        <polyline className="idr-line" points={pointsStr} />
+                        {pts.map(([x, y], i) => <circle key={i} className={i === pts.length - 1 ? 'idr-current-dot' : 'idr-dot'} cx={x} cy={y} r={i === pts.length - 1 ? 5 : 3.5} />)}
+                        {trend.map((pt, i) => (i % Math.ceil(trend.length / 10) === 0) && (
+                          <text key={i} className="idr-axis" x={pts[i][0]} y="260" textAnchor="middle">{formatDate(pt.date).slice(0, 6)}</text>
+                        ))}
+                      </>
+                    )
+                  })()}
+                </svg>
+              </div>
+
+              <div className="eng-card-footer-row">
+                <div className="an-tier-item">
+                  <strong className="eng-strong">{t('eng.an.current_id_rate', { pct: idr.current_pct, defaultValue: '{{pct}}% identified' })}</strong>
+                  {idr.delta_pct != null && <span> · {idr.delta_pct > 0 ? '+' : ''}{idr.delta_pct}% {t('eng.an.vs_compare', 'vs comparison period')}</span>}
+                </div>
+                {idr.commission && (
+                  <div className="an-tier-item eng-ml-auto eng-tnum">
+                    <span>{t('eng.an.commission_contracted', 'Contracted:')} </span>
+                    <strong className="eng-strong">{(idr.commission.commission_rate_pos * 100).toFixed(1)}% POS / {(idr.commission.commission_rate_ecom * 100).toFixed(1)}% online</strong>
+                    <span> · {t('eng.an.commission_realized', 'Realized this period:')} </span>
+                    <strong className="eng-green">€{(idr.commission.realized_commission ?? 0).toLocaleString()} ({idr.commission.realized_effective_rate_pct}%)</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Row 1: Revenue by sales channel + Funnel ── */}
+          <div className="an-grid2">
+            <div className="chart-card">
+              <div className="chart-hd">
+                <div className="chart-hd-l">
+                  <span className="material-symbols-outlined">euro</span>
+                  <div>
+                    <div className="chart-hd-ttl">{t('eng.an.rev_channel_sales', 'Revenue by')} <em>{t('eng.an.rev_channel_em', 'sales channel')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.rev_channel_sales_sub', 'Where your orders came from this period — not campaign attribution.')}</div>
+                  </div>
+                </div>
+              </div>
+
+              {revByChannel.length === 0 ? (
+                <div className="eng-loading">{t('eng.an.no_revenue_data', 'No revenue data for this range.')}</div>
+              ) : (
+                <div className="rev-chan">
+                  {revByChannel.map(r => {
+                    const meta = SALES_CHANNEL_META[r.channel] ?? { label: r.channel, icon: 'payments' }
+                    const pct = Math.round((Number(r.revenue) / maxChannelRevenue) * 100)
+                    return (
+                      <div key={r.channel} className="rev-chan-row">
+                        <div className="rev-chan-name">
+                          <span className="material-symbols-outlined">{meta.icon}</span>
+                          <span>{meta.label}</span>
+                        </div>
+                        <div className="rev-chan-bar"><div className="rev-chan-fill email" style={{ width:`${pct}%` }}>{r.pct_of_total}%</div></div>
+                        <div className="rev-chan-val">€{(r.revenue ?? 0).toLocaleString()}<span className="sub">{r.orders} {t('eng.an.orders', 'orders')}</span></div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="chart-card">
+              <div className="chart-hd">
+                <div className="chart-hd-l">
+                  <span className="material-symbols-outlined">filter_alt</span>
+                  <div>
+                    <div className="chart-hd-ttl">{t('eng.an.eng_funnel', 'Engagement')} <em>{t('eng.an.eng_funnel_em', 'funnel')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.eng_funnel_sub_real', 'Sent → delivered → opened → clicked → purchased, this period.')}</div>
+                  </div>
+                </div>
+              </div>
+
+              {!funnel ? (
+                <div className="eng-loading">{t('eng.an.no_funnel_data', 'No campaign activity in this range yet.')}</div>
+              ) : (
+                <div className="funnel">
+                  {funnelStages.map((s, i) => {
+                    const pct = funnelTop ? Math.round(((s.val ?? 0) / funnelTop) * 1000) / 10 : 0
+                    const prev = funnelStages[i - 1]
+                    const dropPct = prev && prev.val ? Math.round((1 - (s.val ?? 0) / prev.val) * 1000) / 10 : null
+                    return (
+                      <div key={s.key}>
+                        {dropPct != null && dropPct > 0 && (
+                          <div className="funnel-drop">
+                            <span className="material-symbols-outlined eng-icon-xs">south</span>
+                            <strong>−{dropPct}%</strong>&nbsp;<span>{t('eng.an.drop_generic', { from: prev.label, defaultValue: "didn't continue past {{from}}" })}</span>
+                          </div>
+                        )}
+                        <div className="funnel-step">
+                          <div className="funnel-lbl">
+                            <span className="material-symbols-outlined" style={s.success ? { color:'var(--green)' } : undefined}>{s.icon}</span>
+                            <span>{s.label}</span>
+                          </div>
+                          <div className="funnel-bar-wrap">
+                            <div className={`funnel-bar${s.success ? ' funnel-bar-success' : ''}`} style={{ width:`${pct}%` }}>{pct}%</div>
+                          </div>
+                          <div className="funnel-val" style={s.success ? { color:'var(--green)' } : undefined}>
+                            {(s.val ?? 0).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="seg-area">
-            <svg viewBox="0 0 600 240" preserveAspectRatio="none" className="seg-area-svg">
-              <line className="idr-grid" x1="40" y1="40"  x2="580" y2="40"  />
-              <line className="idr-grid" x1="40" y1="90"  x2="580" y2="90"  />
-              <line className="idr-grid" x1="40" y1="140" x2="580" y2="140" />
-              <line className="idr-grid" x1="40" y1="190" x2="580" y2="190" />
-
-              <text className="idr-axis" x="36" y="44"  textAnchor="end">1,200</text>
-              <text className="idr-axis" x="36" y="94"  textAnchor="end">900</text>
-              <text className="idr-axis" x="36" y="144" textAnchor="end">600</text>
-              <text className="idr-axis" x="36" y="194" textAnchor="end">300</text>
-              <text className="idr-axis" x="36" y="214" textAnchor="end">0</text>
-
-              <path className="sh-vip"       d="M 40 210 L 148 210 L 256 210 L 364 210 L 472 210 L 580 210 L 580 170.82 L 472 172.87 L 364 175.24 L 256 176.82 L 148 179.19 L 40 181.56 Z" />
-              <path className="sh-returning" d="M 40 181.56 L 148 179.19 L 256 176.82 L 364 175.24 L 472 172.87 L 580 170.82 L 580 103.51 L 472 108.09 L 364 113.94 L 256 119.15 L 148 125.47 L 40 131 Z" />
-              <path className="sh-new"       d="M 40 131 L 148 125.47 L 256 119.15 L 364 113.94 L 472 108.09 L 580 103.51 L 580 46.94 L 472 55.95 L 364 67.33 L 256 78.07 L 148 90.71 L 40 102.56 Z" />
-              <path className="sh-lapsed"    d="M 40 102.56 L 148 90.71 L 256 78.07 L 364 67.33 L 472 55.95 L 580 46.94 L 580 22.93 L 472 32.57 L 364 45.21 L 256 56.74 L 148 70.17 L 40 83.6 Z" />
-
-              {['Dec','Jan','Feb','Mar','Apr','May'].map((m, i) => (
-                <text key={m} className="idr-axis" x={40 + i*108} y="230" textAnchor="middle">{m}</text>
-              ))}
-            </svg>
-          </div>
-
-          <div className="an-seg-footer">
-            {[
-              { lbl:t('eng.camp.seg_vip', 'VIP'),       val:'248', delta:'↑ +38%', color:'var(--green)' },
-              { lbl:t('eng.an.seg_returning', 'Returning'), val:'426', delta:'↑ +33%', color:'var(--green)' },
-              { lbl:t('eng.camp.seg_new', 'New'),       val:'358', delta:'↑ +99%', color:'var(--green)' },
-              { lbl:t('eng.camp.seg_lapsed', 'Lapsed'),    val:'152', delta:'↑ +27%', color:'#B45309' },
-            ].map(s => (
-              <div key={s.lbl}>
-                <div className="an-seg-footer-lbl">{s.lbl}</div>
-                <div className="an-seg-footer-val">{s.val}</div>
-                <div className="an-seg-delta" style={{color:s.color}}>{s.delta}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-hd">
-            <div className="chart-hd-l">
-              <span className="material-symbols-outlined">grid_on</span>
-              <div>
-                <div className="chart-hd-ttl">{t('eng.an.cohort_retention', 'Cohort')} <em>{t('eng.an.cohort_retention_em', 'retention')}</em></div>
-                <div className="chart-hd-sub">{t('eng.an.cohort_retention_sub', '% of customers from each month who returned in subsequent months. Higher numbers later = healthier base.')}</div>
+          {/* ── Campaign ROI table ── */}
+          <div className="chart-card eng-mb18">
+            <div className="chart-hd">
+              <div className="chart-hd-l">
+                <span className="material-symbols-outlined">leaderboard</span>
+                <div>
+                  <div className="chart-hd-ttl">{t('eng.an.campaign_roi_title', 'Campaign')} <em>{t('eng.an.performance_em', 'Performance')}</em></div>
+                  <div className="chart-hd-sub">{t('eng.an.roi_table_sub_real', 'Every campaign sent in the selected range. Revenue per recipient stands in for ROI — we don\'t have per-send cost data yet.')}</div>
+                </div>
               </div>
             </div>
+
+            {roiRows.length === 0 ? (
+              <div className="eng-loading">{t('eng.an.no_sent_campaigns', 'No sent campaigns yet.')}</div>
+            ) : (
+              <table className="croi-tbl">
+                <thead>
+                  <tr>
+                    <th>{t('eng.an.col_campaign', 'Campaign')}</th><th>{t('eng.an.col_date', 'Date')}</th>
+                    <th className="num">{t('eng.an.col_sent', 'Sent')}</th><th className="num">{t('eng.an.col_open_short', 'Open')}</th><th className="num">{t('eng.an.col_click', 'Click')}</th>
+                    <th className="num">{t('eng.an.col_orders', 'Orders')}</th><th className="num">{t('eng.an.col_revenue', 'Revenue')}</th><th className="num">{t('eng.an.col_rev_per_recipient', 'Rev/recipient')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roiRows.map(c => {
+                    const ch = channelKey(c.channel)
+                    return (
+                      <tr key={c.campaign_id} onClick={() => onOpenCampaignDetail(c.campaign_id)}>
+                        <td>
+                          <div className="croi-name">
+                            <div className={`cn-ico ${ch}`}><span className="material-symbols-outlined">{ch === 'wa' ? 'chat' : ch === 'print' ? 'description' : 'mail'}</span></div>
+                            <span>{c.campaign_name}</span>
+                          </div>
+                        </td>
+                        <td className="eng-meta-sm">{c.sent_at ? formatDate(c.sent_at) : '—'}</td>
+                        <td className="num">{c.recipients ?? 0}</td>
+                        <td className="num">{c.open_rate != null ? `${c.open_rate}%` : '—'}</td>
+                        <td className="num">{c.click_rate != null ? `${c.click_rate}%` : '—'}</td>
+                        <td className="num">{c.orders ?? 0}</td>
+                        <td className="num"><strong>€{(c.revenue ?? 0).toLocaleString()}</strong></td>
+                        <td className="num">€{(c.revenue_per_recipient ?? 0).toFixed(2)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
 
-          <div className="cohort">
-            <div className="cohort-hd cohort-row-lbl">{t('eng.an.acquired_in', 'Acquired in')}</div>
-            {['M+0','M+1','M+2','M+3','M+4','M+5'].map(h => <div key={h} className="cohort-hd">{h}</div>)}
+          {/* ── Row 2: Segment health + Cohort retention ── */}
+          <div className="an-grid2-even">
+            <div className="chart-card">
+              <div className="chart-hd">
+                <div className="chart-hd-l">
+                  <span className="material-symbols-outlined">stacked_bar_chart</span>
+                  <div>
+                    <div className="chart-hd-ttl">{t('eng.an.seg_health', 'Segment')} <em>{t('eng.an.seg_health_em', 'health')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.seg_health_sub_real', 'Customers, engagement, and revenue by segment this period.')}</div>
+                  </div>
+                </div>
+              </div>
 
-            {[
-              { name:"Dec '25", contacts:'84',  cells:[['c5','100%'],['c3','42%'],['c2','31%'],['c2','29%'],['c2','26%'],['c2','24%']] },
-              { name:"Jan '26", contacts:'112', cells:[['c5','100%'],['c3','46%'],['c2','33%'],['c2','28%'],['c2','25%'],['empty','—']] },
-              { name:"Feb '26", contacts:'148', cells:[['c5','100%'],['c3','51%'],['c3','38%'],['c2','31%'],['empty','—'],['empty','—']] },
-              { name:"Mar '26", contacts:'196', cells:[['c5','100%'],['c4','58%'],['c3','42%'],['empty','—'],['empty','—'],['empty','—']] },
-              { name:"Apr '26", contacts:'221', cells:[['c5','100%'],['c4','62%'],['empty','—'],['empty','—'],['empty','—'],['empty','—']] },
-              { name:"May '26", contacts:'234', cells:[['c5','100%'],['empty','—'],['empty','—'],['empty','—'],['empty','—'],['empty','—']] },
-            ].flatMap(row => [
-              <div key={`${row.name}-name`} className="cohort-row-name">{row.name}<span className="sub">{t('eng.an.contacts_count', { count: row.contacts, defaultValue: '{{count}} contacts' })}</span></div>,
-              ...row.cells.map(([cls, v], i) => <div key={`${row.name}-${i}`} className={`cohort-cell ${cls}`}>{v}</div>),
-            ])}
-          </div>
+              {segHealth.length === 0 ? (
+                <div className="eng-loading">{t('eng.an.no_segment_data', 'No segment data for this range.')}</div>
+              ) : (
+                <div className="an-seg-footer" style={{ gridTemplateColumns:`repeat(${segHealth.length}, 1fr)` }}>
+                  {segHealth.map(s => (
+                    <div key={s.segment}>
+                      <div className="an-seg-footer-lbl">{t(`eng.camp.seg_${s.segment}`, s.segment)}</div>
+                      <div className="an-seg-footer-val">{s.customers}</div>
+                      <div className="an-seg-delta" style={{ color: (s.delta_pct ?? 0) >= 0 ? 'var(--green)' : '#B45309' }}>
+                        {s.delta_pct != null ? `${s.delta_pct >= 0 ? '↑ +' : '↓ '}${s.delta_pct}%` : '—'} · €{(s.revenue ?? 0).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          <div className="eng-card-footer">
-            <strong className="eng-strong">{t('eng.an.retention_improving', 'Retention is improving')}</strong>
-            <span> — {t('eng.an.retention_improving_sub', 'M+1 went from 42% (Dec) to 62% (Apr). Your engagement work is paying off in repeat visits.')}</span>
+            <div className="chart-card">
+              <div className="chart-hd">
+                <div className="chart-hd-l">
+                  <span className="material-symbols-outlined">grid_on</span>
+                  <div>
+                    <div className="chart-hd-ttl">{t('eng.an.cohort_retention', 'Cohort')} <em>{t('eng.an.cohort_retention_em', 'retention')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.cohort_retention_sub', '% of customers from each month who returned in subsequent months. Higher numbers later = healthier base.')}</div>
+                  </div>
+                </div>
+              </div>
+
+              {cohorts.length === 0 ? (
+                <div className="eng-loading">{t('eng.an.no_cohort_data', { months: trackMonths, defaultValue: 'Not enough history yet — cohort retention needs at least a few months of contact data.' })}</div>
+              ) : (
+                <div className="cohort">
+                  <div className="cohort-hd cohort-row-lbl">{t('eng.an.acquired_in', 'Acquired in')}</div>
+                  {Array.from({ length: trackMonths }, (_, i) => <div key={i} className="cohort-hd">{`M+${i}`}</div>)}
+                  {cohorts.flatMap((row, ri) => [
+                    <div key={`${ri}-name`} className="cohort-row-name">{row.acquired_month ?? row.month ?? '—'}<span className="sub">{t('eng.an.contacts_count', { count: row.contacts ?? 0, defaultValue: '{{count}} contacts' })}</span></div>,
+                    ...Array.from({ length: trackMonths }, (_, ci) => {
+                      const pct = (row.retention ?? row.months ?? [])[ci]?.pct ?? (row.retention ?? row.months ?? [])[ci]
+                      return <div key={`${ri}-${ci}`} className={`cohort-cell ${pct == null ? 'empty' : 'c3'}`}>{pct == null ? '—' : `${pct}%`}</div>
+                    }),
+                  ])}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* ── Footer note ── */}
       <div className="an-tip-footer">
@@ -3498,7 +3582,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
+    <div className="modal-backdrop">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
           <div className="modal-title">{isEdit ? t('eng.auto.edit_title', 'Edit') : t('eng.auto.create_title', 'Create')} <em>{t('eng.auto.form_title_em', 'Automation')}</em></div>
@@ -3577,10 +3661,71 @@ function FavoritesView() {
   const [saversFor,      setSaversFor]     = useState(null)
   const [savers,         setSavers]        = useState([])
   const [saversLoading,  setSaversLoading] = useState(false)
+  const [saversError,    setSaversError]   = useState('')
   const [notifyTarget,   setNotifyTarget]  = useState(null)
   const [notifyMsg,      setNotifyMsg]     = useState('')
   const [notifying,      setNotifying]     = useState(false)
   const [notifyResult,   setNotifyResult]  = useState(null)
+
+  const [lowStockSweeping, setLowStockSweeping] = useState(false)
+  const [lowStockResult,   setLowStockResult]   = useState(null)
+
+  const [campaignTarget,  setCampaignTarget]  = useState(null)
+  const [campaignChannel, setCampaignChannel] = useState('email')
+  const [campaignSubject, setCampaignSubject] = useState('')
+  const [campaignMessage, setCampaignMessage] = useState('')
+  const [campaignSending, setCampaignSending] = useState(false)
+  const [campaignResult,  setCampaignResult]  = useState(null)
+
+  const [viewMode,    setViewMode]    = useState('products') // 'products' | 'customers'
+  const [custQuery,   setCustQuery]   = useState('')
+  const [custSegment, setCustSegment] = useState('')
+  const [custSort,    setCustSort]    = useState('last_favorited')
+  const [custOrder,   setCustOrder]   = useState('desc')
+  const [custPage,    setCustPage]    = useState(1)
+  const [custTotal,   setCustTotal]   = useState(0)
+  const [custHasMore, setCustHasMore] = useState(false)
+  const [favCustomers,        setFavCustomers]        = useState([])
+  const [favCustomersLoading, setFavCustomersLoading] = useState(false)
+  const [favCustomersError,   setFavCustomersError]   = useState('')
+
+  const FAV_CUST_PAGE_SIZE = 20
+  const refetchFavCustomers = (targetPage = custPage) => {
+    setFavCustomersLoading(true); setFavCustomersError('')
+    const params = { sort: custSort, order: custOrder, page: String(targetPage), limit: String(FAV_CUST_PAGE_SIZE) }
+    if (custQuery.trim()) params.search = custQuery.trim()
+    if (custSegment) params.segment = custSegment
+    favoritesApi.contacts(params)
+      .then(res => {
+        if (res?.success) {
+          setFavCustomers(res.data?.contacts ?? [])
+          setCustPage(targetPage)
+          const pg = res.data?.pagination
+          setCustTotal(pg?.total ?? 0)
+          setCustHasMore(!!pg?.has_more)
+        } else setFavCustomersError(res?.message || t('eng.fav.err_load', 'Failed to load favorites.'))
+      })
+      .catch(() => setFavCustomersError(t('eng.fav.err_network', 'Network error.')))
+      .finally(() => setFavCustomersLoading(false))
+  }
+
+  useEffect(() => {
+    if (viewMode !== 'customers') return
+    refetchFavCustomers(1)
+  }, [viewMode, custSort, custOrder, custSegment])
+
+  const isFirstCustSearch = useRef(true)
+  useEffect(() => {
+    if (viewMode !== 'customers') return
+    if (isFirstCustSearch.current) { isFirstCustSearch.current = false; return }
+    const timer = setTimeout(() => refetchFavCustomers(1), 400)
+    return () => clearTimeout(timer)
+  }, [custQuery])
+
+  const goToCustPage = (targetPage) => {
+    if (targetPage < 1 || favCustomersLoading) return
+    refetchFavCustomers(targetPage)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -3598,10 +3743,13 @@ function FavoritesView() {
   const mostSaved = products.length ? products.reduce((a, b) => (b.saver_count ?? 0) > (a.saver_count ?? 0) ? b : a) : null
 
   const openSavers = (p) => {
-    setSaversFor(p); setSavers([]); setSaversLoading(true)
+    setSaversFor(p); setSavers([]); setSaversError(''); setSaversLoading(true)
     favoritesApi.savers(p.product_id)
-      .then(res => { if (res?.success) setSavers(res.data?.savers ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res?.success) setSavers(res.data?.savers ?? [])
+        else setSaversError(res?.message || t('eng.fav.err_savers', 'Failed to load savers.'))
+      })
+      .catch(() => setSaversError(t('eng.fav.err_network', 'Network error.')))
       .finally(() => setSaversLoading(false))
   }
 
@@ -3618,8 +3766,51 @@ function FavoritesView() {
       .finally(() => setNotifying(false))
   }
 
+  const runLowStockSweep = () => {
+    setLowStockSweeping(true); setLowStockResult(null)
+    favoritesApi.alertLowStock()
+      .then(res => {
+        if (res?.success) setLowStockResult({ ...res.data, message: res.message })
+        else setLowStockResult({ error: res?.message || t('eng.fav.err_alert', 'Failed to alert savers.') })
+      })
+      .catch(() => setLowStockResult({ error: t('eng.fav.err_network', 'Network error.') }))
+      .finally(() => setLowStockSweeping(false))
+  }
+
+  const openCampaignToSavers = (p) => { setCampaignTarget(p); setCampaignChannel('email'); setCampaignSubject(''); setCampaignMessage(''); setCampaignResult(null) }
+  const sendCampaignToSavers = () => {
+    if (!campaignTarget || !campaignMessage.trim()) return
+    setCampaignSending(true)
+    favoritesApi.campaignToSavers({
+      product_id: campaignTarget.product_id,
+      channel: campaignChannel,
+      subject: campaignChannel === 'email' ? (campaignSubject.trim() || undefined) : undefined,
+      message: campaignMessage.trim(),
+      send_now: true,
+    })
+      .then(res => {
+        if (res?.success) setCampaignResult({ ...res.data, message: res.message })
+        else setCampaignResult({ error: res?.message || t('eng.fav.err_campaign', 'Failed to send campaign.') })
+      })
+      .catch(() => setCampaignResult({ error: t('eng.fav.err_network', 'Network error.') }))
+      .finally(() => setCampaignSending(false))
+  }
+
   return (
     <div>
+      <div className="card-hdr eng-mb18">
+        <div className="card-title">{t('eng.fav.title', 'Product')} <em>{t('eng.fav.title_em', 'Favorites')}</em></div>
+        <button className="btn btn-outline btn-sm" disabled={lowStockSweeping} onClick={runLowStockSweep}>
+          <span className="material-symbols-outlined">notifications_active</span>
+          {lowStockSweeping ? t('eng.rev.sending', 'Sending…') : t('eng.fav.alert_low_stock', 'Alert Low-Stock Savers')}
+        </button>
+      </div>
+      {lowStockResult && (
+        <div className={lowStockResult.error ? 'eng-error eng-mb18' : 'eng-success eng-mb18'}>
+          {lowStockResult.error || lowStockResult.message || t('eng.fav.low_stock_result', { products: lowStockResult.products_alerted ?? 0, notified: lowStockResult.notified ?? 0, defaultValue: 'Alerted savers of {{products}} product(s) · {{notified}} notified.' })}
+        </div>
+      )}
+
       {/* KPI Row — derived from the real product-favorites leaderboard, no fabricated totals */}
       <div className="stat-row col3 eng-mb18">
         <div className="stat-card">
@@ -3648,6 +3839,13 @@ function FavoritesView() {
         </div>
       </div>
 
+      <div className="tpl-filter-row eng-mb18">
+        <div className={`tpl-chip${viewMode === 'products' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('products')}>{t('eng.fav.by_product', 'By Product')}</div>
+        <div className={`tpl-chip${viewMode === 'customers' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('customers')}>{t('eng.fav.by_customer', 'By Customer')}</div>
+      </div>
+
+      {viewMode === 'products' ? (
+        <>
       {errorMsg && <div className="eng-error">{errorMsg}</div>}
 
       {loading ? (
@@ -3685,6 +3883,11 @@ function FavoritesView() {
                     <span className="material-symbols-outlined">notifications_active</span>{t('eng.fav.notify_savers', { count: p.saver_count, defaultValue: 'Notify {{count}} savers when restocked' })}
                   </button>
                 )}
+                {(p.saver_count ?? 0) > 0 && (
+                  <button className="btn btn-outline btn-sm" onClick={() => openCampaignToSavers(p)}>
+                    <span className="material-symbols-outlined">campaign</span>{t('eng.fav.campaign_to_savers', 'Send Campaign to Savers')}
+                  </button>
+                )}
                 <button className="btn btn-outline btn-sm" onClick={() => openSavers(p)}>
                   <span className="material-symbols-outlined">people</span>{t('eng.fav.view_savers', { count: p.saver_count ?? 0, defaultValue: 'View all {{count}} savers' })}
                 </button>
@@ -3692,6 +3895,73 @@ function FavoritesView() {
             </div>
           )
         })
+      )}
+        </>
+      ) : (
+        <>
+          <div className="ct-search eng-mb18">
+            <span className="material-symbols-outlined">search</span>
+            <input placeholder={t('eng.fav.search_customers', 'Search customers…')} value={custQuery} onChange={e => setCustQuery(e.target.value)} />
+          </div>
+          <div className="tpl-filter-row eng-mb18">
+            {[
+              { key:'',       label:t('eng.camp.ch_all', 'All') },
+              { key:'vip',    label:t('eng.camp.seg_vip', 'VIP') },
+              { key:'loyal',  label:t('eng.camp.seg_loyal', 'Loyal') },
+              { key:'new',    label:t('eng.camp.seg_new', 'New') },
+              { key:'warm',   label:t('eng.camp.seg_warm', 'Warm') },
+              { key:'lapsed', label:t('eng.camp.seg_lapsed', 'Lapsed') },
+            ].map(s => (
+              <div key={s.key} className={`tpl-chip${custSegment === s.key ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setCustSegment(s.key)}>{s.label}</div>
+            ))}
+            <div className="select-wrap" style={{ width:'auto', marginLeft:'auto' }}>
+              <select className="form-select" value={`${custSort}:${custOrder}`} onChange={e => { const [s, o] = e.target.value.split(':'); setCustSort(s); setCustOrder(o) }}>
+                <option value="last_favorited:desc">{t('eng.fav.sort_recent', 'Most recently favorited')}</option>
+                <option value="favorite_count:desc">{t('eng.fav.sort_most_saves', 'Most saves')}</option>
+                <option value="name:asc">{t('eng.fav.sort_name', 'Name (A-Z)')}</option>
+              </select>
+            </div>
+          </div>
+
+          {favCustomersError && <div className="eng-error">{favCustomersError}</div>}
+
+          {favCustomersLoading ? (
+            <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites…')}</div>
+          ) : favCustomers.length === 0 ? (
+            <div className="eng-loading">{t('eng.fav.no_customers', 'No customers have saved anything yet.')}</div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>{t('eng.ct.col_contact', 'Contact')}</th><th>{t('eng.ov.col_seg', 'Segment')}</th>
+                  <th>{t('eng.fav.col_saves', 'Saves')}</th><th>{t('eng.fav.col_last_favorited', 'Last favorited')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {favCustomers.map((c, i) => (
+                  <tr key={c.id ?? c.user_id ?? i}>
+                    <td>
+                      {c.name || t('eng.ct.unnamed', 'Unnamed')}
+                      {!c.has_contact_record && <span className="tpl-review-txt" style={{ marginLeft:8 }}>{t('eng.fav.webshop_only', 'Webshop only')}</span>}
+                    </td>
+                    <td>{c.segment ? <SegBadge seg={c.segment} /> : '—'}</td>
+                    <td>{c.favorite_count ?? 0}</td>
+                    <td className="eng-meta-sm">{c.last_favorited_at ? timeAgo(c.last_favorited_at, t) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <div className="ct-table-footer">
+            <span>{t('eng.ct.showing_loaded', { shown: favCustomers.length, total: custTotal, defaultValue: 'Showing {{shown}} of {{total}} contacts' })}</span>
+            <div className="ct-footer-btns">
+              <button className="btn btn-outline btn-xs" disabled={custPage <= 1 || favCustomersLoading} onClick={() => goToCustPage(custPage - 1)}>{t('eng.ct.prev', '← Prev')}</button>
+              <span>{t('eng.ct.page_n', { page: custPage, defaultValue: 'Page {{page}}' })}</span>
+              <button className="btn btn-outline btn-xs" disabled={!custHasMore || favCustomersLoading} onClick={() => goToCustPage(custPage + 1)}>{t('eng.ct.next', 'Next →')}</button>
+            </div>
+          </div>
+        </>
       )}
 
       {saversFor && (
@@ -3703,6 +3973,8 @@ function FavoritesView() {
             </div>
             {saversLoading ? (
               <div className="eng-loading">{t('eng.fav.loading_savers', 'Loading savers…')}</div>
+            ) : saversError ? (
+              <div className="eng-error">{saversError}</div>
             ) : savers.length === 0 ? (
               <div className="eng-loading">{t('eng.fav.no_savers', 'No savers to show.')}</div>
             ) : (
@@ -3715,7 +3987,7 @@ function FavoritesView() {
       )}
 
       {notifyTarget && (
-        <div className="modal-backdrop" onClick={() => !notifying && setNotifyTarget(null)}>
+        <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">{t('eng.fav.notify_title', 'Notify')} <em>{t('eng.fav.notify_title_em', 'Savers')}</em></div>
@@ -3747,643 +4019,417 @@ function FavoritesView() {
           </div>
         </div>
       )}
+
+      {campaignTarget && (
+        <div className="modal-backdrop">
+          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">{t('eng.fav.campaign_title', 'Campaign to')} <em>{t('eng.fav.campaign_title_em', 'Savers')}</em></div>
+              <div className="modal-close" onClick={() => !campaignSending && setCampaignTarget(null)}><span className="material-symbols-outlined">close</span></div>
+            </div>
+            {!campaignResult ? (
+              <>
+                <div className="form-hint eng-mb18">{t('eng.fav.campaign_hint', { count: campaignTarget.saver_count ?? 0, product: campaignTarget.product_name, defaultValue: 'Sends a real campaign to the {{count}} customer(s) who saved "{{product}}".' })}</div>
+                <div className="form-group">
+                  <label className="form-lbl">{t('eng.camp.channel', 'Channel')}</label>
+                  <div className="select-wrap">
+                    <select className="form-select" value={campaignChannel} onChange={e => setCampaignChannel(e.target.value)}>
+                      <option value="email">{t('eng.channels.email', 'Email')}</option>
+                      <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>
+                      <option value="push">{t('eng.tpl.push', 'Push')}</option>
+                    </select>
+                  </div>
+                </div>
+                {campaignChannel === 'email' && (
+                  <div className="form-group">
+                    <label className="form-lbl">{t('eng.rev.subject', 'SUBJECT')}</label>
+                    <input className="form-input" placeholder={t('eng.fav.campaign_subject_placeholder', 'Still thinking about this one?')} value={campaignSubject} onChange={e => setCampaignSubject(e.target.value)} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+                  <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.fav.campaign_message_placeholder', 'Hi {{name}}, the piece you saved is still available — come see it before it\'s gone!')} value={campaignMessage} onChange={e => setCampaignMessage(e.target.value)} />
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-outline" onClick={() => setCampaignTarget(null)} disabled={campaignSending}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-primary" onClick={sendCampaignToSavers} disabled={campaignSending || !campaignMessage.trim()}>
+                    <span className="material-symbols-outlined">send</span>{campaignSending ? t('eng.rev.sending', 'Sending…') : t('eng.fav.campaign_send', 'Send Campaign')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={campaignResult.error ? 'eng-error' : 'eng-success'}>
+                  {campaignResult.error || campaignResult.message || t('eng.fav.campaign_result', { count: campaignResult.recipients_count ?? 0, defaultValue: 'Campaign sent to {{count}} recipient(s).' })}
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-primary" onClick={() => setCampaignTarget(null)}>{t('common.done', 'Done')}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 
 
-// ── TEMPLATES VIEW ─────────────────────────────────────
-// Stage 1: Library + Detail header/stats + Structure + Preview tabs
-// Stage 2: Variables + Performance + Languages + Versions + Modals
+// ── TEMPLATES VIEW (real data) ────────────────────────────
+function templateChannelLabel(ch, t) {
+  return ch === 'whatsapp' ? t('eng.channels.wa', 'WhatsApp') : ch === 'push' ? t('eng.tpl.push', 'Push') : t('eng.channels.email', 'Email')
+}
+function templateChannelTag(ch, t) {
+  return ch === 'whatsapp' ? `💬 ${t('eng.channels.wa', 'WhatsApp')}` : ch === 'push' ? `🔔 ${t('eng.tpl.push', 'Push')}` : `📧 ${t('eng.channels.email', 'Email')}`
+}
+const tplChDotClass = (ch) => ch === 'whatsapp' ? 'wa' : ch === 'push' ? 'push' : 'email'
 
-const TEMPLATES = {
-  'new-arrivals': {
-    emoji:'👗', name:<>New <em>Arrivals</em></>, plainName:'New Arrivals', grad:'linear-gradient(135deg,#2A1510,#1A0D07)',
-    desc:'Announce a new collection or drop with a hero visual, editorial body, and a single clear action. Built for Email, with streamlined WhatsApp and Push variants.',
-    status:'approved', statusText:'Approved · All channels', channels:['email','wa','push'], version:'v2.1', category:'announcements',
-    stats:['4×','44%','12%','€1,940'], statSub:['by Sartoria Belloni','Avg open · Email','Avg click · Email','Attributed'],
-    subjectEx:'Your subject, e.g. "The Spring edit is in Brera"',
-    bodyEx:'2 to 4 sentences introducing the arrival. Editorial, specific, Italian in spirit. No exclamation marks, no discount language.',
-    ctaEx:'e.g. "View the collection" or "Scopri la collezione"',
-    pv:{ subject:'The Spring edit is in Brera', preview:'New arrivals from our Spring/Summer 2026 edit…', heroEmoji:'👗', heroLabel:'Spring · Summer 2026',
-      greeting:'Dear Sofia,', body:'The Spring/Summer 2026 collection is now in the boutique. A considered selection from Italian artisans we trust: silk blouses, hand-tailored trousers, each chosen for its craft and quiet elegance.\n\nSee it in Brera, or reserve a private appointment through Mi Italia.',
-      cta:'View the collection →', waHdr:'The Spring edit at Sartoria Belloni', waBody:'Dear Sofia,\n\nThe Spring/Summer 2026 collection is now in the boutique. A considered selection from Italian artisans we trust. See it in Brera or reserve through Mi Italia.',
-      pushTitle:'The Spring edit at Sartoria Belloni', pushBody:'The S/S 2026 collection is now in the boutique on Corso Venezia.' },
-    perf:[
-      { date:'24 Mar 2026', name:'Spring Collection — New Arrivals', meta:'📧 Email · 612 sent · Loyal + New', open:'44%', click:'12%', revenue:'€640', barPct:44 },
-      { date:'10 Jan 2026', name:'Inverno 2026 — Nuovi Arrivi', meta:'📧 Email · 588 sent · All contacts', open:'41%', click:'10%', revenue:'€820', barPct:41 },
-      { date:'15 Sep 2025', name:'Autunno / Inverno 2025 Collection', meta:'📧 Email · 421 sent · All contacts', open:'48%', click:'14%', revenue:'€340', barPct:48 },
-      { date:'2 Jun 2025', name:'Estate 2025 — Primissimi Arrivi', meta:'📧 Email · 310 sent · All contacts', open:'42%', click:'11%', revenue:'€140', barPct:42 },
-    ],
-    bestSubjects:[
-      { pct:'48%', name:'Autunno / Inverno 2025 Collection', meta:'Sep 2025 · 421 sent', top:true },
-      { pct:'44%', name:'Our Spring Collection Has Arrived 🌸', meta:'Mar 2026 · 612 sent' },
-      { pct:'42%', name:'Estate 2025 — Primissimi Arrivi', meta:'Jun 2025 · 310 sent' },
-    ],
-    langContent:{ subject:'La Nostra Collezione Primavera è Arrivata 🌸', preview:'Nuovi arrivi dalla nostra selezione P/E 2026…',
-      body:'Cara {{first_name}},\n\nLa nostra collezione Primavera/Estate 2026 è finalmente arrivata da Sartoria Belloni. Scopri pezzi selezionati con cura dai migliori artigiani italiani — dalle bluse in seta ai pantaloni sartoriali.\n\nDisponibile in boutique su Corso Venezia o prenota il tuo appuntamento su Mi Italia.' },
-    versions:[
-      { ver:'Version 2.1', badge:'current', desc:'Updated 1 Mar 2026 · Body character limit increased 300→400 · WhatsApp CTA button added' },
-      { ver:'Version 2.0', badge:'archived', desc:'Updated 15 Jan 2026 · Hero image section added · Push notification variant added' },
-      { ver:'Version 1.0', badge:'archived', desc:'Original · Launched Jun 2025 · Email only · Body max 300 chars' },
-    ],
-  },
-  'vip-access': {
-    emoji:'⭐', name:<>VIP Early <em>Access</em></>, plainName:'VIP Early Access', grad:'linear-gradient(135deg,#1A1005,#0D0A03)',
-    desc:'Offer your best clients a private window before a launch opens to everyone. Warm, exclusive, and personal in tone.',
-    status:'approved', statusText:'Approved · Email + WhatsApp', channels:['email','wa'], version:'v1.4', category:'announcements',
-    stats:['2×','61%','19%','€4,820'], statSub:['by Sartoria Belloni','Avg open · Email','Avg click · Email','Attributed'],
-    subjectEx:'Your subject, e.g. "A private preview, before anyone else"',
-    bodyEx:'2 to 3 sentences making the client feel chosen. Name the window and how to reserve. Keep it confidential in tone.',
-    ctaEx:'e.g. "Reserve your preview" or "Prenota l\'anteprima"',
-    pv:{ subject:'A private preview, before anyone else', preview:'Your early window opens Thursday…', heroEmoji:'⭐', heroLabel:'Private Preview',
-      greeting:'Cara Sofia,', body:'As one of our closest clients, you are invited to view the new arrivals on Thursday evening, before the collection opens to everyone.\n\nA glass of something and an unhurried hour in Brera. Reply, or reserve through Mi Italia.',
-      cta:'Reserve your preview →', waHdr:'A private preview for you', waBody:'Cara Sofia,\n\nYou are invited to view the new arrivals on Thursday evening, before they open to everyone. An unhurried hour in Brera. Reserve through Mi Italia.',
-      pushTitle:'Your private preview', pushBody:'Thursday evening in Brera, before the collection opens to all.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 1.4', badge:'current', desc:'Current version' }],
-  },
-  'back-in-stock': {
-    emoji:'📦', name:<>Back in <em>Stock</em></>, plainName:'Back in Stock', grad:'linear-gradient(135deg,#0A1A10,#051008)',
-    desc:'Tell a customer that a piece they saved is available again. Fires from the Favorites automation. Short and useful.',
-    status:'approved', statusText:'Approved · Push + WhatsApp', channels:['push','wa'], version:'v1.2', category:'announcements',
-    stats:['3×','38%','—','€2,110'], statSub:['by Sartoria Belloni','Avg tap · Push','No click data','Attributed'],
-    subjectEx:'Not used for Push. WhatsApp header, e.g. "Back in your size"',
-    bodyEx:'One or two sentences. Name the item and the size. Say where to find it.',
-    ctaEx:'e.g. "See it" or "Riservalo"',
-    pv:{ subject:'The piece you saved is back', preview:'Available again in your size…', heroEmoji:'📦', heroLabel:'Back in Stock',
-      greeting:'Dear Sofia,', body:'The Cashmere Trench you saved is available again in your size.\n\nWe can hold it for 24 hours if you would like to see it in Brera.',
-      cta:'See it on Mi Italia →', waHdr:'Back in your size', waBody:'Dear Sofia,\n\nThe Cashmere Trench you saved is back in your size. We can hold it for 24 hours if you would like to come to Brera.',
-      pushTitle:'A saved piece is back', pushBody:'The Cashmere Trench you saved is available again in your size.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 1.2', badge:'current', desc:'Current version' }],
-  },
-  'win-back': {
-    emoji:'💌', name:<>Win-<em>Back</em></>, plainName:'Win-Back', grad:'linear-gradient(135deg,#1A0A0A,#100505)',
-    desc:'Reach a client you have not seen in a while, warmly and without pressure. Reference their history, invite them back.',
-    status:'approved', statusText:'Approved · Email', channels:['email'], version:'v1.0', category:'engagement',
-    stats:['—','—','—','—'], statSub:['Not yet used','No data','No data','No data'],
-    subjectEx:'Your subject, e.g. "It has been a while"',
-    bodyEx:'2 to 3 sentences. Acknowledge the gap gently, reference a past purchase, extend a warm invitation.',
-    ctaEx:'e.g. "Come see us" or "Torna a trovarci"',
-    pv:{ subject:'It has been a while', preview:'We saved a few things we think you would like…', heroEmoji:'💌', heroLabel:'We miss you',
-      greeting:'Cara Sofia,', body:'It has been a few months since your last visit, when you found the silk blouse you liked so much.\n\nThe new season has brought in pieces in the same spirit. We would love to show you, whenever you are next in Brera.',
-      cta:'Come see us →', waHdr:'It has been a while', waBody:'Cara Sofia,\n\nIt has been a few months since we saw you. The new season has pieces in the spirit of the silk blouse you liked. Come by Brera whenever suits you.',
-      pushTitle:'It has been a while', pushBody:'New pieces in the spirit of what you loved. Come see us in Brera.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 1.0', badge:'current', desc:'Original version' }],
-  },
-  'birthday': {
-    emoji:'🎂', name:<>Birthday <em>Greeting</em></>, plainName:'Birthday Greeting', grad:'linear-gradient(135deg,#1A100A,#0D0805)',
-    desc:'A warm birthday note, sent automatically on the day. No hard sell, just a gesture. Highest read rate of any template.',
-    status:'approved', statusText:'Approved · WhatsApp', channels:['wa'], version:'v1.6', category:'engagement',
-    stats:['12×','100%','—','—'], statSub:['by Sartoria Belloni','Read rate · WhatsApp','No click data','Gesture, not sale'],
-    subjectEx:'Not used for WhatsApp. Header, e.g. "Buon compleanno"',
-    bodyEx:'One or two warm sentences. A genuine wish. Optionally a small gesture, never a discount code.',
-    ctaEx:'Optional, e.g. "Come celebrate with us"',
-    pv:{ subject:'Buon compleanno, Sofia', preview:'A small note from all of us…', heroEmoji:'🎂', heroLabel:'Buon Compleanno',
-      greeting:'Cara Sofia,', body:'Buon compleanno from all of us in Brera.\n\nWe hope the day is a lovely one. Should you wish to mark it with something, we would be delighted to welcome you.',
-      cta:'', waHdr:'Buon compleanno, Sofia', waBody:'Cara Sofia,\n\nBuon compleanno from all of us in Brera. We hope the day is a lovely one, and we would be delighted to welcome you whenever you wish.',
-      pushTitle:'Buon compleanno, Sofia', pushBody:'A warm birthday wish from all of us at Sartoria Belloni.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 1.6', badge:'current', desc:'Current version' }],
-  },
-  'reservation-reminder': {
-    emoji:'📅', name:<>Reservation <em>Reminder</em></>, plainName:'Reservation Reminder', grad:'linear-gradient(135deg,#0A0A1A,#060610)',
-    desc:'Remind a client of an upcoming reservation or a hold that is about to expire. Automation only. Practical and precise.',
-    status:'approved', statusText:'Approved · WhatsApp · Automation only', channels:['wa'], version:'v2.0', category:'engagement',
-    stats:['—','94%','—','—'], statSub:['Automation','Show rate','No click data','Operational'],
-    subjectEx:'Not used. WhatsApp header, e.g. "Your reservation tomorrow"',
-    bodyEx:'One or two sentences. State the date, time, and what is held. Give a simple way to change it.',
-    ctaEx:'e.g. "Confirm" or "Reschedule"',
-    pv:{ subject:'Your reservation tomorrow', preview:'A quick reminder…', heroEmoji:'📅', heroLabel:'Reservation',
-      greeting:'Dear Sofia,', body:'A reminder that we are holding the Cashmere Trench for you until tomorrow at 18:00.\n\nDo let us know if you would like more time, or a different day.',
-      cta:'Confirm →', waHdr:'Your reservation tomorrow', waBody:'Dear Sofia,\n\nWe are holding the Cashmere Trench for you until tomorrow at 18:00. Let us know if you need more time or a different day.',
-      pushTitle:'Reservation tomorrow', pushBody:'We are holding your piece until tomorrow at 18:00 in Brera.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 2.0', badge:'current', desc:'Current version' }],
-  },
-  'seasonal': {
-    emoji:'🎁', name:<>Seasonal <em>Promotion</em></>, plainName:'Seasonal Promotion', grad:'linear-gradient(135deg,#1A1205,#100C03)',
-    desc:'Mark a moment in the calendar with restraint. Currently awaiting Mi Italia review.',
-    status:'pending', statusText:'Review required · Email', channels:['email'], version:'draft', category:'seasonal',
-    stats:['—','—','—','—'], statSub:['Draft','No data','No data','No data'],
-    subjectEx:'Your subject, e.g. "For the season ahead"',
-    bodyEx:'2 to 3 sentences tied to the moment. Editorial, never shouty.',
-    ctaEx:'e.g. "Explore the edit" or "Scopri"',
-    pv:{ subject:'For the season ahead', preview:'A small selection for the festive weeks…', heroEmoji:'🎁', heroLabel:'The Season',
-      greeting:'Cara Sofia,', body:'For the weeks ahead we have brought together a small edit of pieces that carry well through the season, from evening silk to winter tailoring.\n\nCome see them in Brera, or explore the edit on Mi Italia.',
-      cta:'Explore the edit →', waHdr:'For the season ahead', waBody:'Cara Sofia,\n\nA small edit for the festive weeks, from evening silk to winter tailoring. Come see it in Brera or on Mi Italia.',
-      pushTitle:'For the season ahead', pushBody:'A small edit for the festive weeks, in Brera and on Mi Italia.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[],
-  },
-  'event-invite': {
-    emoji:'🎭', name:<>Event <em>Invite</em></>, plainName:'Event Invite', grad:'linear-gradient(135deg,#0A0A2A,#050518)',
-    desc:'Invite clients to an in-boutique moment. Sent across Email and Push.',
-    status:'approved', statusText:'Approved · Email + Push', channels:['email','push'], version:'v1.3', category:'seasonal',
-    stats:['—','52%','—','—'], statSub:['by Sartoria Belloni','Avg open · Email','No click data','RSVP tracked'],
-    subjectEx:'Your subject, e.g. "An evening with the atelier"',
-    bodyEx:'2 to 3 sentences. Name the occasion, the date, and how to RSVP. Make it feel like an invitation, not a flyer.',
-    ctaEx:'e.g. "RSVP" or "Confermare"',
-    pv:{ subject:'An evening with the atelier', preview:'Thursday the 22nd, from 18:00…', heroEmoji:'🎭', heroLabel:'You are invited',
-      greeting:'Cara Sofia,', body:'We are hosting an evening in Brera on Thursday the 22nd, from 18:00, with the maker of our knitwear line and a few of the season\'s best pieces.\n\nWe would be glad to see you there. Kindly let us know if you can come.',
-      cta:'RSVP →', waHdr:'An evening with the atelier', waBody:'Cara Sofia,\n\nAn evening in Brera, Thursday the 22nd from 18:00, with the maker of our knitwear line. We would be glad to see you. Let us know if you can come.',
-      pushTitle:'An evening in Brera', pushBody:'Thursday the 22nd from 18:00, with the maker of our knitwear line.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[{ ver:'Version 1.3', badge:'current', desc:'Current version' }],
-  },
-  'custom-1': {
-    emoji:'✨', name:<>Exclusive <em>Pre-Order</em></>, plainName:'Exclusive Pre-Order', grad:'linear-gradient(135deg,#1A0508,#100305)',
-    desc:'A custom template for offering a made-to-order or pre-release piece. Currently in Mi Italia review.',
-    status:'review', statusText:'In Mi Italia review · Email', channels:['email'], version:'draft', category:'custom',
-    stats:['—','—','—','—'], statSub:['In review','No data','No data','No data'],
-    subjectEx:'Your subject, e.g. "Reserve yours before production"',
-    bodyEx:'2 to 3 sentences. Explain what is being pre-offered, the window, and how to reserve. Exclusive, not urgent.',
-    ctaEx:'e.g. "Reserve yours" or "Prenota"',
-    pv:{ subject:'Reserve yours before production', preview:'A limited made-to-order run…', heroEmoji:'✨', heroLabel:'Pre-Order',
-      greeting:'Cara Sofia,', body:'We are opening a small made-to-order run of the Bordeaux silk dress, in your size, before production is confirmed.\n\nReservations are open this week only. We would be glad to hold one for you.',
-      cta:'Reserve yours →', waHdr:'Reserve before production', waBody:'Cara Sofia,\n\nA small made-to-order run of the Bordeaux silk dress, in your size, before production is confirmed. Reservations open this week. We would be glad to hold one.',
-      pushTitle:'Pre-order open this week', pushBody:'A made-to-order run of the Bordeaux silk dress, in your size.' },
-    perf:[], bestSubjects:[], langContent:null, versions:[],
-  },
+function RealTemplateFormModal({ template, onClose, onSaved }) {
+  const { t } = useTranslation()
+  const isEdit = !!template?.id
+  const primaryContent = template?.content?.[template?.primary_language] ?? {}
+  const [templateKey, setTemplateKey] = useState(template?.template_key ?? '')
+  const [primaryLang, setPrimaryLang] = useState(template?.primary_language ?? 'it')
+  const [channel,     setChannel]     = useState(template?.channel ?? 'email')
+  const [subject,     setSubject]     = useState(primaryContent.subject ?? '')
+  const [text,        setText]        = useState(primaryContent.text ?? '')
+  const [title,       setTitle]       = useState(primaryContent.title ?? '')
+  const [body,        setBody]        = useState(primaryContent.body ?? '')
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+
+  const handleSave = async () => {
+    if (!isEdit && !templateKey.trim()) { setError(t('eng.tpl.err_key_required', 'Template key is required.')); return }
+    let content
+    if (channel === 'whatsapp') {
+      if (!body.trim()) { setError(t('eng.tpl.err_body_required', 'Body is required.')); return }
+      content = { body: body.trim() }
+    } else if (channel === 'push') {
+      if (!title.trim() || !body.trim()) { setError(t('eng.tpl.err_title_body_required', 'Title and body are required.')); return }
+      content = { title: title.trim(), body: body.trim() }
+    } else {
+      if (!subject.trim() || !text.trim()) { setError(t('eng.tpl.err_content_required', 'Subject and body are required.')); return }
+      content = { subject: subject.trim(), html: `<p>${text.trim()}</p>`, text: text.trim() }
+    }
+    setSaving(true); setError('')
+    try {
+      const res = isEdit
+        ? await templateApi.update(template.id, { content })
+        : await templateApi.create({ templateKey: templateKey.trim(), channel, primaryLanguage: primaryLang, content })
+      if (res?.success) onSaved(res.data?.template?.id)
+      else setError(res?.message || t('eng.tpl.err_save', 'Failed to save template.'))
+    } catch { setError(t('eng.tpl.err_network', 'Network error.')) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+        <div className="modal-hdr">
+          <div className="modal-title">{isEdit ? t('eng.tpl.edit_real_title', 'Edit') : t('eng.tpl.create_real_title', 'Create')} <em>{t('eng.tpl.form_title_em', 'Template')}</em></div>
+          <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
+        </div>
+        {error && <div className="eng-error">{error}</div>}
+        {!isEdit ? (
+          <>
+            <div className="form-row2">
+              <div className="form-group">
+                <label className="form-lbl">{t('eng.tpl.template_key', 'Template key')}</label>
+                <input className="form-input" placeholder="aw25_new_arrivals" value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-lbl">{t('eng.tpl.primary_language', 'Primary language')}</label>
+                <div className="select-wrap">
+                  <select className="form-select" value={primaryLang} onChange={e => setPrimaryLang(e.target.value)}>
+                    {Object.keys(LANG_MAP).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.tpl.channel', 'Channel')}</label>
+              <div className="select-wrap">
+                <select className="form-select" value={channel} onChange={e => setChannel(e.target.value)}>
+                  <option value="email">{t('eng.channels.email', 'Email')}</option>
+                  <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>
+                  <option value="push">{t('eng.tpl.push', 'Push')}</option>
+                </select>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="form-hint eng-mb18">{t('eng.tpl.editing_primary_hint', { lang: langDisplayName(template.primary_language, t), defaultValue: 'Editing the {{lang}} (primary) content. Saving invalidates existing translations — re-translate afterward.' })}</div>
+        )}
+        {channel === 'whatsapp' ? (
+          <div className="form-group">
+            <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+            <textarea className="form-textarea ct-notes-textarea" value={body} onChange={e => setBody(e.target.value)} />
+          </div>
+        ) : channel === 'push' ? (
+          <>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.tpl.sec_title', 'TITLE')}</label>
+              <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+              <textarea className="form-textarea ct-notes-textarea" value={body} onChange={e => setBody(e.target.value)} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.rev.subject', 'SUBJECT')}</label>
+              <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+              <textarea className="form-textarea ct-notes-textarea" value={text} onChange={e => setText(e.target.value)} />
+            </div>
+          </>
+        )}
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
-function getTplKeysByCat(t) {
-  return [
-    { label:t('eng.tpl.cat_announcements', 'Announcements'), keys:['new-arrivals','vip-access','back-in-stock'] },
-    { label:t('eng.tpl.cat_engagement', 'Engagement'),    keys:['win-back','birthday','reservation-reminder'] },
-    { label:t('eng.tpl.cat_seasonal', 'Seasonal'),      keys:['seasonal','event-invite'] },
-    { label:t('eng.tpl.cat_custom', { name: 'Sartoria Belloni', defaultValue: 'Custom ({{name}})' }), keys:['custom-1'] },
-  ]
-}
-
-function getTplStatLabels(t) {
-  return [t('eng.tpl.stat_times_used', 'Times Used'), t('eng.tpl.stat_avg_open', 'Avg Open Rate'), t('eng.tpl.stat_avg_click', 'Avg Click Rate'), t('eng.tpl.stat_total_revenue', 'Total Revenue')]
-}
-
-const TPL_VARIABLES = {
-  contact: [
-    { token:'{{first_name}}',       desc:'Customer\'s first name from their Mi Italia profile.',                    fb:'Fallback: "Gentile Cliente" (or "Dear Customer" if English)', ex:'Example: "Dear Sofia,"' },
-    { token:'{{full_name}}',         desc:'Customer\'s full name. Use in formal or luxury context.',                 fb:'Fallback: "Gentile Cliente"',                                 ex:'Example: "Cara Sofia Marchetti,"' },
-    { token:'{{last_purchase_date}}',desc:'Date of the contact\'s most recent purchase from your boutique.',         fb:'Fallback: not recommended if contact may have never purchased',ex:'Example: "24 March 2026"' },
-    { token:'{{last_purchase_item}}',desc:'Name of the most recently purchased item from your boutique.',            fb:'Fallback: "your last purchase"',                              ex:'Example: "your Silk Blouse"' },
-  ],
-  boutique: [
-    { token:'{{boutique_name}}',    desc:'Your boutique name as set in Store Profile.',                              fb:'Always present — no fallback needed', fbOk:true,              ex:'Example: "Sartoria Belloni"' },
-    { token:'{{boutique_address}}', desc:'Street address from Store Profile. Used in footers automatically.',        fb:'Always present — no fallback needed', fbOk:true,              ex:'Example: "Corso Venezia 15, Milano"' },
-    { token:'{{boutique_phone}}',   desc:'Boutique contact number. Useful in WhatsApp and event templates.',         fb:'Fallback: omitted if not set in Store Profile',               ex:'Example: "+39 02 7600 0000"' },
-    { token:'{{mi_italia_url}}',    desc:'Direct link to your Sartoria Belloni page on Mi Italia.',                  fb:'Always present — generated automatically', fbOk:true,         ex:'Example: "miitalia.com/boutique/neglia"' },
-  ],
-  product: [
-    { token:'{{product_name}}',     desc:'Name of a specific product. Used in Back in Stock, Win-Back, and personalised campaigns.', fb:'Fallback: "a product you love"',           ex:'Example: "Cashmere Trench Coat"' },
-    { token:'{{product_price}}',    desc:'Product price. Only available if price is not hidden.',                     fb:'Fallback: omitted entirely if price is hidden',               ex:'Example: "€1,290"' },
-    { token:'{{saved_item_count}}', desc:'Number of items this contact has saved from your boutique.',                fb:'Fallback: "some items" — only use if contact has saves',      ex:'Example: "7 pieces"' },
-    { token:'{{product_url}}',      desc:'Direct link to a specific product on Mi Italia.',                           fb:'Falls back to boutique page URL automatically', fbOk:true,   ex:'Example: "miitalia.com/…/cashmere-trench"' },
-  ],
-}
-
-function getTplLanguages(t) {
-  return [
-    { code:'it', flag:'🇮🇹', name:langDisplayName('it', t),  status:t('eng.tpl.status_primary_ready', 'Primary · Ready'),    ready:true,  sel:true },
-    { code:'en', flag:'🇬🇧', name:langDisplayName('en', t),  status:t('eng.tpl.status_approved_ready', 'Approved · Ready'),   ready:true,  sel:true },
-    { code:'fr', flag:'🇫🇷', name:langDisplayName('fr', t),   status:t('eng.tpl.status_approved_ready', 'Approved · Ready'),   ready:true,  sel:true },
-    { code:'de', flag:'🇩🇪', name:langDisplayName('de', t),   status:t('eng.tpl.status_approved_ready', 'Approved · Ready'),   ready:true,  sel:true },
-    { code:'es', flag:'🇪🇸', name:langDisplayName('es', t),  status:t('eng.tpl.status_approved_ready', 'Approved · Ready'),   ready:true,  sel:true },
-    { code:'ar', flag:'🇸🇦', name:langDisplayName('ar', t),   status:t('eng.tpl.status_not_available', 'Not yet available'),  ready:false, sel:false },
-    { code:'zh', flag:'🇨🇳', name:langDisplayName('zh', t), status:t('eng.tpl.status_not_available', 'Not yet available'),  ready:false, sel:false },
-    { code:'ja', flag:'🇯🇵', name:langDisplayName('ja', t), status:t('eng.tpl.status_not_available', 'Not yet available'),  ready:false, sel:false },
-  ]
+function TemplateRequestModal({ requestName, setRequestName, requestChannel, setRequestChannel, requestDescribe, setRequestDescribe, requestError, requestSending, requestSent, onClose, onSubmit }) {
+  const { t } = useTranslation()
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-hdr">
+          <div className="modal-title">{t('eng.tpl.request_title', 'Request a')} <em>{t('eng.tpl.request_title_em', 'Custom Template')}</em></div>
+          <div className="modal-close" onClick={onClose}><span className="material-symbols-outlined">close</span></div>
+        </div>
+        <div className="alert alert-info"><span className="material-symbols-outlined">info</span><div dangerouslySetInnerHTML={{ __html: t('eng.tpl.request_timeline_hint', 'Mi Italia will build, translate, and submit your custom template. Timeline: <strong>3–5 business days</strong> for Email/Push · <strong>5–10 days</strong> for WhatsApp (Meta review).') }} /></div>
+        {requestSent ? (
+          <>
+            <div className="eng-success">{t('eng.tpl.request_sent', 'Request submitted — Mi Italia will follow up on the timeline above.')}</div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={onClose}>{t('common.done', 'Done')}</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {requestError && <div className="eng-error">{requestError}</div>}
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name', 'Template Name')} *</label><input className="form-input" placeholder="e.g. Post-Purchase Thank You" value={requestName} onChange={e => setRequestName(e.target.value)} /></div>
+            <div className="form-group">
+              <label className="form-lbl">{t('eng.tpl.channels_needed', 'Channel Needed')}</label>
+              <div className="select-wrap">
+                <select className="form-select" value={requestChannel} onChange={e => setRequestChannel(e.target.value)}>
+                  <option value="email">{t('eng.tpl.email_only', 'Email')}</option>
+                  <option value="whatsapp">{t('eng.tpl.wa_only', 'WhatsApp')}</option>
+                  <option value="push">{t('eng.tpl.push_only', 'Push')}</option>
+                </select>
+                <span className="material-symbols-outlined select-arrow">expand_more</span>
+              </div>
+            </div>
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need', 'Describe what you need')} *</label><textarea className="form-textarea" rows={4} placeholder="Purpose, audience, sections, specific requirements…" value={requestDescribe} onChange={e => setRequestDescribe(e.target.value)} /></div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={onClose} disabled={requestSending}>{t('common.cancel', 'Cancel')}</button>
+              <button className="btn btn-primary" onClick={onSubmit} disabled={requestSending}><span className="material-symbols-outlined">send</span>{requestSending ? t('eng.rev.sending', 'Sending…') : t('eng.tpl.submit_template_request', 'Submit Template Request')}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function TemplatesView({ onNavigateToBuilder, emailSettings }) {
   const { t } = useTranslation()
-  const [selId, setSelId]             = useState('new-arrivals')
-  const [activeTab, setActiveTab]     = useState('structure')
-  const [structCh, setStructCh]       = useState('email')
-  const [prevCh, setPrevCh]           = useState('email')
-  const [showUseModal, setShowUseModal]       = useState(false)
+  const [templates,     setTemplates]     = useState([])
+  const [loadingList,   setLoadingList]   = useState(true)
+  const [selId,         setSelId]         = useState(null)
+  const [tplDetail,     setTplDetail]     = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [activeTab,     setActiveTab]     = useState('structure')
+  const [searchQ,       setSearchQ]       = useState('')
+  const [channelFilter, setChannelFilter] = useState('all')
+  const [previewLang,   setPreviewLang]   = useState(null)
+
+  const [showForm,     setShowForm]     = useState(false)
+  const [editingTpl,   setEditingTpl]   = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting,     setDeleting]     = useState(false)
+  const [deleteError,  setDeleteError]  = useState('')
+
+  const [variables,        setVariables]        = useState([])
+  const [variablesLoading, setVariablesLoading] = useState(true)
+  const [perf,             setPerf]             = useState(null)
+  const [perfLoading,      setPerfLoading]      = useState(false)
+  const [versions,         setVersions]         = useState([])
+  const [versionsLoading,  setVersionsLoading]  = useState(false)
+  const [changeRequests,        setChangeRequests]        = useState([])
+  const [changeRequestsLoading, setChangeRequestsLoading] = useState(false)
+  const [changeRequestText,    setChangeRequestText]    = useState('')
+  const [changeRequestSending, setChangeRequestSending] = useState(false)
+  const [changeRequestError,   setChangeRequestError]   = useState('')
+
+  const [langBusy, setLangBusy] = useState(null)
+  const [langNote, setLangNote] = useState('')
+
   const [showRequestModal, setShowRequestModal] = useState(false)
-  const [searchQ, setSearchQ]         = useState('')
-  const [langNote, setLangNote]       = useState('')
-  const [langRequesting, setLangRequesting] = useState(false)
+  const [requestName,       setRequestName]       = useState('')
+  const [requestChannel,    setRequestChannel]    = useState('email')
+  const [requestDescribe,   setRequestDescribe]   = useState('')
+  const [requestError,      setRequestError]      = useState('')
+  const [requestSending,    setRequestSending]    = useState(false)
+  const [requestSent,       setRequestSent]       = useState(false)
 
-  const tpl = TEMPLATES[selId]
-  const pv = tpl?.pv || {}
+  const refetchTemplates = () => {
+    setLoadingList(true)
+    templateApi.list()
+      .then(res => { if (res?.success) setTemplates(res.data?.templates ?? []) })
+      .catch(() => {})
+      .finally(() => setLoadingList(false))
+  }
+  useEffect(() => { refetchTemplates() }, [])
 
-  async function handleRequestTranslation() {
-    // This library is currently mock data (no real template id from the backend) — see docs/engagement-gaps.md
-    // case 10. Once TemplatesView is wired to GET /boutique/email-templates, this should call
-    // templateApi.translate(tpl.id) exactly like the retranslate flow in CampaignReview does.
-    if (!tpl?.id) {
-      setLangNote(t('eng.tpl.err_not_connected', "This template isn't connected to the live library yet, so a real translation request can't be sent — ask your dev to wire the Templates tab to the backend first."))
+  useEffect(() => {
+    templateApi.variables()
+      .then(res => { if (res?.success) setVariables(res.data?.variables ?? []) })
+      .catch(() => {})
+      .finally(() => setVariablesLoading(false))
+  }, [])
+
+  // Keep a valid selection once the list loads or changes
+  useEffect(() => {
+    if (templates.length === 0) { setSelId(null); return }
+    if (selId == null || !templates.some(x => x.id === selId)) setSelId(templates[0].id)
+  }, [templates])
+
+  const refetchChangeRequests = (id) => {
+    setChangeRequestsLoading(true)
+    templateApi.changeRequests(id)
+      .then(res => { if (res?.success) setChangeRequests(res.data?.change_requests ?? []) })
+      .catch(() => {})
+      .finally(() => setChangeRequestsLoading(false))
+  }
+
+  // Fetch full detail + performance/versions/change-requests whenever selection changes
+  useEffect(() => {
+    if (!selId) { setTplDetail(null); return }
+    setDetailLoading(true)
+    templateApi.get(selId).then(res => {
+      if (res?.success) {
+        setTplDetail(res.data?.template)
+        setPreviewLang(res.data?.template?.primary_language ?? null)
+      }
+    }).catch(() => {}).finally(() => setDetailLoading(false))
+
+    setPerfLoading(true)
+    templateApi.performance(selId).then(res => { if (res?.success) setPerf(res.data) }).catch(() => {}).finally(() => setPerfLoading(false))
+
+    setVersionsLoading(true)
+    templateApi.versions(selId).then(res => { if (res?.success) setVersions(res.data?.versions ?? []) }).catch(() => {}).finally(() => setVersionsLoading(false))
+
+    refetchChangeRequests(selId)
+    setActiveTab('structure')
+    setLangNote('')
+  }, [selId])
+
+  const filteredTemplates = templates.filter(tpl => {
+    if (channelFilter !== 'all' && tpl.channel !== channelFilter) return false
+    if (searchQ.trim() && !templateDisplayName(tpl.template_key, t).toLowerCase().includes(searchQ.trim().toLowerCase())) return false
+    return true
+  })
+
+  const openCreate = () => { setEditingTpl(null); setShowForm(true) }
+  const openEdit = async (tpl) => {
+    const res = await templateApi.get(tpl.id).catch(() => null)
+    setEditingTpl(res?.success ? res.data?.template : tpl)
+    setShowForm(true)
+  }
+  const onFormSaved = (savedId) => {
+    setShowForm(false)
+    refetchTemplates()
+    if (savedId) setSelId(savedId)
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    setDeleting(true); setDeleteError('')
+    templateApi.delete(deleteTarget.id)
+      .then(res => {
+        if (res?.success) { setDeleteTarget(null); refetchTemplates() }
+        else setDeleteError(res?.message || t('eng.tpl.err_delete', 'Failed to delete template.'))
+      })
+      .catch(() => setDeleteError(t('eng.tpl.err_network', 'Network error.')))
+      .finally(() => setDeleting(false))
+  }
+
+  const retranslateLang = (code) => {
+    if (!selId) return
+    setLangBusy(code); setLangNote('')
+    templateApi.translate(selId, code).then(res => {
+      if (res?.success) {
+        setLangNote(t('eng.tpl.retranslate_queued_lang', { lang: langDisplayName(code, t), defaultValue: 'Translation queued for {{lang}}.' }))
+        templateApi.get(selId).then(r => { if (r?.success) setTplDetail(r.data?.template) })
+      } else {
+        setLangNote(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
+      }
+    }).catch(() => setLangNote(t('eng.tpl.err_network', 'Network error'))).finally(() => setLangBusy(null))
+  }
+
+  const submitChangeRequest = () => {
+    if (!selId || !changeRequestText.trim()) return
+    setChangeRequestSending(true); setChangeRequestError('')
+    templateApi.submitChangeRequest(selId, changeRequestText.trim())
+      .then(res => {
+        if (res?.success) { setChangeRequestText(''); refetchChangeRequests(selId) }
+        else setChangeRequestError(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
+      })
+      .catch(() => setChangeRequestError(t('eng.tpl.err_network', 'Network error')))
+      .finally(() => setChangeRequestSending(false))
+  }
+
+  const closeRequestModal = () => {
+    setShowRequestModal(false); setRequestName(''); setRequestChannel('email'); setRequestDescribe(''); setRequestError(''); setRequestSent(false)
+  }
+  const handleSubmitRequest = () => {
+    if (!requestName.trim() || !requestDescribe.trim()) {
+      setRequestError(t('eng.tpl.err_required', 'Template name and description are required'))
       return
     }
-    setLangRequesting(true)
-    const res = await templateApi.translate(tpl.id).catch(() => ({ success:false, message:t('eng.tpl.err_network', 'Network error') }))
-    setLangRequesting(false)
-    setLangNote(res?.success ? (res.message || t('eng.tpl.translation_requested', 'Translation requested.')) : (res?.message || t('eng.tpl.err_request_failed', 'Request failed.')))
+    setRequestError('')
+    setRequestSending(true)
+    apiFetch(`${API}/boutique/marketing/template-requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: requestChannel, title: requestName.trim(), brief: requestDescribe.trim() }),
+    }).then(r => r.json()).then(res => {
+      if (res?.success) setRequestSent(true)
+      else setRequestError(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
+    }).catch(() => setRequestError(t('eng.tpl.err_network', 'Network error.')))
+      .finally(() => setRequestSending(false))
   }
 
   const TABS = [
     { key:'structure',   label:t('eng.tpl.tab_structure', 'Structure') },
     { key:'preview',     label:t('common.preview', 'Preview') },
-    { key:'variables',   label:t('eng.tpl.tab_variables', 'Variables') },
-    { key:'performance', label:t('eng.tpl.tab_performance', 'Performance') },
     { key:'languages',   label:t('eng.tpl.tab_languages', 'Languages') },
+    { key:'performance', label:t('eng.tpl.tab_performance', 'Performance') },
     { key:'versions',    label:t('eng.tpl.versions', 'Versions') },
+    { key:'variables',   label:t('eng.tpl.tab_variables', 'Variables') },
   ]
 
-  const selectTemplate = (id) => {
-    setSelId(id)
-    setActiveTab('structure')
-    setStructCh('email')
-    setPrevCh('email')
-  }
+  const content = tplDetail?.content?.[previewLang] ?? tplDetail?.content?.[tplDetail?.primary_language] ?? {}
 
-  // ── Render helpers ──
-
-  const StatusBadge = ({ status, text }) => {
-    const cls = status === 'approved' ? 'tpl-sb-approved' : status === 'pending' ? 'tpl-sb-pending' : 'tpl-sb-review'
-    const icon = status === 'approved' ? 'check_circle' : status === 'pending' ? 'pending' : 'hourglass_top'
-    return <div className={`tpl-sb ${cls}`}><span className="material-symbols-outlined">{icon}</span>{text}</div>
-  }
-
-  const ChannelTag = ({ ch }) => <div className={`tpl-det-tag ${ch}`}>{ch === 'email' ? `📧 ${t('eng.channels.email', 'Email')}` : ch === 'wa' ? `💬 ${t('eng.channels.wa', 'WhatsApp')}` : `🔔 ${t('eng.tpl.push', 'Push')}`}</div>
-
-  // ── Structure section renderer ──
-  const TsSection = ({ type, icon, name, children }) => (
-    <div className={`tpl-ts-sec ${type}`}>
-      <div className="tpl-ts-hdr">
-        <div className={`tpl-ts-ico ${type}`}><span className="material-symbols-outlined">{icon}</span></div>
-        <div className="tpl-ts-name">{name}</div>
-        <span className={`tpl-ts-type ${type}`}>{type === 'editable' ? t('eng.tpl.editable', 'Editable') : t('eng.tpl.fixed', 'Fixed')}</span>
-      </div>
-      <div className="tpl-ts-body">{children}</div>
-    </div>
-  )
-
-  const TsField = ({ label, val, editable, limit }) => (
-    <div className="tpl-ts-field">
-      {label && <div className="tpl-ts-field-lbl">{label}</div>}
-      <div className={`tpl-ts-field-val${editable ? ' editable' : ' fixed-val'}`}>{val}</div>
-      {limit && <div className="tpl-ts-limit"><span className="material-symbols-outlined">straighten</span>{limit}</div>}
-    </div>
-  )
-
-  // ── TAB: Structure ──
-  const StructureTab = () => (
-    <div>
-      <div className="alert alert-info">
-        <span className="material-symbols-outlined">info</span>
-        <div dangerouslySetInnerHTML={{ __html: t('eng.tpl.structure_hint', '<strong>Green sections</strong> are yours to edit — fill in your content within the character limits shown. <strong>Grey sections</strong> are fixed by Mi Italia and cannot be changed.') }} />
-      </div>
-
-      <div className="tpl-ch-switch">
-        {['email','wa','push'].map(ch => (
-          <button key={ch} className={`btn btn-outline btn-sm tpl-ch-btn${structCh === ch ? ' act' : ''}`} onClick={() => setStructCh(ch)}>
-            {ch === 'email' ? `📧 ${t('eng.channels.email', 'Email')}` : ch === 'wa' ? `💬 ${t('eng.channels.wa', 'WhatsApp')}` : `🔔 ${t('eng.tpl.push', 'Push')}`} {t('eng.tpl.structure', 'Structure')}
-          </button>
-        ))}
-      </div>
-
-      {structCh === 'email' && (
-        <div className="tpl-ts">
-          <div className="cdp-sec-title">{t('eng.tpl.email_structure_title', { name: tpl.plainName, defaultValue: 'Email Template Structure — {{name}}' })}</div>
-          <TsSection type="fixed" icon="lock" name={t('eng.tpl.sec_header', 'Header — Mi Italia × Boutique Brand Bar')}>
-            <TsField val="Mi Italia logo + Sartoria Belloni boutique name, pulled automatically from your Store Profile. Black background, gold accents." />
-          </TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_hero', 'Hero Visual')}>
-            <TsField label="Image / Emoji" val="Upload a JPG or PNG (600px wide, 4:3 ratio recommended). Or leave the emoji placeholder." editable limit="Max file size: 2MB · Formats: JPG, PNG, WebP" />
-          </TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_subject_preview', 'Subject Line & Preview Text')}>
-            <TsField label="Subject Line" val={tpl.subjectEx} editable limit="40–80 characters recommended · No ALL CAPS · Max 1 emoji" />
-            <TsField label="Preview Text" val="Short supporting text visible in the inbox before opening" editable limit="Max 120 characters" />
-          </TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_body', 'Body Copy')}>
-            <TsField label="Greeting" val={<>Personalised greeting — e.g. "Dear <span className="tpl-ts-var">{'{{first_name}}'}</span>,"</>} editable />
-            <TsField label="Main Body" val={tpl.bodyEx} editable limit="Max 400 characters · Plain text only · No markdown" />
-          </TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_cta', 'Call to Action Button')}>
-            <TsField label="Button Label" val={tpl.ctaEx} editable limit="Max 24 characters" />
-            <TsField label="Destination" val="Your boutique page on Mi Italia, a specific product, or the new arrivals filter. All links must stay within Mi Italia." editable />
-          </TsSection>
-          <TsSection type="fixed" icon="lock" name={t('eng.tpl.sec_footer', 'Footer — Legal & Compliance')}>
-            <TsField val={<>Boutique address (from Store Profile) · Unsubscribe link (GDPR required) · Privacy Policy link · Mi Italia terms. <strong>This cannot be removed or modified.</strong></>} />
-          </TsSection>
-        </div>
-      )}
-
-      {structCh === 'wa' && (
-        <div className="tpl-ts">
-          <div className="cdp-sec-title">{t('eng.tpl.wa_structure_title', { name: tpl.plainName, defaultValue: 'WhatsApp Template Structure — {{name}}' })}</div>
-          <div className="alert alert-warn">
-            <span className="material-symbols-outlined">warning</span>
-            <div dangerouslySetInnerHTML={{ __html: t('eng.tpl.wa_structure_hint', 'WhatsApp template structure is set by Meta, not Mi Italia. Only the variable fields (shown in <span class="tpl-ts-var">purple</span>) can be changed per campaign.') }} />
-          </div>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_header_short', 'Header')}><TsField label="Header Text" val='e.g. "🌸 New Collection at Sartoria Belloni"' editable limit="Max 60 chars · No variables allowed in header" /></TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_body_short', 'Body')}><TsField label="Body Text with Variables" val={<>Dear <span className="tpl-ts-var">{'{{1}}'}</span>, [your message]. Variable <span className="tpl-ts-var">{'{{1}}'}</span> = First Name, <span className="tpl-ts-var">{'{{2}}'}</span> = Product Name.</>} editable limit="Max 1,024 chars · Up to 5 variables" /></TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_footer_short', 'Footer')}><TsField label="Footer Text" val='Boutique name, e.g. "Sartoria Belloni · Milano"' editable limit="Max 60 chars" /></TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_cta_btn', 'CTA Button')}><TsField label="Button Label & URL" val="Button text: max 20 chars. URL: must be an approved Mi Italia domain." editable /></TsSection>
-          <TsSection type="fixed" icon="lock" name={t('eng.tpl.sec_meta_optout', 'Meta Opt-Out Text')}><TsField val='WhatsApp automatically appends opt-out instructions ("Reply STOP to unsubscribe"). You cannot change this.' /></TsSection>
-        </div>
-      )}
-
-      {structCh === 'push' && (
-        <div className="tpl-ts">
-          <div className="cdp-sec-title">{t('eng.tpl.push_structure_title', { name: tpl.plainName, defaultValue: 'Push Notification Structure — {{name}}' })}</div>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_title', 'Title')}><TsField label="Notification Title" val='e.g. "New arrivals at Sartoria Belloni 🌸" — shown in bold on the lock screen' editable limit="Max 65 chars · iOS truncates at ~50 chars · 1 emoji max" /></TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_body_short', 'Body')}><TsField label="Body Text" val='One or two sentences max — e.g. "Our S/S 2026 collection has arrived in store."' editable limit="Max 240 chars · ~2 lines visible before truncation" /></TsSection>
-          <TsSection type="editable" icon="edit" name={t('eng.tpl.sec_action_deeplink', 'Action Button & Deep Link')}>
-            <TsField label="Button Label" val='e.g. "View Collection" — max 20 chars.' editable />
-            <TsField label="Deep Link" val="Where tapping opens in Mi Italia — your boutique page, a product, or a filtered collection." editable />
-          </TsSection>
-          <TsSection type="fixed" icon="lock" name={t('eng.tpl.sec_app_badge', 'App Badge & Icon')}><TsField val="Mi Italia app icon shown automatically by iOS/Android. Cannot be changed per notification." /></TsSection>
-        </div>
-      )}
-    </div>
-  )
-
-  // ── TAB: Preview ──
-  const PreviewTab = () => (
-    <div>
-      <div className="tpl-ch-switch">
-        {['email','wa','push'].map(ch => (
-          <button key={ch} className={`btn btn-outline btn-sm tpl-ch-btn${prevCh === ch ? ' act' : ''}`} onClick={() => setPrevCh(ch)}>
-            {ch === 'email' ? `📧 ${t('eng.channels.email', 'Email')}` : ch === 'wa' ? `💬 ${t('eng.channels.wa', 'WhatsApp')}` : `🔔 ${t('eng.tpl.push', 'Push')}`} {t('common.preview', 'Preview')}
-          </button>
-        ))}
-      </div>
-
-      {prevCh === 'email' && (
-        <>
-          <div className="tpl-email-frame">
-            <div className="tpl-ef-topbar">
-              <div className="tpl-ef-dots"><div className="tpl-ef-dot" style={{background:'#FF5F57'}} /><div className="tpl-ef-dot" style={{background:'#FFBD2E'}} /><div className="tpl-ef-dot" style={{background:'#28C840'}} /></div>
-              <div className="tpl-ef-urlbar">mail.google.com</div>
-            </div>
-            <div className="tpl-ef-subj-bar">
-              <div className="tpl-ef-from">From: {emailSettings
-                ? `${emailSettings.sender_display_name} via Mi Italia <${emailSettings.reply_to_email || `${emailSettings.sender_local_part}@${emailSettings.sender_domain}`}>`
-                : t('common.loading', 'Loading...')}</div>
-              <div className="tpl-ef-subj">{pv.subject}</div>
-              <div className="tpl-ef-preview">{pv.preview}</div>
-            </div>
-            <div className="tpl-ef-body">
-              <div className="tpl-ef-hdr"><div className="tpl-ef-logo">MI</div><div className="tpl-ef-brand">NEGLIA</div></div>
-              <div className="tpl-ef-hero">
-                <div className="tpl-ef-hero-overlay" />
-                <span className="tpl-ef-hero-emoji">{pv.heroEmoji}</span>
-                <div className="tpl-ef-hero-label">{pv.heroLabel}</div>
-              </div>
-              <div className="tpl-ef-content">
-                <div className="tpl-ef-greeting">{pv.greeting}</div>
-                <div className="tpl-ef-txt">{pv.body?.split('\n').map((line, i) => <span key={i}>{line}<br /></span>)}</div>
-                {pv.cta && <button className="tpl-ef-cta">{pv.cta}</button>}
-                <div className="tpl-ef-divider" />
-                <div className="tpl-ef-footer-txt">{t('eng.tpl.email_follow_footer', "You're receiving this because you follow Sartoria Belloni on Mi Italia.")}</div>
-              </div>
-              <div className="tpl-ef-footer">
-                <div className="tpl-ef-footer-txt">Sartoria Belloni · Corso Venezia 15 · 20121 Milano MI, Italy<br /><a>{t('eng.tpl.unsubscribe', 'Unsubscribe')}</a> · <a>{t('eng.tpl.privacy_policy', 'Privacy Policy')}</a> · <a>{t('eng.tpl.mi_italia_terms', 'Mi Italia Terms')}</a></div>
-              </div>
-            </div>
-          </div>
-          <div className="tpl-ef-note">{t('eng.tpl.showing_preview_for', 'Showing preview for')} <strong>Sofia Marchetti</strong> ({t('eng.camp.seg_vip', 'VIP')}) · <a>{t('eng.tpl.change_preview_contact', 'Change preview contact →')}</a></div>
-        </>
-      )}
-
-      {prevCh === 'wa' && (
-        <div className="tpl-wa-frame">
-          <div className="tpl-wa-top">
-            <div className="tpl-wa-av">N</div>
-            <div><div className="tpl-wa-biz">Sartoria Belloni</div><div className="tpl-wa-verified">{t('eng.tpl.wa_verified', '✓ Official Business · Verified')}</div></div>
-          </div>
-          <div className="tpl-wa-chat">
-            <div className="tpl-wa-bubble">
-              <div className="tpl-wa-bub-hdr"><div className="tpl-wa-bub-hdr-txt">{pv.waHdr}</div></div>
-              <div className="tpl-wa-bub-body"><div className="tpl-wa-bub-txt">{pv.waBody?.split('\n').map((line, i) => <span key={i}>{line}<br /></span>)}</div></div>
-              <div className="tpl-wa-bub-footer"><div className="tpl-wa-bub-footer-txt">Sartoria Belloni · Milano</div></div>
-              <div className="tpl-wa-time"><span className="tpl-wa-time-txt">10:24</span><span className="tpl-wa-ticks">✓✓</span></div>
-              <div className="tpl-wa-cta-div" />
-              <button className="tpl-wa-cta-btn"><span className="material-symbols-outlined">open_in_new</span>{t('eng.tpl.view_collection_mi', 'View Collection on Mi Italia')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {prevCh === 'push' && (
-        <div className="tpl-push-wrap">
-          <div className="tpl-push-device">
-            <div className="tpl-push-bg">
-              <div className="tpl-push-clock"><div className="tpl-push-time">10:24</div><div className="tpl-push-date">Tuesday, 5 May · Milano</div></div>
-              <div className="tpl-push-notif">
-                <div className="tpl-pn-row1"><div className="tpl-pn-app-ico">MI</div><div className="tpl-pn-app-name">Mi Italia</div><div className="tpl-pn-time">now</div></div>
-                <div className="tpl-pn-title">{pv.pushTitle}</div>
-                <div className="tpl-pn-body">{pv.pushBody}</div>
-                <div className="tpl-pn-actions"><div className="tpl-pn-btn">{t('eng.tpl.dismiss', 'Dismiss')}</div><div className="tpl-pn-btn primary">{t('eng.tpl.view_collection_arrow', 'View Collection →')}</div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-
-  // ── TAB: Variables ──
-  const VariablesTab = () => (
-    <div>
-      <div className="alert alert-info">
-        <span className="material-symbols-outlined">data_object</span>
-        <div>{t('eng.tpl.variables_hint', 'Variables are pulled automatically from your Mi Italia data at send time. If a value is missing for a contact, the fallback is used instead.')}</div>
-      </div>
-      {Object.entries(TPL_VARIABLES).map(([cat, vars]) => (
-        <div key={cat}>
-          <div className="cdp-sec-title">{t(`eng.tpl.varcat_${cat}`, { defaultValue: `${cat.charAt(0).toUpperCase() + cat.slice(1)} Variables` })}</div>
-          <div className="tpl-var-grid">
-            {vars.map(v => (
-              <div key={v.token} className={`tpl-var-card ${cat}`}>
-                <div className="tpl-var-token">{v.token}</div>
-                <div className="tpl-var-desc">{v.desc}</div>
-                <div className={`tpl-var-fb${v.fbOk ? ' tpl-var-fb-ok' : ''}`}><span className="material-symbols-outlined">{v.fbOk ? 'check_circle' : 'warning'}</span>{v.fb}</div>
-                <div className="tpl-var-ex"><span className="material-symbols-outlined">check_circle</span>{v.ex}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-
-  // ── TAB: Performance ──
-  const PerformanceTab = () => (
-    <div>
-      <div className="cdp-sec-title">{t('eng.tpl.perf_title', { name: tpl.plainName, defaultValue: 'Campaign Performance — {{name}} Template' })}</div>
-      {tpl.perf.length > 0 ? (
-        <div className="tpl-perf-card">
-          <div className="tpl-perf-hdr">
-            <div className="tpl-perf-hdr-txt">{t('eng.tpl.perf_count', { count: tpl.perf.length, defaultValue: '{{count}} campaigns using this template · Sorted by date' })}</div>
-          </div>
-          {tpl.perf.map((p, i) => (
-            <div key={i} className="tpl-perf-row">
-              <div className="tpl-perf-date">{p.date}</div>
-              <div className="tpl-perf-camp">
-                <div className="tpl-perf-camp-name">{p.name}</div>
-                <div className="tpl-perf-camp-meta">{p.meta}</div>
-                <div className="tpl-perf-bar-wrap"><div className="tpl-perf-bar" style={{width:`${p.barPct}%`}} /></div>
-              </div>
-              <div className="tpl-perf-stats">
-                <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{p.open}</div><div className="tpl-perf-stat-l">{t('eng.an.col_open_short', 'Open')}</div></div>
-                <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{p.click}</div><div className="tpl-perf-stat-l">{t('eng.an.col_click', 'Click')}</div></div>
-                <div className="tpl-perf-stat"><div className="tpl-perf-stat-v eng-green">{p.revenue}</div><div className="tpl-perf-stat-l">{t('eng.an.col_revenue', 'Revenue')}</div></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="eng-loading">{t('eng.tpl.no_perf_data', 'No performance data yet — this template has not been used in a campaign.')}</div>
-      )}
-
-      {tpl.bestSubjects.length > 0 && (
-        <div className="card card-flush">
-          <div className="card-hdr"><div className="card-title">{t('eng.tpl.best_subjects', 'Best Subject Lines')} <em>{t('eng.tpl.best_subjects_em', 'for this Template')}</em></div></div>
-          {tpl.bestSubjects.map((s, i) => (
-            <div key={i} className="tpl-subject-row">
-              <div className={`tpl-subject-pct${s.top ? ' eng-green' : ''}`}>{s.pct}</div>
-              <div><div className="tpl-subject-name">{s.name}</div><div className="tpl-subject-meta">{s.meta}</div></div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
-  // ── TAB: Languages ──
-  const LanguagesTab = () => (
-    <div>
-      <div className="alert alert-info">
-        <span className="material-symbols-outlined">translate</span>
-        <div dangerouslySetInnerHTML={{ __html: t('eng.tpl.langs_hint', 'Mi Italia supports 8 languages. When you send a campaign, each contact receives it in <strong>their preferred language</strong> automatically. You write once — Mi Italia handles translation.') }} />
-      </div>
-      <div className="cdp-sec-title">{t('eng.tpl.available_langs_title', { name: tpl.plainName, defaultValue: 'Available Language Versions — {{name}} Template' })}</div>
-      <div className="tpl-lang-grid">
-        {getTplLanguages(t).map(l => (
-          <div key={l.code} className={`tpl-lang-card${l.sel ? ' sel' : ''}${!l.ready ? ' unavail' : ''}`}>
-            <div className="tpl-lang-flag">{l.flag}</div>
-            <div className="tpl-lang-name">{l.name}</div>
-            <div className={`tpl-lang-status${l.ready ? ' ready' : ' unavail'}`}>
-              {l.ready ? `✓ ${l.status}` : l.status}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {tpl.langContent && (
-        <div className="card card-flush">
-          <div className="card-hdr"><div className="card-title">{langDisplayName('it', t)} <em>{t('eng.tpl.version', 'Version')}</em></div><button className="btn btn-outline btn-sm">{t('eng.tpl.edit_content', 'Edit content')}</button></div>
-          <div className="tpl-lang-content">
-            <div className="tpl-lang-subj">{t('eng.tpl.oggetto', 'Oggetto:')} {tpl.langContent.subject}</div>
-            <div className="tpl-lang-prev">{t('eng.tpl.anteprima', 'Anteprima:')} {tpl.langContent.preview}</div>
-            <div>{tpl.langContent.body?.split('\n').map((line, i) => <span key={i}>{line}<br /></span>)}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="alert alert-warn">
-        <span className="material-symbols-outlined">translate</span>
-        <div>{t('eng.tpl.langs_not_available', 'Arabic, Mandarin, and Japanese versions are not yet available for this template. Contacts with these preferences will receive the English version.')}</div>
-      </div>
-      <button className="btn btn-outline btn-sm" disabled={langRequesting} onClick={handleRequestTranslation}>
-        <span className="material-symbols-outlined">add</span>{langRequesting ? t('eng.tpl.requesting', 'Requesting…') : t('eng.tpl.request_translation_btn', 'Request Arabic / Mandarin / Japanese translation')}
-      </button>
-      {langNote && <div className="alert alert-warn" style={{ marginTop:10 }}>{langNote}</div>}
-    </div>
-  )
-
-  // ── TAB: Versions ──
-  const VersionsTab = () => (
-    <div>
-      <div className="cdp-sec-title">{t('eng.tpl.version_history_title', { name: tpl.plainName, defaultValue: 'Version History — {{name}} Template' })}</div>
-      <div className="alert alert-info">
-        <span className="material-symbols-outlined">history</span>
-        <div>{t('eng.tpl.version_hint', 'When Mi Italia updates a template, a new version is created. Your campaigns always use the version active at send time. You can view past versions but cannot revert.')}</div>
-      </div>
-      {(tpl.versions || []).map((v, i) => (
-        <div key={i} className="tpl-ver-row">
-          <div>
-            <div className="tpl-ver-name">{v.ver} <span className={`tpl-ver-badge ${v.badge}`}>{v.badge === 'current' ? t('eng.tpl.current', 'Current') : t('eng.tpl.archived', 'Archived')}</span></div>
-            <div className="tpl-ver-meta">{v.desc}</div>
-          </div>
-          <button className="btn btn-outline btn-xs">{t('eng.tpl.view', 'View')}</button>
-        </div>
-      ))}
-      {(!tpl.versions || tpl.versions.length === 0) && (
-        <div className="eng-loading">{t('eng.tpl.no_version_history', 'No version history — this template is still in draft.')}</div>
-      )}
-
-      <div className="eng-card-footer">
-        <div className="cdp-sec-title">{t('eng.tpl.request_change', 'Request a Change')}</div>
-        <div className="card card-flush">
-          <div className="tpl-perf-hdr-txt">{t('eng.tpl.request_custom_hint', "Need something this template can't do? Submit a change request to Mi Italia.")}</div>
-          <div className="form-group"><label className="form-lbl">{t('eng.tpl.what_change', 'What would you like to change?')}</label><textarea className="form-textarea" placeholder={t('eng.tpl.what_change_placeholder', "e.g. I'd like to add a second CTA button…")} /></div>
-          <button className="btn btn-outline btn-sm"><span className="material-symbols-outlined">send</span>{t('eng.tpl.submit_change_request', 'Submit Change Request')}</button>
-        </div>
-      </div>
-    </div>
-  )
-
-  // ── MODALS ──
-  const UseTemplateModal = () => (
-    <div className="modal-backdrop" onClick={() => setShowUseModal(false)}>
-      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-        <div className="modal-hdr">
-          <div className="modal-title">{t('eng.tpl.use_template_title', 'Use')} <em>{tpl.plainName}</em> {t('eng.tpl.use_template_title_em', 'Template')}</div>
-          <div className="modal-close" onClick={() => setShowUseModal(false)}><span className="material-symbols-outlined">close</span></div>
-        </div>
-        <div className="form-row2">
-          <div className="form-group"><label className="form-lbl">{t('eng.camp.name_label', 'Campaign Name')}</label><input className="form-input" placeholder="e.g. Spring 2026 — New Arrivals" /></div>
-          <div className="form-group"><label className="form-lbl">{t('eng.camp.channel', 'Channel')}</label><div className="select-wrap"><select className="form-select"><option>📧 {t('eng.tpl.reachable_email', { count: 612, defaultValue: 'Email ({{count}} reachable)' })}</option><option>💬 {t('eng.tpl.reachable_wa', { count: 389, defaultValue: 'WhatsApp ({{count}} reachable)' })}</option><option>🔔 {t('eng.tpl.reachable_push', { count: 501, defaultValue: 'Push ({{count}} reachable)' })}</option></select><span className="material-symbols-outlined select-arrow">expand_more</span></div></div>
-        </div>
-        <div className="form-group"><label className="form-lbl">{t('eng.ct.language', 'Language')}</label><div className="select-wrap"><select className="form-select"><option>{t('eng.tpl.lang_primary', { lang: langDisplayName('it', t), defaultValue: '{{lang}} (primary)' })}</option><option>{langDisplayName('en', t)}</option><option>{langDisplayName('fr', t)}</option><option>{langDisplayName('de', t)}</option><option>{langDisplayName('es', t)}</option><option>{t('eng.tpl.lang_auto_detect', 'All languages — auto-detect per contact')}</option></select><span className="material-symbols-outlined select-arrow">expand_more</span></div></div>
-        <div className="alert alert-info"><span className="material-symbols-outlined">arrow_forward</span><div dangerouslySetInnerHTML={{ __html: t('eng.tpl.use_modal_hint', 'Clicking "Continue to Builder" opens the Campaign Builder — pick this template from the template picker in Step 3.') }} /></div>
-        <div className="modal-footer">
-          <button className="btn btn-outline" onClick={() => setShowUseModal(false)}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary" onClick={() => { setShowUseModal(false); onNavigateToBuilder && onNavigateToBuilder() }}><span className="material-symbols-outlined">arrow_forward</span>{t('eng.tpl.continue_to_builder', 'Continue to Builder')}</button>
-        </div>
-      </div>
-    </div>
-  )
-
-  const RequestModal = () => (
-    <div className="modal-backdrop" onClick={() => setShowRequestModal(false)}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-hdr">
-          <div className="modal-title">{t('eng.tpl.request_title', 'Request a')} <em>{t('eng.tpl.request_title_em', 'Custom Template')}</em></div>
-          <div className="modal-close" onClick={() => setShowRequestModal(false)}><span className="material-symbols-outlined">close</span></div>
-        </div>
-        <div className="alert alert-info"><span className="material-symbols-outlined">info</span><div dangerouslySetInnerHTML={{ __html: t('eng.tpl.request_timeline_hint', 'Mi Italia will build, translate, and submit your custom template. Timeline: <strong>3–5 business days</strong> for Email/Push · <strong>5–10 days</strong> for WhatsApp (Meta review).') }} /></div>
-        <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name', 'Template Name')}</label><input className="form-input" placeholder="e.g. Post-Purchase Thank You" /></div>
-        <div className="form-row2">
-          <div className="form-group"><label className="form-lbl">{t('eng.tpl.channels_needed', 'Channels Needed')}</label><div className="select-wrap"><select className="form-select"><option>{t('eng.tpl.email_only', 'Email only')}</option><option>{t('eng.tpl.wa_only', 'WhatsApp only')}</option><option>{t('eng.tpl.push_only', 'Push only')}</option><option>{t('eng.tpl.all_three', 'All three')}</option><option>{t('eng.tpl.email_wa', 'Email + WhatsApp')}</option></select><span className="material-symbols-outlined select-arrow">expand_more</span></div></div>
-          <div className="form-group"><label className="form-lbl">{t('eng.tpl.category', 'Category')}</label><div className="select-wrap"><select className="form-select"><option>{t('eng.tpl.cat_customer_engagement', 'Customer engagement')}</option><option>{t('eng.tpl.cat_product_announcement', 'Product announcement')}</option><option>{t('eng.tpl.cat_transactional', 'Transactional')}</option><option>{t('eng.tpl.cat_reengagement', 'Re-engagement')}</option><option>{t('eng.tpl.cat_seasonal_event', 'Seasonal / event')}</option></select><span className="material-symbols-outlined select-arrow">expand_more</span></div></div>
-        </div>
-        <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need', 'Describe what you need')}</label><textarea className="form-textarea" rows={4} placeholder="Purpose, audience, sections, specific requirements…" /></div>
-        <div className="form-group"><label className="form-lbl">{t('eng.tpl.reference_examples', 'Reference examples?')}</label><input className="form-input" placeholder="Paste a URL or describe a campaign that inspired this" /></div>
-        <div className="form-row2">
-          <div className="form-group"><label className="form-lbl">{t('eng.tpl.priority', 'Priority')}</label><div className="select-wrap"><select className="form-select"><option>{t('eng.tpl.priority_standard', 'Standard (3–5 days)')}</option><option>{t('eng.tpl.priority_urgent', 'Urgent (+50% fee — 1–2 days)')}</option></select><span className="material-symbols-outlined select-arrow">expand_more</span></div></div>
-          <div className="form-group"><label className="form-lbl">{t('eng.tpl.target_send_date', 'Target Send Date')}</label><input className="form-input" type="date" /></div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-outline" onClick={() => setShowRequestModal(false)}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary"><span className="material-symbols-outlined">send</span>{t('eng.tpl.submit_template_request', 'Submit Template Request')}</button>
-        </div>
-      </div>
-    </div>
-  )
-
-  // ── MAIN RENDER ──
   return (
     <>
-    <RealTemplatesPanel />
     <div className="tpl-wrap">
       {/* ── LIBRARY PANEL ── */}
       <div className="tpl-library">
         <div className="tpl-lib-hdr">
           <div className="tpl-lib-title">{t('eng.tpl.lib_title', 'Campaign')} <em>{t('eng.tpl.lib_title_em', 'Templates')}</em></div>
-          <div className="tpl-lib-count">{t('eng.tpl.lib_count', { count: Object.keys(TEMPLATES).length, pending: 2, defaultValue: '{{count}} templates available · {{pending}} pending approval' })}</div>
+          <div className="tpl-lib-count">{t('eng.tpl.lib_count_real', { count: templates.length, defaultValue: '{{count}} template(s)' })}</div>
         </div>
 
         <div className="tpl-lib-search">
@@ -4393,58 +4439,36 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
 
         <div className="tpl-filters">
           <div className="tpl-filter-row">
-            <div className="tpl-chip on">{t('eng.camp.ch_all', 'All')}</div>
-            <div className="tpl-chip email-on">📧 {t('eng.channels.email', 'Email')}</div>
-            <div className="tpl-chip wa-on">💬 {t('eng.channels.wa', 'WhatsApp')}</div>
-            <div className="tpl-chip push-on">🔔 {t('eng.tpl.push', 'Push')}</div>
-          </div>
-          <div className="tpl-filter-row">
-            <div className="tpl-chip off">✓ {t('eng.tpl.approved', 'Approved')}</div>
-            <div className="tpl-chip off">⏳ {t('common.pending', 'Pending')}</div>
-            <div className="tpl-chip off">{t('eng.tpl.used_before', 'Used before')}</div>
-            <div className="tpl-chip off">{t('eng.tpl.cat_seasonal', 'Seasonal')}</div>
+            <div className={`tpl-chip${channelFilter === 'all' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('all')}>{t('eng.camp.ch_all', 'All')}</div>
+            <div className={`tpl-chip${channelFilter === 'email' ? ' email-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('email')}>📧 {t('eng.channels.email', 'Email')}</div>
+            <div className={`tpl-chip${channelFilter === 'whatsapp' ? ' wa-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('whatsapp')}>💬 {t('eng.channels.wa', 'WhatsApp')}</div>
+            <div className={`tpl-chip${channelFilter === 'push' ? ' push-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('push')}>🔔 {t('eng.tpl.push', 'Push')}</div>
           </div>
         </div>
 
         <div className="tpl-lib-list">
-          {getTplKeysByCat(t).map(cat => {
-            const visibleKeys = cat.keys.filter(k => {
-              if (!searchQ.trim()) return true
-              const tpl = TEMPLATES[k]
-              return tpl.plainName.toLowerCase().includes(searchQ.toLowerCase())
-            })
-            if (visibleKeys.length === 0) return null
-            return (
-              <div key={cat.label}>
-                <div className="tpl-sec-label">{cat.label}</div>
-                {visibleKeys.map(k => {
-                  const tpl = TEMPLATES[k]
-                  return (
-                    <div key={k} className={`tpl-row${selId === k ? ' sel' : ''}`} onClick={() => selectTemplate(k)}>
-                      <div className="tpl-row-thumb" style={{background:tpl.grad}}>
-                        {tpl.emoji}
-                        <div className={`tpl-row-status ${tpl.status === 'review' ? 'review' : tpl.status}`}>
-                          {tpl.status === 'approved' ? '✓' : tpl.status === 'pending' ? '!' : '↻'}
-                        </div>
-                      </div>
-                      <div className="tpl-row-body">
-                        <div className="tpl-row-name">{tpl.plainName}</div>
-                        <div className="tpl-row-meta">
-                          {tpl.channels.map(ch => <span key={ch} className="tpl-row-meta"><span className={`tpl-ch-dot ${ch}`} />{ch === 'email' ? t('eng.channels.email', 'Email') : ch === 'wa' ? t('eng.channels.wa', 'WhatsApp') : t('eng.tpl.push', 'Push')}</span>)}
-                          {tpl.status === 'pending' && <span className="tpl-review-txt">{t('eng.tpl.review_required', 'Review required')}</span>}
-                          {tpl.status === 'review' && <span className="tpl-in-review-txt">{t('eng.tpl.in_review', 'In Mi Italia review')}</span>}
-                        </div>
-                      </div>
-                      <div className="tpl-row-perf">
-                        <div className="tpl-row-perf-val">{tpl.stats[1]}</div>
-                        <div className="tpl-row-perf-lbl">{tpl.statSub[1]?.replace(/Avg |· Email| · WhatsApp| · Push/g, '') || t('eng.tpl.no_data', 'no data')}</div>
-                      </div>
-                    </div>
-                  )
-                })}
+          <button className="btn btn-primary btn-sm" style={{ marginBottom:12 }} onClick={openCreate}>
+            <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real', 'Create Template')}
+          </button>
+          {loadingList ? (
+            <div className="eng-loading">{t('eng.tpl.loading_real', 'Loading templates…')}</div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="eng-loading">{t('eng.tpl.no_real_templates', 'No templates yet.')}</div>
+          ) : (
+            filteredTemplates.map(tpl => (
+              <div key={tpl.id} className={`tpl-row${selId === tpl.id ? ' sel' : ''}`} onClick={() => setSelId(tpl.id)}>
+                <div className="tpl-row-thumb">{templateEmoji(tpl.template_key)}</div>
+                <div className="tpl-row-body">
+                  <div className="tpl-row-name">{templateDisplayName(tpl.template_key, t)}</div>
+                  <div className="tpl-row-meta">
+                    <span className="tpl-row-meta"><span className={`tpl-ch-dot ${tplChDotClass(tpl.channel)}`} />{templateChannelLabel(tpl.channel, t)}</span>
+                    {tpl.translations_pending && <span className="tpl-review-txt">{t('eng.tpl.translations_pending', 'Translations pending')}</span>}
+                  </div>
+                </div>
+                <button className="btn btn-outline btn-xs btn-red" onClick={e => { e.stopPropagation(); setDeleteTarget(tpl) }}>{t('common.delete', 'Delete')}</button>
               </div>
-            )
-          })}
+            ))
+          )}
 
           <div className="tpl-request" onClick={() => setShowRequestModal(true)}>
             <div className="material-symbols-outlined tpl-request-icon">add_circle</div>
@@ -4457,220 +4481,302 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       {/* ── DETAIL PANEL ── */}
       <div className="tpl-detail">
         <div className="tpl-detail-inner">
-          {/* Header */}
-          <div className="tpl-det-hdr">
-            <div className="tpl-det-top">
-              <div className="tpl-det-thumb" style={{background:tpl.grad}}>{tpl.emoji}</div>
-              <div className="tpl-det-title-block">
-                <div className="tpl-det-name">{tpl.name}</div>
-                <div className="tpl-det-desc">{tpl.desc}</div>
-                <div className="tpl-det-tags">
-                  <StatusBadge status={tpl.status} text={tpl.statusText} />
-                  {tpl.channels.map(ch => <ChannelTag key={ch} ch={ch} />)}
-                  <div className="tpl-det-tag ver">{tpl.version}</div>
+          {!tplDetail ? (
+            <div className="eng-loading">{detailLoading ? t('eng.tpl.loading_real', 'Loading…') : t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
+          ) : (
+            <>
+              <div className="tpl-det-hdr">
+                <div className="tpl-det-top">
+                  <div className="tpl-det-thumb">{templateEmoji(tplDetail.template_key)}</div>
+                  <div className="tpl-det-title-block">
+                    <div className="tpl-det-name">{templateDisplayName(tplDetail.template_key, t)}</div>
+                    <div className="tpl-det-tags">
+                      <div className={`tpl-det-tag ${tplChDotClass(tplDetail.channel)}`}>{templateChannelTag(tplDetail.channel, t)}</div>
+                      <div className="tpl-det-tag">{langDisplayName(tplDetail.primary_language, t)} · {t('eng.tpl.source', 'source')}</div>
+                      {tplDetail.translations_pending && <div className="tpl-det-tag">{t('eng.tpl.translations_pending', 'Translations pending')}</div>}
+                    </div>
+                  </div>
+                  <div className="tpl-det-actions">
+                    <button className="btn btn-outline btn-sm" onClick={() => openEdit(tplDetail)}><span className="material-symbols-outlined">edit</span>{t('common.edit', 'Edit')}</button>
+                    <button className="btn btn-primary" onClick={() => onNavigateToBuilder?.(tplDetail.id, tplDetail.channel)}><span className="material-symbols-outlined">campaign</span>{t('eng.tpl.use_template', 'Use Template')}</button>
+                  </div>
                 </div>
               </div>
-              <div className="tpl-det-actions">
-                <button className="btn btn-outline btn-sm"><span className="material-symbols-outlined">history</span>{t('eng.tpl.versions', 'Versions')}</button>
-                <button className="btn btn-primary" onClick={() => setShowUseModal(true)}><span className="material-symbols-outlined">edit</span>{t('eng.tpl.use_template', 'Use Template')}</button>
-              </div>
-            </div>
-          </div>
 
-          {/* Stats */}
-          <div className="tpl-stats">
-            {tpl.stats.map((v, i) => (
-              <div key={i} className="tpl-stat">
-                <div className="tpl-stat-val">{v}</div>
-                <div className="tpl-stat-lbl">{getTplStatLabels(t)[i]}</div>
-                <div className="tpl-stat-sub">{tpl.statSub[i]}</div>
-              </div>
-            ))}
-          </div>
+              {perf && (
+                <div className="tpl-stats">
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.usage_count ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_times_used', 'Times Used')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_open', 'Avg Open Rate')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_click', 'Avg Click Rate')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.counts?.recipients ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_recipients', 'Recipients')}</div></div>
+                </div>
+              )}
 
-          {/* Tabs */}
-          <div className="tpl-tabs">
-            {TABS.map(tab => (
-              <div key={tab.key} className={`tpl-tab${activeTab === tab.key ? ' act' : ''}`} onClick={() => setActiveTab(tab.key)}>
-                {tab.label}
+              <div className="tpl-tabs">
+                {TABS.map(tab => (
+                  <div key={tab.key} className={`tpl-tab${activeTab === tab.key ? ' act' : ''}`} onClick={() => setActiveTab(tab.key)}>{tab.label}</div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Tab content */}
-          {activeTab === 'structure'   && <StructureTab />}
-          {activeTab === 'preview'     && <PreviewTab />}
-          {activeTab === 'variables'   && <VariablesTab />}
-          {activeTab === 'performance' && <PerformanceTab />}
-          {activeTab === 'languages'   && <LanguagesTab />}
-          {activeTab === 'versions'    && <VersionsTab />}
+              {activeTab === 'structure' && (
+                <div>
+                  <div className="alert alert-info">
+                    <span className="material-symbols-outlined">info</span>
+                    <div>{t('eng.tpl.structure_hint_real', 'This is the primary-language content. Click Edit to change it — saving invalidates existing translations.')}</div>
+                  </div>
+                  {tplDetail.channel === 'whatsapp' ? (
+                    <div className="tpl-ts">
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short', 'Body')}</div>
+                      <div className="tpl-ts-field-val fixed-val">{content.body || '—'}</div>
+                    </div>
+                  ) : tplDetail.channel === 'push' ? (
+                    <div className="tpl-ts">
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_title', 'Title')}</div>
+                      <div className="tpl-ts-field-val fixed-val">{content.title || '—'}</div>
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short', 'Body')}</div>
+                      <div className="tpl-ts-field-val fixed-val">{content.body || '—'}</div>
+                    </div>
+                  ) : (
+                    <div className="tpl-ts">
+                      <div className="cdp-sec-title">{t('eng.rev.subject', 'Subject')}</div>
+                      <div className="tpl-ts-field-val fixed-val">{content.subject || '—'}</div>
+                      <div className="cdp-sec-title">{t('eng.rev.body', 'Body')}</div>
+                      <div className="tpl-ts-field-val fixed-val">{content.text || '—'}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'preview' && (
+                <div>
+                  {Object.keys(tplDetail.content || {}).length > 1 && (
+                    <div className="select-wrap" style={{ maxWidth:220, marginBottom:12 }}>
+                      <select className="form-select" value={previewLang || ''} onChange={e => setPreviewLang(e.target.value)}>
+                        {Object.keys(tplDetail.content).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {tplDetail.channel === 'email' && (
+                    <div className="tpl-email-frame">
+                      <div className="tpl-ef-topbar">
+                        <div className="tpl-ef-dots"><div className="tpl-ef-dot" style={{background:'#FF5F57'}} /><div className="tpl-ef-dot" style={{background:'#FFBD2E'}} /><div className="tpl-ef-dot" style={{background:'#28C840'}} /></div>
+                        <div className="tpl-ef-urlbar">mail.google.com</div>
+                      </div>
+                      <div className="tpl-ef-subj-bar">
+                        <div className="tpl-ef-from">{t('eng.tpl.from_label', 'From:')} {emailSettings ? `${emailSettings.sender_display_name} <${emailSettings.reply_to_email || `${emailSettings.sender_local_part}@${emailSettings.sender_domain}`}>` : t('common.loading', 'Loading...')}</div>
+                        <div className="tpl-ef-subj">{content.subject || '—'}</div>
+                      </div>
+                      <div className="tpl-ef-body">
+                        {content.html
+                          ? <div dangerouslySetInnerHTML={{ __html: content.html }} />
+                          : <div className="tpl-ef-content"><div className="tpl-ef-txt">{(content.text || '—').split('\n').map((line, i) => <span key={i}>{line}<br /></span>)}</div></div>}
+                      </div>
+                    </div>
+                  )}
+                  {tplDetail.channel === 'whatsapp' && (
+                    <div className="tpl-wa-frame">
+                      <div className="tpl-wa-top">
+                        <div className="tpl-wa-av">{templateEmoji(tplDetail.template_key)}</div>
+                        <div><div className="tpl-wa-biz">{t('eng.tpl.wa_preview_biz', 'Your Boutique')}</div></div>
+                      </div>
+                      <div className="tpl-wa-chat">
+                        <div className="tpl-wa-bubble">
+                          <div className="tpl-wa-bub-body"><div className="tpl-wa-bub-txt">{(content.body || '—').split('\n').map((line, i) => <span key={i}>{line}<br /></span>)}</div></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {tplDetail.channel === 'push' && (
+                    <div className="tpl-push-wrap">
+                      <div className="tpl-push-device">
+                        <div className="tpl-push-bg">
+                          <div className="tpl-push-notif">
+                            <div className="tpl-pn-row1"><div className="tpl-pn-app-ico">MI</div><div className="tpl-pn-app-name">Mi Italia</div></div>
+                            <div className="tpl-pn-title">{content.title || '—'}</div>
+                            <div className="tpl-pn-body">{content.body || '—'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'languages' && (
+                <div>
+                  <div className="alert alert-info">
+                    <span className="material-symbols-outlined">translate</span>
+                    <div>{t('eng.tpl.langs_hint_real', 'Contacts receive this template in their preferred language automatically. Missing languages fall back to the primary language.')}</div>
+                  </div>
+                  <div className="tpl-lang-grid">
+                    {Object.keys(LANG_MAP).map(code => {
+                      const ready = !!tplDetail.content?.[code]
+                      const isPrimary = code === tplDetail.primary_language
+                      return (
+                        <div key={code} className={`tpl-lang-card${ready ? ' sel' : ' unavail'}`}>
+                          <div className="tpl-lang-flag">{LANG_MAP[code].flag}</div>
+                          <div className="tpl-lang-name">{langDisplayName(code, t)}</div>
+                          <div className={`tpl-lang-status${ready ? ' ready' : ' unavail'}`}>
+                            {isPrimary ? t('eng.rev.source_tag', 'Source') : ready ? `✓ ${t('eng.tpl.status_approved_ready', 'Ready')}` : t('eng.tpl.status_not_available', 'Not yet translated')}
+                          </div>
+                          {!isPrimary && (
+                            <button className="btn btn-outline btn-xs" disabled={!!langBusy} onClick={() => retranslateLang(code)} style={{ marginTop:6 }}>
+                              {langBusy === code ? t('eng.tpl.requesting', 'Requesting…') : ready ? t('eng.tpl.retranslate', 'Re-translate') : t('eng.tpl.translate', 'Translate')}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {langNote && <div className="alert alert-warn" style={{ marginTop:10 }}>{langNote}</div>}
+                </div>
+              )}
+
+              {activeTab === 'performance' && (
+                <div>
+                  <div className="cdp-sec-title">{t('eng.tpl.perf_title', { name: templateDisplayName(tplDetail.template_key, t), defaultValue: 'Campaign Performance — {{name}}' })}</div>
+                  {perfLoading ? (
+                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                  ) : !perf || (perf.usage_count ?? 0) === 0 ? (
+                    <div className="eng-loading">{t('eng.tpl.no_perf_data', 'No performance data yet — this template has not been used in a campaign.')}</div>
+                  ) : (
+                    <div className="tpl-perf-card">
+                      <div className="tpl-perf-hdr"><div className="tpl-perf-hdr-txt">{t('eng.tpl.perf_count', { count: perf.usage_count, defaultValue: '{{count}} campaign(s) using this template' })}</div></div>
+                      <div className="tpl-perf-stats">
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.counts?.recipients ?? 0}</div><div className="tpl-perf-stat-l">{t('eng.an.col_recipients', 'Recipients')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_open_short', 'Open')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_click', 'Click')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.bounce != null ? `${perf.rates.bounce}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_bounce', 'Bounce')}</div></div>
+                      </div>
+                      {(perf.campaigns_used_in ?? []).length > 0 && (
+                        <div>
+                          {perf.campaigns_used_in.map((c, i) => (
+                            <div key={c.id ?? i} className="tpl-perf-row">
+                              <div className="tpl-perf-camp">
+                                <div className="tpl-perf-camp-name">{c.campaign_name || c.name || t('eng.tpl.untitled_campaign', 'Untitled campaign')}</div>
+                                {c.sent_at && <div className="tpl-perf-camp-meta">{formatDate(c.sent_at)}</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'versions' && (
+                <div>
+                  <div className="cdp-sec-title">{t('eng.tpl.version_history_title', { name: templateDisplayName(tplDetail.template_key, t), defaultValue: 'Version History — {{name}}' })}</div>
+                  {versionsLoading ? (
+                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                  ) : versions.length === 0 ? (
+                    <div className="eng-loading">{t('eng.tpl.no_version_history', 'No version history yet.')}</div>
+                  ) : (
+                    versions.map((v, i) => (
+                      <div key={v.id ?? i} className="tpl-ver-row">
+                        <div>
+                          <div className="tpl-ver-name">
+                            {t('eng.tpl.version_n', { n: v.version_number, defaultValue: 'Version {{n}}' })}
+                            {i === 0 && <span className="tpl-ver-badge current">{t('eng.tpl.current', 'Current')}</span>}
+                          </div>
+                          <div className="tpl-ver-meta">{formatDate(v.created_at)}{v.change_note ? ` · ${v.change_note}` : ''}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  <div className="eng-card-footer">
+                    <div className="cdp-sec-title">{t('eng.tpl.request_change', 'Request a Change')}</div>
+                    {!changeRequestsLoading && changeRequests.length > 0 && (
+                      <div style={{ marginBottom:12 }}>
+                        {changeRequests.map(cr => (
+                          <div key={cr.id} className="tpl-ver-row">
+                            <div>
+                              <div className="tpl-ver-name">{cr.request_text} <span className={`tpl-ver-badge ${cr.status === 'open' ? 'archived' : 'current'}`}>{cr.status}</span></div>
+                              <div className="tpl-ver-meta">{formatDate(cr.created_at)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="card card-flush">
+                      <div className="tpl-perf-hdr-txt">{t('eng.tpl.request_custom_hint', "Need something this template can't do? Submit a change request to Mi Italia.")}</div>
+                      {changeRequestError && <div className="eng-error">{changeRequestError}</div>}
+                      <div className="form-group">
+                        <label className="form-lbl">{t('eng.tpl.what_change', 'What would you like to change?')}</label>
+                        <textarea className="form-textarea" placeholder={t('eng.tpl.what_change_placeholder', "e.g. I'd like to add a second CTA button…")} value={changeRequestText} onChange={e => setChangeRequestText(e.target.value)} />
+                      </div>
+                      <button className="btn btn-outline btn-sm" disabled={changeRequestSending || !changeRequestText.trim()} onClick={submitChangeRequest}>
+                        <span className="material-symbols-outlined">send</span>{changeRequestSending ? t('eng.rev.sending', 'Sending…') : t('eng.tpl.submit_change_request', 'Submit Change Request')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'variables' && (
+                <div>
+                  <div className="alert alert-info">
+                    <span className="material-symbols-outlined">data_object</span>
+                    <div>{t('eng.tpl.variables_hint', 'Variables are pulled automatically from your Mi Italia data at send time.')}</div>
+                  </div>
+                  {variablesLoading ? (
+                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                  ) : (
+                    <div className="tpl-var-grid">
+                      {variables.map(v => (
+                        <div key={v.key} className="tpl-var-card">
+                          <div className="tpl-var-token">{`{{${v.key}}}`}</div>
+                          <div className="tpl-var-desc">{v.description}</div>
+                          <div className="tpl-var-ex"><span className="material-symbols-outlined">check_circle</span>{v.example}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
-
-      {/* Modals */}
-      {showUseModal && <UseTemplateModal />}
-      {showRequestModal && <RequestModal />}
     </div>
+
+    {showForm && (
+      <RealTemplateFormModal
+        template={editingTpl}
+        onClose={() => setShowForm(false)}
+        onSaved={onFormSaved}
+      />
+    )}
+    {deleteTarget && (
+      <div className="modal-backdrop" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}>
+        <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+          <div className="modal-hdr">
+            <div className="modal-title">{t('eng.tpl.delete_title', 'Delete')} <em>{t('eng.tpl.delete_title_em', 'Template')}</em></div>
+            <div className="modal-close" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}><span className="material-symbols-outlined">close</span></div>
+          </div>
+          {deleteError && <div className="eng-error">{deleteError}</div>}
+          <div>{t('eng.tpl.confirm_delete', { name: templateDisplayName(deleteTarget.template_key, t), defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
+          <div className="modal-footer">
+            <button className="btn btn-outline" onClick={() => { setDeleteTarget(null); setDeleteError('') }} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
+            <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
+              <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting…') : t('common.delete', 'Delete')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {showRequestModal && (
+      <TemplateRequestModal
+        requestName={requestName} setRequestName={setRequestName}
+        requestChannel={requestChannel} setRequestChannel={setRequestChannel}
+        requestDescribe={requestDescribe} setRequestDescribe={setRequestDescribe}
+        requestError={requestError} requestSending={requestSending} requestSent={requestSent}
+        onClose={closeRequestModal} onSubmit={handleSubmitRequest}
+      />
+    )}
     </>
-  )
-}
-
-// ── REAL TEMPLATES (separate from the mock catalog above) ──
-function RealTemplatesPanel() {
-  const { t } = useTranslation()
-  const [templates, setTemplates] = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [showForm,  setShowForm]  = useState(false)
-  const [editing,   setEditing]   = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting,     setDeleting]     = useState(false)
-
-  const refetch = () => {
-    setLoading(true)
-    templateApi.list()
-      .then(res => { if (res?.success) setTemplates(res.data?.templates ?? []) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }
-  useEffect(() => { refetch() }, [])
-
-  const openEdit = async (tpl) => {
-    const res = await templateApi.get(tpl.id).catch(() => null)
-    setEditing(res?.success ? res.data?.template : tpl)
-    setShowForm(true)
-  }
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return
-    setDeleting(true)
-    templateApi.delete(deleteTarget.id)
-      .then(res => { if (res?.success) { setDeleteTarget(null); refetch() } })
-      .catch(() => {})
-      .finally(() => setDeleting(false))
-  }
-
-  return (
-    <div className="card eng-mb18">
-      <div className="card-hdr">
-        <div className="card-title">{t('eng.tpl.real_title', 'Your')} <em>{t('eng.tpl.real_title_em', 'Templates')}</em></div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setEditing(null); setShowForm(true) }}>
-          <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real', 'Create Template')}
-        </button>
-      </div>
-      {loading ? (
-        <div className="eng-loading">{t('eng.tpl.loading_real', 'Loading templates…')}</div>
-      ) : templates.length === 0 ? (
-        <div className="eng-loading">{t('eng.tpl.no_real_templates', 'No templates yet.')}</div>
-      ) : (
-        templates.map(tpl => (
-          <div key={tpl.id} className="rc-item">
-            <div className="rc-icon email"><span className="material-symbols-outlined">description</span></div>
-            <div className="rc-body">
-              <div className="rc-name">{templateDisplayName(tpl.template_key, t)}</div>
-              <div className="rc-meta">
-                <span className="rc-meta-txt">{langDisplayName(tpl.primary_language, t)}</span>
-                {tpl.translations_pending && <span className="rc-meta-txt">{t('eng.tpl.translations_pending', 'Translations pending')}</span>}
-              </div>
-            </div>
-            <button className="btn btn-outline btn-xs" onClick={() => openEdit(tpl)}>{t('common.edit', 'Edit')}</button>
-            <button className="btn btn-outline btn-xs btn-red" onClick={() => setDeleteTarget(tpl)}>{t('common.delete', 'Delete')}</button>
-          </div>
-        ))
-      )}
-      {showForm && (
-        <RealTemplateFormModal
-          template={editing}
-          onClose={() => setShowForm(false)}
-          onSaved={() => { setShowForm(false); refetch() }}
-        />
-      )}
-      {deleteTarget && (
-        <div className="modal-backdrop" onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-            <div className="modal-hdr">
-              <div className="modal-title">{t('eng.tpl.delete_title', 'Delete')} <em>{t('eng.tpl.delete_title_em', 'Template')}</em></div>
-              <div className="modal-close" onClick={() => !deleting && setDeleteTarget(null)}><span className="material-symbols-outlined">close</span></div>
-            </div>
-            <div>{t('eng.tpl.confirm_delete', { name: templateDisplayName(deleteTarget.template_key, t), defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
-              <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting…') : t('common.delete', 'Delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RealTemplateFormModal({ template, onClose, onSaved }) {
-  const { t } = useTranslation()
-  const isEdit = !!template?.id
-  const primaryContent = template?.content?.[template?.primary_language] ?? {}
-  const [templateKey, setTemplateKey] = useState(template?.template_key ?? '')
-  const [primaryLang, setPrimaryLang] = useState(template?.primary_language ?? 'it')
-  const [subject,     setSubject]     = useState(primaryContent.subject ?? '')
-  const [text,        setText]        = useState(primaryContent.text ?? '')
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState('')
-
-  const handleSave = async () => {
-    if (!isEdit && !templateKey.trim()) { setError(t('eng.tpl.err_key_required', 'Template key is required.')); return }
-    if (!subject.trim() || !text.trim()) { setError(t('eng.tpl.err_content_required', 'Subject and body are required.')); return }
-    setSaving(true); setError('')
-    const content = { subject: subject.trim(), html: `<p>${text.trim()}</p>`, text: text.trim() }
-    try {
-      const res = isEdit
-        ? await templateApi.update(template.id, { content })
-        : await templateApi.create({ templateKey: templateKey.trim(), primaryLanguage: primaryLang, content })
-      if (res?.success) onSaved()
-      else setError(res?.message || t('eng.tpl.err_save', 'Failed to save template.'))
-    } catch { setError(t('eng.tpl.err_network', 'Network error.')) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
-      <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
-        <div className="modal-hdr">
-          <div className="modal-title">{isEdit ? t('eng.tpl.edit_real_title', 'Edit') : t('eng.tpl.create_real_title', 'Create')} <em>{t('eng.tpl.form_title_em', 'Template')}</em></div>
-          <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
-        </div>
-        {error && <div className="eng-error">{error}</div>}
-        {!isEdit ? (
-          <div className="form-row2">
-            <div className="form-group">
-              <label className="form-lbl">{t('eng.tpl.template_key', 'Template key')}</label>
-              <input className="form-input" placeholder="aw25_new_arrivals" value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label className="form-lbl">{t('eng.tpl.primary_language', 'Primary language')}</label>
-              <div className="select-wrap">
-                <select className="form-select" value={primaryLang} onChange={e => setPrimaryLang(e.target.value)}>
-                  {Object.keys(LANG_MAP).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="form-hint eng-mb18">{t('eng.tpl.editing_primary_hint', { lang: langDisplayName(template.primary_language, t), defaultValue: 'Editing the {{lang}} (primary) content. Saving invalidates existing translations — re-translate afterward.' })}</div>
-        )}
-        <div className="form-group">
-          <label className="form-lbl">{t('eng.rev.subject', 'SUBJECT')}</label>
-          <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
-          <textarea className="form-textarea ct-notes-textarea" value={text} onChange={e => setText(e.target.value)} />
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}</button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -4922,6 +5028,9 @@ export default function Engagement() {
   const [dashboard,  setDashboard]  = useState(null)
   const [emailSettings, setEmailSettings] = useState(null)
   const [campaignsStart, setCampaignsStart] = useState('hub')
+  const [campaignsPresetSegment, setCampaignsPresetSegment] = useState(null)
+  const [campaignsPresetTemplate, setCampaignsPresetTemplate] = useState(null)
+  const [campaignsPresetChannel, setCampaignsPresetChannel] = useState(null)
 
   const refetchCampaigns = () => {
     setCampaignsLoading(true)
@@ -4937,6 +5046,20 @@ export default function Engagement() {
       .then(r => r.json())
       .then(res => { if (res.success) setEmailSettings(res.data?.settings ?? null) })
       .catch(() => {})
+
+  const refetchSegments = () =>
+    apiFetch(`${API}/boutique/marketing/segments`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setSegments(res.data?.segments ?? []) })
+      .catch(() => {})
+
+  const refetchDashboard = () =>
+    apiFetch(`${API}/boutique/marketing/dashboard`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setDashboard(res.data) })
+      .catch(() => {})
+
+  const onContactsChanged = () => { refetchSegments(); refetchDashboard() }
 
   useEffect(() => {
     apiFetch(`${API}/boutique/marketing/segments`)
@@ -4960,7 +5083,7 @@ export default function Engagement() {
     { key:'campaigns',   icon:'campaign',   label:t('eng.nav.campaigns', 'Campaigns') },
     { key:'templates',   icon:'description', label:t('eng.nav.templates', 'Templates') },
     { key:'automations', icon:'bolt',        label:t('eng.nav.automations', 'Automations') },
-    { key:'analytics',   icon:'monitoring', label:t('eng.nav.analytics', 'Analytics'), tag:t('eng.nav.new_tag', 'NEW') },
+    { key:'analytics',   icon:'monitoring', label:t('eng.nav.analytics', 'Analytics') },
     { key:'settings',    icon:'settings',   label:t('eng.nav.settings', 'Settings') },
   ]
 
@@ -4969,7 +5092,7 @@ export default function Engagement() {
       <div className="crm-subnav">
         {VIEWS.map(v => (
           <div key={v.key} className={`sni${activeView === v.key ? ' act' : ''}`} onClick={() => {
-            if (v.key === 'campaigns') setCampaignsStart('hub')
+            if (v.key === 'campaigns') { setCampaignsStart('hub'); setCampaignsPresetSegment(null) }
             setActiveView(v.key)
           }}>
             <span className="material-symbols-outlined">{v.icon}</span>
@@ -4985,16 +5108,16 @@ export default function Engagement() {
             segments={segments}
             dashboard={dashboard}
             campaigns={campaigns}
-            onNewCampaign={() => { setCampaignsStart('builder'); setActiveView('campaigns') }}
-            onViewAllCampaigns={() => { setCampaignsStart('hub'); setActiveView('campaigns') }}
+            onNewCampaign={(presetSegment) => { setCampaignsPresetSegment(presetSegment ?? null); setCampaignsStart('builder'); setActiveView('campaigns') }}
+            onViewAllCampaigns={() => { setCampaignsPresetSegment(null); setCampaignsStart('hub'); setActiveView('campaigns') }}
             onManageContacts={() => setActiveView('contacts')}
             onManageAutomations={() => setActiveView('automations')}
           />
         )}
-        {activeView === 'contacts'    && <ContactsView />}
+       {activeView === 'contacts'    && <ContactsView onContactsChanged={onContactsChanged} segments={segments} />}
         {activeView === 'favorites'   && <FavoritesView />}
-        {activeView === 'campaigns'   && <CampaignsView  campaigns={campaigns} segments={segments} dashboard={dashboard} refetchCampaigns={refetchCampaigns} campaignsLoading={campaignsLoading} emailSettings={emailSettings} initialSub={campaignsStart} key={campaignsStart} />}
-        {activeView === 'templates'   && <TemplatesView emailSettings={emailSettings} onNavigateToBuilder={() => { setCampaignsStart('builder'); setActiveView('campaigns') }} />}
+        {activeView === 'campaigns'   && <CampaignsView  campaigns={campaigns} segments={segments} dashboard={dashboard} refetchCampaigns={refetchCampaigns} campaignsLoading={campaignsLoading} emailSettings={emailSettings} initialSub={campaignsStart} initialSegment={campaignsPresetSegment} initialTemplate={campaignsPresetTemplate} initialChannel={campaignsPresetChannel} key={`${campaignsStart}:${campaignsPresetSegment ?? ''}:${campaignsPresetTemplate ?? ''}`} />}
+        {activeView === 'templates'   && <TemplatesView emailSettings={emailSettings} onNavigateToBuilder={(presetTemplateId, presetChannel) => { setCampaignsPresetTemplate(presetTemplateId ?? null); setCampaignsPresetChannel(presetChannel ?? null); setCampaignsStart('builder'); setActiveView('campaigns') }} />}
         {activeView === 'automations' && <AutomationsView />}
         {activeView === 'analytics'   && <AnalyticsView />}
         {activeView === 'settings'    && <SenderSettingsView emailSettings={emailSettings} refetchEmailSettings={refetchEmailSettings} />}
