@@ -2582,7 +2582,7 @@
 .sup-bubble-time{font-size:8px;color:var(--stone);margin-top:3px;}
 .sup-bubble-time-right{text-align:right;}
 .sup-awaiting{padding:10px 12px;background:var(--card);border-radius:0;font-size:10px;color:var(--stone);text-align:center;}
-.sup-followup{margin-top:12px;display:flex;gap:8px;}
+.sup-followup{margin-top:12px;display:flex;gap:8px;align-items:flex-end;}
 .sup-followup-ta{flex:1;resize:none;font-size:11px;min-height:unset;}
 .sup-resolved-note{margin-top:10px;display:flex;align-items:center;gap:7px;font-size:10px;font-weight:600;color:var(--green);}
 .sup-resolved-icon{font-size:14px;}
@@ -2604,6 +2604,26 @@
 .sup-online-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(0,108,53,.04);border-radius:0;border:1px solid rgba(0,108,53,.12);}
 .sup-online-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;}
 .sup-online-label{font-size:11px;font-weight:700;color:var(--green);}
+/* Attachments */
+.sup-upload-selected{display:flex;align-items:center;gap:8px;border:2px solid var(--mist);border-radius:0;padding:10px 12px;}
+.sup-upload-selected-icon{font-size:18px;color:var(--stone);}
+.sup-upload-selected-name{flex:1;font-size:11px;font-weight:600;color:var(--deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sup-upload-selected-remove{font-size:16px;color:var(--stone);cursor:pointer;}
+.sup-upload-selected-remove:hover{color:var(--red);}
+.sup-followup-input-wrap{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}
+.sup-attach-btn{align-self:flex-start;}
+.sup-attach-chip{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--stone);background:var(--card);padding:5px 8px;border-radius:0;align-self:flex-start;}
+.sup-attach-chip .material-symbols-outlined{font-size:13px;}
+.sup-attach-chip-remove{cursor:pointer;}
+.sup-attach-chip-remove:hover{color:var(--red);}
+.sup-msg-attachments{display:flex;flex-direction:column;gap:5px;margin-top:8px;}
+.sup-msg-attachment{display:flex;align-items:center;gap:6px;padding:6px 9px;background:rgba(0,0,0,.06);border-radius:0;cursor:pointer;transition:background .12s;}
+.sup-msg-attachment:hover{background:rgba(0,0,0,.1);}
+.sup-bubble-support .sup-msg-attachment{background:var(--card);}
+.sup-bubble-support .sup-msg-attachment:hover{background:var(--mist);}
+.sup-msg-attachment-icon{font-size:14px;}
+.sup-msg-attachment-name{font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sup-reopen-btn{margin-left:auto;}
 
 
 
