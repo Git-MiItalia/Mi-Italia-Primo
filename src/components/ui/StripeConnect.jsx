@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
-import useLangStore from '../../store/langStore'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -9,9 +8,6 @@ const FEATURE_KEYS = ['orders', 'payouts', 'security']
 
 export default function StripeConnect({ onConnected, onSkip }) {
   const { t } = useTranslation()
-  const fetchLoginTranslations = useLangStore(s => s.fetchLoginTranslations)
-
-  useEffect(() => { fetchLoginTranslations() }, [])
 
   const TX = {
     title:         t('stripe_connect.title', 'You need to create a'),

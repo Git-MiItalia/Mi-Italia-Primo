@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
@@ -36,7 +37,7 @@ function catToSubject(category) {
   return SUBJECT_KEYS.find(s => s.key === category) ?? SUBJECT_KEYS[SUBJECT_KEYS.length - 1]
 }
 
-function formatRelative(iso) {
+function formatRelative(iso, t) {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
@@ -45,7 +46,7 @@ function formatRelative(iso) {
   const min  = Math.floor(sec / 60)
   const hr   = Math.floor(min / 60)
   const day  = Math.floor(hr / 24)
-  if (sec < 60) return 'just now'
+  if (sec < 60) return t('sup.just_now')
   if (min < 60) return `${min}m ago`
   if (hr < 24)  return `${hr}h ago`
   if (day < 7)  return `${day}d ago`
@@ -59,6 +60,7 @@ function initials(name) {
 
 export default function Support() {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
 
   // ── Form state ─────────────────────────────────────────
   const [selectedSubj, setSelectedSubj] = useState(0)
@@ -69,6 +71,8 @@ export default function Support() {
   const [lastTicketRef, setLastTicketRef] = useState('')
   const [submitting, setSubmitting]     = useState(false)
   const [submitError, setSubmitError]   = useState(null)
+  const [attachFile, setAttachFile]     = useState(null)
+  const fileInputRef = useRef(null)
 
   // ── Tickets list ───────────────────────────────────────
   const [tickets, setTickets]               = useState([])
@@ -91,6 +95,8 @@ export default function Support() {
   const [followUpError, setFollowUpError]     = useState(null)
   const [resolving, setResolving]             = useState(false)
   const [resolveError, setResolveError]       = useState(null)
+  const [followUpFile, setFollowUpFile]       = useState(null)
+  const followUpFileInputRef = useRef(null)
 
   // ── Mount: fetch quick-help + tickets ──────────────────
   useEffect(() => {
@@ -151,15 +157,26 @@ export default function Support() {
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const res = await apiFetch(`${API}/boutique/support/tickets`, {
-        method: 'POST',
-        body: JSON.stringify({
-          category: SUBJECT_KEYS[selectedSubj].key,
-          priority: selectedPri,
-          subject:  subjLine,
-          body:     msgBody,
-        }),
-      }).then(r => r.json())
+      let res
+      if (attachFile) {
+        const fd = new FormData()
+        fd.append('category', SUBJECT_KEYS[selectedSubj].key)
+        fd.append('priority', selectedPri)
+        fd.append('subject', subjLine)
+        fd.append('body', msgBody)
+        fd.append('file', attachFile)
+        res = await apiFetch(`${API}/boutique/support/tickets`, { method: 'POST', body: fd }).then(r => r.json())
+      } else {
+        res = await apiFetch(`${API}/boutique/support/tickets`, {
+          method: 'POST',
+          body: JSON.stringify({
+            category: SUBJECT_KEYS[selectedSubj].key,
+            priority: selectedPri,
+            subject:  subjLine,
+            body:     msgBody,
+          }),
+        }).then(r => r.json())
+      }
 
       if (res?.success) {
         setLastTicketRef(res.data?.ticket?.ref ?? '')
@@ -183,28 +200,39 @@ export default function Support() {
     setSelectedSubj(0)
     setSelectedPri('normal')
     setSubmitError(null)
+    setAttachFile(null)
   }
 
   function toggleTicket(id) {
     setOpenTicketId(prev => prev === id ? null : id)
     setFollowUpError(null)
     setResolveError(null)
+    setFollowUpFile(null)
   }
 
   // ── Send follow-up ─────────────────────────────────────
   async function sendFollowUp(id) {
     const text = followUps[id]?.trim()
-    if (!text || sendingFollowUp) return
+    if ((!text && !followUpFile) || sendingFollowUp) return
     setSendingFollowUp(true)
     setFollowUpError(null)
     try {
-      const res = await apiFetch(`${API}/boutique/support/tickets/${id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body: text }),
-      }).then(r => r.json())
+      let res
+      if (followUpFile) {
+        const fd = new FormData()
+        if (text) fd.append('body', text)
+        fd.append('file', followUpFile)
+        res = await apiFetch(`${API}/boutique/support/tickets/${id}/messages`, { method: 'POST', body: fd }).then(r => r.json())
+      } else {
+        res = await apiFetch(`${API}/boutique/support/tickets/${id}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ body: text }),
+        }).then(r => r.json())
+      }
 
       if (res?.success) {
         setFollowUps(prev => ({ ...prev, [id]: '' }))
+        setFollowUpFile(null)
         await Promise.all([refetchThread(), fetchTickets()])
       } else {
         setFollowUpError(res?.message ?? 'Failed to send message')
@@ -217,15 +245,15 @@ export default function Support() {
     }
   }
 
-  // ── Mark resolved ──────────────────────────────────────
-  async function markResolved(id) {
+  // ── Resolve / reopen ────────────────────────────────────
+  async function setTicketStatus(id, status) {
     if (resolving) return
     setResolving(true)
     setResolveError(null)
     try {
       const res = await apiFetch(`${API}/boutique/support/tickets/${id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'resolved' }),
+        body: JSON.stringify({ status }),
       }).then(r => r.json())
 
       if (res?.success) {
@@ -234,10 +262,28 @@ export default function Support() {
         setResolveError(res?.message ?? 'Failed to update ticket')
       }
     } catch (err) {
-      console.error('[Support] markResolved failed:', err)
+      console.error('[Support] setTicketStatus failed:', err)
       setResolveError('Network error — please try again')
     } finally {
       setResolving(false)
+    }
+  }
+
+  // ── Download attachment ─────────────────────────────────
+  async function downloadAttachment(att) {
+    try {
+      const res = await apiFetch(`${API}/boutique/support/attachments/${att.id}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = att.filename || 'attachment'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('[Support] downloadAttachment failed:', err)
     }
   }
 
@@ -302,16 +348,27 @@ export default function Support() {
                 value={msgBody} onChange={e => setMsgBody(e.target.value)} />
             </div>
 
-            {/* Attachment zone — placeholder only; backend doesn't accept attachments */}
+            {/* Attachment zone */}
             <div className="form-group">
               <label className="form-lbl">
                 {t('sup.form.attachments_label')} <span className="sup-optional">{t('sup.form.optional')}</span>
               </label>
-              <div className="sup-upload-zone">
-                <span className="material-symbols-outlined sup-upload-icon">upload_file</span>
-                <div className="sup-upload-title">{t('sup.form.upload_title')}</div>
-                <div className="sup-upload-sub">{t('sup.form.upload_sub')}</div>
-              </div>
+              <input ref={fileInputRef} type="file" className="pp-hidden-input"
+                onChange={e => setAttachFile(e.target.files?.[0] ?? null)} />
+              {!attachFile ? (
+                <div className="sup-upload-zone" onClick={() => fileInputRef.current?.click()}>
+                  <span className="material-symbols-outlined sup-upload-icon">upload_file</span>
+                  <div className="sup-upload-title">{t('sup.form.upload_title')}</div>
+                  <div className="sup-upload-sub">{t('sup.form.upload_sub')}</div>
+                </div>
+              ) : (
+                <div className="sup-upload-selected">
+                  <span className="material-symbols-outlined sup-upload-selected-icon">description</span>
+                  <span className="sup-upload-selected-name">{attachFile.name}</span>
+                  <span className="material-symbols-outlined sup-upload-selected-remove"
+                    title={t('sup.form.remove_title')} onClick={() => setAttachFile(null)}>close</span>
+                </div>
+              )}
             </div>
 
             {submitError && (
@@ -381,7 +438,7 @@ export default function Support() {
                   className={`sup-ticket-row${isOpen?' sel':''}`}>
                   <div className="sup-ticket-ico">{subj.ico}</div>
                   <div className="sup-ticket-body">
-                    <div className="sup-ticket-meta">{tk.ref} · {formatRelative(tk.lastMessageAt ?? tk.createdAt)}</div>
+                    <div className="sup-ticket-meta">{tk.ref} · {formatRelative(tk.lastMessageAt ?? tk.createdAt, t)}</div>
                     <div className="sup-ticket-subj">{tk.subject}</div>
                   </div>
                   <div className="sup-ticket-badges">
@@ -423,9 +480,19 @@ export default function Support() {
                                 <div>
                                   <div className={`sup-bubble ${isBoutique ? 'sup-bubble-user' : 'sup-bubble-support'}`}>
                                     {m.body}
+                                    {m.attachments?.length > 0 && (
+                                      <div className="sup-msg-attachments">
+                                        {m.attachments.map(att => (
+                                          <div key={att.id} className="sup-msg-attachment" onClick={() => downloadAttachment(att)}>
+                                            <span className="material-symbols-outlined sup-msg-attachment-icon">attach_file</span>
+                                            <span className="sup-msg-attachment-name">{att.filename}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className={`sup-bubble-time${isBoutique ? ' sup-bubble-time-right' : ''}`}>
-                                    {formatRelative(m.created_at)} · {isBoutique ? t('sup.tickets.you') : (m.author_name || t('sup.tickets.support_name'))}
+                                    {formatRelative(m.created_at, t)} · {isBoutique ? t('sup.tickets.you') : (m.author_name || t('sup.tickets.support_name'))}
                                   </div>
                                 </div>
                               </div>
@@ -450,13 +517,31 @@ export default function Support() {
                               </div>
                             )}
                             <div className="sup-followup">
-                              <textarea className="form-textarea sup-followup-ta"
-                                placeholder={t('sup.tickets.followup_placeholder')}
-                                value={followUps[tk.id] || ''}
-                                onChange={e => setFollowUps(prev => ({ ...prev, [tk.id]: e.target.value }))} />
+                              <input ref={followUpFileInputRef} type="file" className="pp-hidden-input"
+                                onChange={e => setFollowUpFile(e.target.files?.[0] ?? null)} />
+                              <div className="sup-followup-input-wrap">
+                                <textarea className="form-textarea sup-followup-ta"
+                                  placeholder={t('sup.tickets.followup_placeholder')}
+                                  value={followUps[tk.id] || ''}
+                                  onChange={e => setFollowUps(prev => ({ ...prev, [tk.id]: e.target.value }))} />
+                                {followUpFile && (
+                                  <div className="sup-attach-chip">
+                                    <span className="material-symbols-outlined">description</span>
+                                    {followUpFile.name}
+                                    <span className="material-symbols-outlined sup-attach-chip-remove"
+                                      title={t('sup.form.remove_title')} onClick={() => setFollowUpFile(null)}>close</span>
+                                  </div>
+                                )}
+                              </div>
+                              <button className="btn btn-outline btn-sm sup-attach-btn"
+                                title={t('sup.form.attach_title')}
+                                onClick={() => followUpFileInputRef.current?.click()}
+                                disabled={sendingFollowUp}>
+                                <span className="material-symbols-outlined">attach_file</span>
+                              </button>
                               <button className="btn btn-primary btn-sm"
                                 onClick={() => sendFollowUp(tk.id)}
-                                disabled={sendingFollowUp || !(followUps[tk.id] || '').trim()}>
+                                disabled={sendingFollowUp || (!(followUps[tk.id] || '').trim() && !followUpFile)}>
                                 <span className="material-symbols-outlined">
                                   {sendingFollowUp ? 'hourglass_top' : 'send'}
                                 </span>
@@ -464,7 +549,7 @@ export default function Support() {
                             </div>
                             <div className="sup-thread-actions">
                               <button className="btn btn-outline btn-xs"
-                                onClick={() => markResolved(tk.id)}
+                                onClick={() => setTicketStatus(tk.id, 'resolved')}
                                 disabled={resolving}>
                                 <span className="material-symbols-outlined">check_circle</span>
                                 {resolving ? 'Marking…' : 'Mark as resolved'}
@@ -475,6 +560,11 @@ export default function Support() {
                           <div className="sup-resolved-note">
                             <span className="material-symbols-outlined sup-resolved-icon">check_circle</span>
                             {t('sup.tickets.resolved_note')}
+                            <button className="btn btn-outline btn-xs sup-reopen-btn"
+                              onClick={() => setTicketStatus(tk.id, 'open')}
+                              disabled={resolving}>
+                              {resolving ? t('sup.tickets.reopening_btn') : t('sup.tickets.reopen_btn')}
+                            </button>
                           </div>
                         )}
                       </>
@@ -498,7 +588,7 @@ export default function Support() {
           {!loadingHelp && quickHelp && (
             <div className="sup-quick-links">
               {(quickHelp.articles ?? []).map(l => (
-                <div key={l.key} className="sup-quick-link">
+                <div key={l.key} className="sup-quick-link" onClick={() => l.url && navigate(l.url)}>
                   <span className="material-symbols-outlined sup-quick-link-icon">{l.icon}</span>
                   <div className="sup-quick-link-body">
                     <div className="sup-quick-link-title">{l.title}</div>
