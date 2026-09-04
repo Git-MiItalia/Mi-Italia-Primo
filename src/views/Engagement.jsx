@@ -610,7 +610,7 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
               </tr>
             </thead>
             <tbody>
-              {segsArr.map((s,i) => {
+              {segsArr.map((s) => {
                 const engPct   = s.engagedPct ?? 0
                 const engCls   = engPct >= 70 ? 'eng-pct-green' : engPct >= 40 ? 'eng-pct-gold' : 'eng-pct-red'
                 return (
@@ -622,10 +622,7 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
                     <td className="tbl-meta">{s.lastCampaign ? `${s.lastCampaign.name}${s.lastCampaign.sentAt ? ` · ${formatDate(s.lastCampaign.sentAt)}` : ''}` : '—'}</td>
                     <td>
                       <button
-                        className={`btn btn-xs ${
-                          s.key === 'lapsed' ? 'btn-red' :
-                          i === 0            ? 'btn-primary' : 'btn-outline'
-                        }`}
+                        className={`btn btn-xs ${s.key === 'lapsed' ? 'btn-red' : 'btn-outline'}`}
                         onClick={() => onNewCampaign(s.key)}
                       >
                         {s.key === 'lapsed' ? t('eng.ov.reengage', 'Re-engage') : t('eng.ov.send', 'Send')}
@@ -1975,22 +1972,22 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             {template && (
               <div className="alert alert-info">
                 <span className="material-symbols-outlined">info</span>
-                <div>{t('eng.camp.step4_template_override', { name: templateDisplayName(apiTemplates.find(tpl => tpl.id === template)?.template_key, t), defaultValue: 'This campaign uses "{{name}}"\'s content — Subject and Body below won\'t be sent. Edit the actual content in Step 5, or clear the template in Step 3 to write custom content here instead.' })}</div>
+                <div>{t('eng.camp.step4_template_override', { name: templateDisplayName(apiTemplates.find(tpl => tpl.id === template)?.template_key, t), defaultValue: 'This campaign uses "{{name}}"\'s content, so Subject and Body below are locked. Edit the actual content in Translation Review, or clear the template in Step 3 to write custom content here instead.' })}</div>
               </div>
             )}
             <div className="form-row2">
               <div className="form-group">
                 <label className="form-lbl">{t('eng.camp.subject', 'Subject Line')}</label>
-                <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
+                <input className="form-input" disabled={!!template} value={subject} onChange={e => setSubject(e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-lbl">{t('eng.camp.preview_text', 'Preview Text')}</label>
-                <input className="form-input" value={previewText} onChange={e => setPreviewText(e.target.value)} />
+                <input className="form-input" disabled={!!template} value={previewText} onChange={e => setPreviewText(e.target.value)} />
               </div>
             </div>
             <div className="form-group">
               <label className="form-lbl">{t('eng.camp.body', 'Message Body')}</label>
-              <textarea className="form-textarea camp-body-textarea" value={body} onChange={e => setBody(e.target.value)} />
+              <textarea className="form-textarea camp-body-textarea" disabled={!!template} value={body} onChange={e => setBody(e.target.value)} />
               <div className="form-hint">{t('eng.camp.write_italian', 'Write in Italian. The other languages auto-translate on save — review each in step 5 before send.')}</div>
             </div>
           </div>
@@ -4136,7 +4133,7 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
             <div className="form-row2">
               <div className="form-group">
                 <label className="form-lbl">{t('eng.tpl.template_key', 'Template key')}</label>
-                <input className="form-input" placeholder="aw25_new_arrivals" value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
+                <input className="form-input" placeholder={t('eng.tpl.template_key_placeholder', 'name, eg. aw25_new_arrivals')} value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-lbl">{t('eng.tpl.primary_language', 'Primary language')}</label>
