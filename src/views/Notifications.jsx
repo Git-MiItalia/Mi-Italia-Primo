@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
 import useNotifStore from '../store/notifStore'
+import { timeAgo } from '../lib/timeAgo'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -27,10 +28,16 @@ function getNotifIcon(type) {
   return { icon:'notifications', cls:'reservation' }
 }
 
+// Routes that accept a record id (/orders/:id, /reservations/:id) and open that
+// record directly. Anything else keeps only the list path, since navigating to
+// a route that doesn't exist would land on a blank page.
+const DEEP_LINKABLE = ['/orders/', '/reservations/']
+const UUID_SUFFIX   = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function getNavRoute(type, link) {
   if (link) {
-    // Strip trailing IDs — routes like /reservations/{uuid} don't exist
-    return link.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, '')
+    if (DEEP_LINKABLE.some(prefix => link.startsWith(prefix))) return link
+    return link.replace(UUID_SUFFIX, '')
   }
   if (!type) return null
   const t = type.toLowerCase()
@@ -41,29 +48,27 @@ function getNavRoute(type, link) {
   return null
 }
 
-function timeAgo(isoDate) {
-  if (!isoDate) return ''
-  const diff = Date.now() - new Date(isoDate).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1)   return 'just now'
-  if (m < 60)  return `${m} min ago`
-  const h = Math.floor(m / 60)
-  if (h < 24)  return `${h}h ago`
-  const d = Math.floor(h / 24)
-  if (d === 1) return 'Yesterday'
-  return `${d}d ago`
-}
+// Was a local copy returning English literals ('just now', 'Yesterday'), so
+// every notification timestamp stayed English on an Italian page. Now the
+// shared helper — see lib/timeAgo.js.
 
 export default function Notifications() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
 
-  const TABS  = [t('notifications.tabs.all'), t('notifications.tabs.reservations'), t('notifications.tabs.orders'), t('notifications.tabs.stock'), t('notifications.tabs.messages')]
+  const TABS  = [
+    t('notifications.tabs.all',          'All'),
+    t('notifications.tabs.reservations', 'Reservations'),
+    t('notifications.tabs.orders',       'Orders'),
+    t('notifications.tabs.stock',        'Stock'),
+    t('notifications.tabs.messages',     'Messages'),
+  ]
+  // `field` maps each row to its key in the preferences payload.
   const prefs = [
-    { label: t('notifications.prefs.expiry'),    sub: t('notifications.prefs.expiry_sub')    },
-    { label: t('notifications.prefs.orders'),     sub: t('notifications.prefs.orders_sub')    },
-    { label: t('notifications.prefs.low_stock'),  sub: t('notifications.prefs.low_stock_sub') },
-    { label: t('notifications.prefs.tryon'),      sub: t('notifications.prefs.tryon_sub')     },
+    { field: 'reservation_expiry', label: t('notifications.prefs.expiry',    'Reservation expiry'), sub: t('notifications.prefs.expiry_sub',    'Alert me before a reservation expires') },
+    { field: 'new_orders',         label: t('notifications.prefs.orders',    'New orders'),         sub: t('notifications.prefs.orders_sub',    'Alert me when an order comes in')       },
+    { field: 'low_stock',          label: t('notifications.prefs.low_stock', 'Low stock'),          sub: t('notifications.prefs.low_stock_sub', 'Alert me when a size is running out')   },
+    { field: 'tryon_requests',     label: t('notifications.prefs.tryon',     'Try-on requests'),    sub: t('notifications.prefs.tryon_sub',     'Alert me when a customer books a try-on') },
   ]
 
   const notifications    = useNotifStore(s => s.notifications)
@@ -74,10 +79,49 @@ export default function Notifications() {
 
   const [activeTab, setActiveTab] = useState(0)
   const [loading,   setLoading]   = useState(false)
-  const [toggles,   setToggles]   = useState(prefs.map(() => true))
+  const [listFailed, setListFailed] = useState(false)
 
-  function flipToggle(i) {
-    setToggles(prev => prev.map((v, idx) => idx === i ? !v : v))
+  // null until the preferences endpoint answers — the toggles stay disabled
+  // until then rather than showing a guessed state the boutique might trust.
+  const [prefValues,  setPrefValues]  = useState(null)
+  const [prefSaving,  setPrefSaving]  = useState(false)
+  const [prefError,   setPrefError]   = useState(null)
+
+  // prefValues stays null until this answers, and the toggles are disabled
+  // while it is null — so a swallowed failure left every switch permanently
+  // greyed out with nothing saying why.
+  const [prefLoadFailed, setPrefLoadFailed] = useState(false)
+  useEffect(() => {
+    apiFetch(`${API}/boutique/notifications/preferences`)
+      .then(r => r.json())
+      .then(res => {
+        if (res?.success) { setPrefValues(res.data ?? {}); setPrefLoadFailed(false) }
+        else setPrefLoadFailed(true)
+      })
+      .catch(() => setPrefLoadFailed(true))
+  }, [])
+
+  function togglePref(field) {
+    if (!prefValues || prefSaving) return
+    const next = { ...prefValues, [field]: !prefValues[field] }
+    const previous = prefValues
+    setPrefValues(next)          // optimistic — the switch should feel instant
+    setPrefSaving(true)
+    setPrefError(null)
+    apiFetch(`${API}/boutique/notifications/preferences`, {
+      method: 'PUT',
+      body: JSON.stringify(next),
+    })
+      .then(r => r.json())
+      .then(res => {
+        if (res?.success) { if (res.data) setPrefValues(res.data) }
+        else { setPrefValues(previous); setPrefError(res?.message ?? t('common.error_generic', 'Something went wrong. Please try again.')) }
+      })
+      .catch(() => {
+        setPrefValues(previous)  // put the switch back rather than lie about it
+        setPrefError(t('common.error_network', 'Network error. Please check your connection.'))
+      })
+      .finally(() => setPrefSaving(false))
   }
 
   // Skip refetching if the global store already has notifications for the
@@ -91,15 +135,30 @@ export default function Notifications() {
     apiFetch(`${API}/boutique/notifications`)
       .then(r => r.json())
       .then(res => {
-        if (res.success) setNotifications(res.data.notifications ?? [], res.data.unread_count ?? 0)
-        fetchedLangRef.current = i18n.language
+        if (res.success) {
+          setNotifications(res.data.notifications ?? [], res.data.unread_count ?? 0)
+          fetchedLangRef.current = i18n.language
+          setListFailed(false)
+        } else {
+          // An empty list and a failed list looked the same, and the empty
+          // state reads "You're all caught up" — actively reassuring when we
+          // simply have no idea what is waiting. `fetchedLangRef` is left
+          // alone so the next render retries rather than caching the failure.
+          setListFailed(true)
+        }
       })
+      .catch(() => setListFailed(true))
       .finally(() => setLoading(false))
   }, [i18n.language])
 
   function handleNotifClick(n) {
     if (!n.read_at && !n.is_read) {
+      // Marked read locally either way — the click did happen, and blocking
+      // navigation on this would make the list feel broken. The catch is here
+      // only so a failure doesn't surface as an unhandled rejection; the row
+      // reappearing unread after a refresh is the honest outcome.
       apiFetch(`${API}/boutique/notifications/${n.id}/read`, { method: 'PUT', body: JSON.stringify({}) })
+        .catch(() => {})
       markReadFn(n.id)
     }
     const route = getNavRoute(n.type, n.link)
@@ -109,7 +168,12 @@ export default function Notifications() {
   function markAllRead() {
     apiFetch(`${API}/boutique/notifications/read-all`, { method: 'PUT', body: JSON.stringify({}) })
       .then(r => r.json())
-      .then(res => { if (res.success) markAllReadFn() })
+      .then(res => {
+        if (res.success) markAllReadFn()
+        // Nothing clearing on a refused call looked like a dead button.
+        else setListFailed(true)
+      })
+      .catch(() => setListFailed(true))
   }
 
   const isUnread = (n) => !n.read_at && !n.is_read
@@ -139,7 +203,7 @@ export default function Notifications() {
           <div className="notif-sub">{n.body ?? n.message ?? '—'}</div>
         </div>
         <div className="notif-item-right">
-          <div className="notif-time">{timeAgo(n.created_at)}</div>
+          <div className="notif-time">{timeAgo(t, n.created_at)}</div>
           {route && (
             <span className="material-symbols-outlined notif-arrow">arrow_forward</span>
           )}
@@ -161,21 +225,21 @@ export default function Notifications() {
 
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('notifications.recent')} <em>{t('notifications.recent_em')}</em></div>
-          <div className="card-action" onClick={markAllRead}>{t('notifications.mark_all_read')}</div>
+          <div className="card-title">{t('notifications.recent', 'Recent')} <em>{t('notifications.recent_em', 'Activity')}</em></div>
+          <div className="card-action" onClick={markAllRead}>{t('notifications.mark_all_read', 'Mark all as read')}</div>
         </div>
 
         {loading && (
           <div className="notif-state">
             <span className="material-symbols-outlined notif-state-icon">hourglass_empty</span>
-            {t('notifications.loading')}
+            {t('notifications.loading', 'Loading notifications...')}
           </div>
         )}
 
         {!loading && notifications.length === 0 && (
           <div className="notif-state">
             <span className="material-symbols-outlined notif-state-icon">notifications_none</span>
-            {t('notifications.empty')}
+            {t('notifications.empty', 'No notifications yet')}
           </div>
         )}
 
@@ -184,7 +248,7 @@ export default function Notifications() {
           <>
             <div className="notif-section-hdr">
               <div className="notif-unread-dot" />
-              <div className="notif-section-lbl">{t('notifications.unread')} · {unread.length}</div>
+              <div className="notif-section-lbl">{t('notifications.unread', 'Unread')} · {unread.length}</div>
             </div>
             {unread.map(n => (
               <NotifItem key={n.id} n={n} isUnreadItem={true} isLast={false} />
@@ -195,34 +259,57 @@ export default function Notifications() {
         {/* Read / Earlier section */}
         {!loading && read.length > 0 && (
           <div className={`notif-read-section${unread.length > 0 ? ' notif-read-section-mt' : ''}`}>
-            <div className="notif-section-lbl notif-section-lbl-mb">{t('notifications.earlier')}</div>
+            <div className="notif-section-lbl notif-section-lbl-mb">{t('notifications.earlier', 'Earlier')}</div>
             {read.map((n, i) => (
               <NotifItem key={n.id} n={n} isUnreadItem={false} isLast={i === read.length - 1} />
             ))}
           </div>
         )}
 
-        {!loading && notifications.length > 0 && filtered.length === 0 && (
+        {!loading && listFailed && (
+          <div className="alert alert-urgent notif-prefs-pending">
+            {t('notifications.err_load', 'Could not load your notifications — this list may be incomplete or out of date.')}
+          </div>
+        )}
+
+        {!loading && !listFailed && notifications.length > 0 && filtered.length === 0 && (
           <div className="notif-tab-empty">
-            {t('notifications.tab_empty', { tab: TABS[activeTab].toLowerCase() })}
+            {t('notifications.tab_empty', { tab: TABS[activeTab].toLowerCase(), defaultValue: 'No {{tab}} notifications' })}
           </div>
         )}
 
         {/* Preferences */}
         <div className="detail-divider" />
-        <div className="notif-prefs-lbl">{t('notifications.prefs.title')}</div>
+        <div className="notif-prefs-lbl">{t('notifications.prefs.title', 'Notification Preferences')}</div>
+        {prefError && (
+          <div className="alert alert-urgent notif-prefs-pending">{prefError}</div>
+        )}
+        {prefLoadFailed && (
+          <div className="alert alert-urgent notif-prefs-pending">
+            {t('notifications.prefs.err_load', 'Could not load your notification preferences, so these switches are disabled. Reload the page to try again.')}
+          </div>
+        )}
         <div className="notif-prefs-list">
-          {prefs.map((p, i) => (
-            <div key={p.label} className="notif-pref-row">
-              <div>
-                <div className="notif-pref-title">{p.label}</div>
-                <div className="notif-pref-sub">{p.sub}</div>
+          {/* Disabled only while the current state is unknown — a switch that
+              silently does nothing is worse than one that can't be pressed. */}
+          {prefs.map(p => {
+            const ready = prefValues !== null
+            const on    = ready ? !!prefValues[p.field] : false
+            return (
+              <div key={p.field} className={`notif-pref-row${ready ? '' : ' notif-pref-row-disabled'}`}>
+                <div>
+                  <div className="notif-pref-title">{p.label}</div>
+                  <div className="notif-pref-sub">{p.sub}</div>
+                </div>
+                <div
+                  className={`toggle${on ? ' on' : ''}${ready && !prefSaving ? '' : ' toggle-disabled'}`}
+                  onClick={() => togglePref(p.field)}
+                >
+                  <div className="toggle-knob" />
+                </div>
               </div>
-              <div className={`toggle${toggles[i] ? ' on' : ''}`} onClick={() => flipToggle(i)}>
-                <div className="toggle-knob" />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </>

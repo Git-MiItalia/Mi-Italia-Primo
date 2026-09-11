@@ -9,10 +9,13 @@ import { validatePolicy, isEligibleAsDefault, POLICY_ERRORS } from '../../lib/re
  * `policy` is null when creating a new one. Validation mirrors the guardrails
  * the API must also enforce server-side (see returnsPolicy/engine.js).
  */
-export default function PolicyEditorModal({ policy, isCurrentDefault, onSave, onRemove, onClose }) {
+export default function PolicyEditorModal({ policy, isCurrentDefault, protectedIds, onSave, onRemove, onClose }) {
   const { t } = useTranslation()
   const isNew = !policy
-  const isCustom = !!policy && !isProtected(policy.id)
+  // The server owns the protected list; fall back to the local constant only
+  // when the caller has not loaded it yet.
+  const guarded  = Array.isArray(protectedIds) && protectedIds.length ? protectedIds : null
+  const isCustom = !!policy && (guarded ? !guarded.includes(policy.id) : !isProtected(policy.id))
 
   const [en, setEn]           = useState(policy?.en ?? '')
   const [it, setIt]           = useState(policy?.it ?? '')
@@ -127,7 +130,10 @@ export default function PolicyEditorModal({ policy, isCurrentDefault, onSave, on
       )}
 
       <div className="modal-footer">
-        {isCustom && (
+        {/* Never offer Remove for the policy the store currently defaults to:
+            deleting it would leave defaultPolicyId pointing at nothing and the
+            store with no default at all. Change the default first. */}
+        {isCustom && !isCurrentDefault && (
           <button
             type="button"
             className="btn btn-red"

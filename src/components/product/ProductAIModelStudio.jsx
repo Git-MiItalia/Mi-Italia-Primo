@@ -1,23 +1,28 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
 
 const API = import.meta.env.VITE_API_URL
 
-// Preset prompt chips (dead UI — Custom Text Prompt tab is placeholder only)
+// Preset prompt chips (dead UI — Custom Text Prompt tab is placeholder only).
+// `en` is what gets appended to the prompt: the prompt is sent to the image
+// model, which expects English, so only the chip label is translated.
 const PROMPT_CHIPS = [
-  'Studio white background',
-  'Milan street, golden hour',
-  'Boutique interior, warm light',
-  'Italian countryside',
-  'Relaxed pose',
-  'Athletic build',
-  'Slim fit build',
-  'Plus size',
+  { key: 'studio_white',     en: 'Studio white background' },
+  { key: 'milan_street',     en: 'Milan street, golden hour' },
+  { key: 'boutique_warm',    en: 'Boutique interior, warm light' },
+  { key: 'italian_country',  en: 'Italian countryside' },
+  { key: 'relaxed_pose',     en: 'Relaxed pose' },
+  { key: 'athletic_build',   en: 'Athletic build' },
+  { key: 'slim_build',       en: 'Slim fit build' },
+  { key: 'plus_size',        en: 'Plus size' },
 ]
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function AIModelStudio({ productId, refreshKey, onPhotosChange }) {
+  const { t } = useTranslation()
+
   // UI state
   const [aiStudioOn,      setAiStudioOn]      = useState(true)
   const [studioTab,       setStudioTab]       = useState('mi')       // 'mi' | 'prompt'
@@ -77,11 +82,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
       .catch(err => {
         if (cancelled) return
         console.error('[AIModelStudio] product fetch failed:', err)
-        setError('Could not load product photos.')
+        setError(t('ais_legacy.err_load_photos'))
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [productId, refreshKey])
+    // `t` re-runs this on a language switch; the fetch is cancel-guarded, so
+    // the only effect is that a failure message reappears in the new language.
+  }, [productId, refreshKey, t])
 
   // ── Auto-select first product photo as source ───────────────────────────────
   useEffect(() => {
@@ -119,13 +126,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
       await new Promise(r => setTimeout(r, INTERVAL_MS))
       const res  = await apiFetch(`${API}/boutique/ai-studio/status/${predictionId}`)
       const data = await res.json()
-      if (!data.success) throw new Error(data.message || 'Status check failed')
+      if (!data.success) throw new Error(data.message || t('ais_legacy.err_status_check'))
       const { status, outputs, error: statusErr } = data.data
       setProgress(`${status}…`)
       if (status === 'completed') return outputs?.[0] || null
-      if (status === 'failed' || statusErr) throw new Error(statusErr || 'Generation failed')
+      if (status === 'failed' || statusErr) throw new Error(statusErr || t('ais_legacy.err_generation_failed'))
     }
-    throw new Error('Generation timed out after 3 minutes')
+    throw new Error(t('ais_legacy.err_timeout'))
   }
 
   // ── Submit + poll for the single selected source photo ─────────────────────
@@ -134,13 +141,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
     setSaveMessage('')
 
     // Validate — inline errors instead of toast
-    if (!selectedSourcePhoto) { setError('Please select a source photo.'); return }
-    if (!selectedModel)       { setError('Please select a model first.'); return }
+    if (!selectedSourcePhoto) { setError(t('ais_legacy.err_select_source')); return }
+    if (!selectedModel)       { setError(t('ais_legacy.err_select_model')); return }
 
     setGeneratedUrl(null)
     setSaved(false)
     setGenerating(true)
-    setProgress('Submitting…')
+    setProgress(t('ais_legacy.submitting'))
 
     try {
       const submitRes  = await apiFetch(`${API}/boutique/ai-studio/run`, {
@@ -154,13 +161,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         }),
       })
       const submitData = await submitRes.json()
-      if (!submitData.success) throw new Error(submitData.message || 'Submit failed')
+      if (!submitData.success) throw new Error(submitData.message || t('ais_legacy.err_submit_failed'))
 
       const outputUrl = await pollStatus(submitData.data.predictionId)
       if (outputUrl) setGeneratedUrl(outputUrl)
     } catch (err) {
       console.error('[AIModelStudio] generation failed:', err)
-      setError(err.message || 'Generation failed — please try again.')
+      setError(err.message || t('ais_legacy.err_generation_retry'))
     } finally {
       setGenerating(false)
       setProgress('')
@@ -185,14 +192,14 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         body:   JSON.stringify({ imageUrls: [generatedUrl] }),
       })
       const data = await res.json()
-      if (!data.success) throw new Error(data.message || 'Save failed')
+      if (!data.success) throw new Error(data.message || t('ais_legacy.err_save_failed'))
 
       setSaved(true)
-      setSaveMessage(data.message || 'Photo added to gallery')
+      setSaveMessage(data.message || t('ais_legacy.toast_added_gallery'))
       if (onPhotosChange) onPhotosChange()
     } catch (err) {
       console.error('[AIModelStudio] save-to-gallery failed:', err)
-      setError(err.message || 'Save failed — please try again.')
+      setError(err.message || t('ais_legacy.err_save_retry'))
     } finally {
       setSaving(false)
     }
@@ -204,13 +211,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
     <div className="card">
       <div className="card-hdr">
         <div>
-          <div className="card-title">AI Model <em>Studio</em></div>
+          <div className="card-title">{t('ais_legacy.title_pre')} <em>{t('ais_legacy.title_em')}</em></div>
           <div className="ap-card-sub">
-            Generate on-model photos from your product photos · No photoshoot needed
+            {t('ais_legacy.sub')}
           </div>
         </div>
         <div className="ap-ai-hdr-right">
-          <span className="ap-ai-badge">POWERED BY AI</span>
+          <span className="ap-ai-badge">{t('ais_legacy.powered_by_ai')}</span>
           <div
             className={`toggle${aiStudioOn ? ' on' : ''}`}
             onClick={() => setAiStudioOn(v => !v)}
@@ -225,21 +232,21 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
           {!productId && (
             <div className="ap-studio-empty">
               <span className="material-symbols-outlined">info</span>
-              <div>Save the product first, then upload photos to enable AI Studio.</div>
+              <div>{t('ais_legacy.save_product_first')}</div>
             </div>
           )}
 
           {productId && loading && (
-            <div className="ap-studio-empty">Loading…</div>
+            <div className="ap-studio-empty">{t('common.loading')}</div>
           )}
 
           {productId && !loading && productPhotos.length === 0 && (
             <div className="ap-studio-empty ap-studio-empty-warn">
               <span className="material-symbols-outlined">photo_camera</span>
               <div>
-                <strong>Upload product photos first.</strong>
+                <strong>{t('ais_legacy.upload_first_bold')}</strong>
                 <div className="ap-studio-empty-sub">
-                  Add photos in the Product Photos card above, then return here to generate on-model images.
+                  {t('ais_legacy.upload_first_note')}
                 </div>
               </div>
             </div>
@@ -255,10 +262,10 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                 />
                 <div className="ap-source-body">
                   <div className="ap-source-title">
-                    Source: Photo {selectedSourceIndex >= 0 ? selectedSourceIndex + 1 : '—'}
+                    {t('ais_legacy.source_photo_n', { n: selectedSourceIndex >= 0 ? selectedSourceIndex + 1 : '—' })}
                   </div>
                   <div className="ap-source-sub">
-                    AI will place this garment on the selected model
+                    {t('ais_legacy.source_photo_note')}
                   </div>
                 </div>
                 <button
@@ -266,7 +273,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                   className="btn btn-sm btn-outline ap-source-btn"
                   onClick={() => setShowSourceModal(true)}
                 >
-                  Change Source
+                  {t('ais_legacy.change_source')}
                 </button>
               </div>
 
@@ -276,13 +283,13 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                   className={`ai-studio-tab${studioTab === 'mi' ? ' act' : ''}`}
                   onClick={() => setStudioTab('mi')}
                 >
-                  Mi Italia Models
+                  {t('ais_legacy.tab_mi')}
                 </div>
                 <div
                   className={`ai-studio-tab${studioTab === 'prompt' ? ' act' : ''}`}
                   onClick={() => setStudioTab('prompt')}
                 >
-                  Custom Text Prompt
+                  {t('ais_legacy.tab_prompt')}
                 </div>
               </div>
 
@@ -290,10 +297,12 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
               {studioTab === 'mi' && (
                 <>
                   <div className="ap-section-lbl">
-                    Select a Model{stockModels.length > 0 ? ` — ${stockModels.length} Stock Models` : ''}
+                    {stockModels.length > 0
+                      ? t('ais_legacy.select_model_n', { n: stockModels.length })
+                      : t('ais_legacy.select_model')}
                   </div>
                   {stockModels.length === 0 ? (
-                    <div className="ap-studio-empty">Loading models…</div>
+                    <div className="ap-studio-empty">{t('ais_legacy.loading_models')}</div>
                   ) : (
                     <>
                       <div className="ai-model-grid">
@@ -326,32 +335,32 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
               {/* Custom Text Prompt tab — dead UI, will wire later */}
               {studioTab === 'prompt' && (
                 <div>
-                  <div className="ap-section-lbl">Describe Your Model &amp; Scene</div>
+                  <div className="ap-section-lbl">{t('ais_legacy.describe_model_scene')}</div>
                   <div className="form-group">
                     <textarea
                       className="form-textarea ap-prompt-textarea"
-                      placeholder="e.g. 35-year-old Italian man, athletic build, medium skin tone…"
+                      placeholder={t('ais_legacy.prompt_placeholder')}
                       value={customPrompt}
                       onChange={e => setCustomPrompt(e.target.value)}
                     />
                     <div className="form-hint">
-                      Be specific about age, ethnicity, build, pose, background, and lighting.
+                      {t('ais_legacy.prompt_hint')}
                     </div>
                   </div>
                   <div className="ap-chips">
                     {PROMPT_CHIPS.map(chip => (
                       <div
-                        key={chip}
+                        key={chip.key}
                         className="prompt-chip"
-                        onClick={() => setCustomPrompt(p => p ? p + ', ' + chip : chip)}
+                        onClick={() => setCustomPrompt(p => p ? p + ', ' + chip.en : chip.en)}
                       >
-                        {chip}
+                        {t(`ais_legacy.chip.${chip.key}`)}
                       </div>
                     ))}
                   </div>
                   <div className="ap-prompt-note">
                     <span className="material-symbols-outlined">info</span>
-                    Custom prompts are a preview — currently the generator uses Mi Italia Models only.
+                    {t('ais_legacy.prompt_preview_note')}
                   </div>
                 </div>
               )}
@@ -393,7 +402,9 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                 disabled={generating}
               >
                 <span className="material-symbols-outlined">auto_awesome</span>
-                {generating ? `Generating… ${progress}` : 'Generate Model Photo'}
+                {generating
+                  ? t('ais_legacy.generating_progress', { progress })
+                  : t('ais_legacy.generate_btn')}
               </button>
 
               {error && (
@@ -411,7 +422,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
               {/* Single result display */}
               {generatedUrl && (
                 <>
-                  <div className="ap-section-lbl ap-gen-results-lbl">Generated Result</div>
+                  <div className="ap-section-lbl ap-gen-results-lbl">{t('ais_legacy.generated_result')}</div>
                   <div className="ap-gen-single-wrap">
                     <div
                       className="ap-gen-single-img"
@@ -420,15 +431,18 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                     {saved && (
                       <div className="ap-gen-saved-badge">
                         <span className="material-symbols-outlined">check_circle</span>
-                        Saved to Gallery
+                        {t('ais_legacy.saved_to_gallery')}
                       </div>
                     )}
                   </div>
 
                   <div className="ap-studio-desc-box">
-                    <div className="ap-studio-desc-lbl">Description</div>
+                    <div className="ap-studio-desc-lbl">{t('ais_legacy.description')}</div>
                     <div className="ap-studio-desc-text">
-                      AI-generated on-model photo — garment from Photo {selectedSourceIndex + 1} placed on {selectedModel?.label || 'model'}.
+                      {t('ais_legacy.description_text', {
+                        n:     selectedSourceIndex + 1,
+                        model: selectedModel?.label || t('ais_legacy.model_fallback'),
+                      })}
                     </div>
                   </div>
 
@@ -440,7 +454,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                       disabled={generating || saving}
                     >
                       <span className="material-symbols-outlined">refresh</span>
-                      Regenerate
+                      {t('ais_legacy.regenerate')}
                     </button>
                     <button
                       type="button"
@@ -452,8 +466,8 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                         {saved ? 'check_circle' : 'add_photo_alternate'}
                       </span>
                       {saved
-                        ? 'Saved to Gallery'
-                        : (saving ? 'Saving…' : 'Add to Gallery')}
+                        ? t('ais_legacy.saved_to_gallery')
+                        : (saving ? t('common.saving') : t('ais_legacy.add_to_gallery'))}
                     </button>
                   </div>
                 </>
@@ -468,14 +482,14 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         <div className="modal-backdrop" onClick={() => setShowSourceModal(false)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()} style={{ overflowY:'auto', maxHeight:'85vh' }}>
             <div className="modal-hdr">
-              <div className="modal-title">Select <em>Source Photo</em></div>
+              <div className="modal-title">{t('ais_legacy.select_source_pre')} <em>{t('ais_legacy.select_source_em')}</em></div>
               <div className="modal-close" onClick={() => setShowSourceModal(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
             </div>
 
             <div className="ap-source-modal-info">
-              Choose which product photo will be used as the garment reference.
+              {t('ais_legacy.select_source_info')}
             </div>
 
             <div className="ap-source-modal-grid">
@@ -492,7 +506,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
                     className="ap-source-modal-img"
                     style={{ backgroundImage:`url('${p.url}')` }}
                   />
-                  <div className="ap-source-modal-label">Photo {i + 1}</div>
+                  <div className="ap-source-modal-label">{t('ais.gen.photo_n', { n: i + 1 })}</div>
                   {p.id === selectedSourceId && (
                     <div className="ap-source-modal-check">
                       <span className="material-symbols-outlined">check_circle</span>

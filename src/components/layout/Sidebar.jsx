@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { clearToken, getStaff } from '../../lib/auth'
+import { clearToken, getStaff, isWhatsappEnabled } from '../../lib/auth'
 import { apiFetch } from '../../lib/api'
 import PrimoLogo from '../../assets/PrimoLogo.svg'
 import useNotifStore from '../../store/notifStore'
@@ -126,6 +126,7 @@ function Sidebar() {
   const ordBadge = getRouteUnread(notifications, '/orders')
   const invBadge = getRouteUnread(notifications, '/inventory')
   const msgBadge = getRouteUnread(notifications, '/messages')
+  const waOn     = isWhatsappEnabled()
 
   const NAV_SECTIONS = [
     {
@@ -140,7 +141,9 @@ function Sidebar() {
         { to: '/orders',       icon: 'local_shipping',  label: t('sidebar.orders'),       badge: ordBadge },
         { to: '/void-cil',     icon: 'block',           label: t('sidebar.void_cil') },
         { to: '/pos',          icon: 'point_of_sale',   label: t('sidebar.pos') },
-        { to: '/messages',     icon: 'chat_bubble',     label: t('sidebar.messages'),     badge: msgBadge },
+        // Messages is a WhatsApp-only inbox, so it is dropped entirely for a
+        // boutique without the entitlement rather than shown and disabled.
+        ...(waOn ? [{ to: '/messages', icon: 'chat_bubble', label: t('sidebar.messages'), badge: msgBadge }] : []),
       ],
     },
     {
@@ -149,9 +152,9 @@ function Sidebar() {
       icon: 'group',
       items: [
         { to: '/customers',  icon: 'group',    label: t('sidebar.customers') },
-        { to: '/engagement', icon: 'campaign', label: t('sidebar.engagement') },
+        { to: '/engagement', icon: 'campaign', label: t('sidebar.engagement', 'Engagement') },
         { to: '/discounts',  icon: 'local_offer', label: t('sidebar.discounts') },
-        { to: '/promotions', icon: 'sell',     label: t('sidebar.promotions') },
+        { to: '/promotions', icon: 'sell',     label: t('sidebar.promotions', 'Promotions') },
       ],
     },
     {
@@ -161,6 +164,7 @@ function Sidebar() {
       items: [
         { to: '/analytics',    icon: 'travel_explore',    label: t('sidebar.analytics') },
         { to: '/financials',   icon: 'account_balance',   label: t('sidebar.financials') },
+        { to: '/markdowns',    icon: 'sell',               label: t('sidebar.markdowns', 'Aging & Markdowns') },
         { to: '/reports',      icon: 'summarize',         label: t('sidebar.reports') },
         { to: '/subscription', icon: 'workspace_premium', label: t('sidebar.subscription') },
       ],
@@ -282,7 +286,7 @@ function Sidebar() {
                   <div className="sb-user-menu-item sb-user-menu-logout"
                     onClick={() => { clearToken(); navigate('/login') }}>
                     <span className="material-symbols-outlined">logout</span>
-                    Logout
+                    {t('sidebar.logout')}
                   </div>
                 </div>
               </>

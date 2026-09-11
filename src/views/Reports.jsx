@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { csvRow, csvTable, triggerDownload } from '../lib/csv'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -64,23 +65,8 @@ const SCHEDULED_REPORTS = [
 ]
 
 // ─── CSV utilities ───────────────────────────────────────
-
-function csvEscape(v) {
-  if (v == null) return ''
-  const s = String(v)
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-function csvRow(cells) { return cells.map(csvEscape).join(',') }
-
-function csvTable(rows, headerOverrides = null) {
-  if (!rows || rows.length === 0) return csvRow(['(no data)'])
-  const cols = Object.keys(rows[0])
-  const headerRow = headerOverrides
-    ? csvRow(cols.map(c => headerOverrides[c] ?? c))
-    : csvRow(cols)
-  const bodyRows = rows.map(r => csvRow(cols.map(c => r[c])))
-  return [headerRow, ...bodyRows].join('\n')
-}
+// csvEscape / csvRow / csvTable / triggerDownload now live in lib/csv.js so the
+// Inventory export can share the same quoting rules instead of its own.
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -230,20 +216,6 @@ const CSV_BUILDERS = {
   'customers':  buildCustomersCsv,
   'returns':    buildReturnsCsv,
   'looks':      buildLooksCsv,
-}
-
-// ─── Download util ───────────────────────────────────────
-
-function triggerDownload(text, filename) {
-  const blob = new Blob(['\ufeff', text], { type: 'text/csv;charset=utf-8;' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
 }
 
 // ─── Sub-components ──────────────────────────────────────

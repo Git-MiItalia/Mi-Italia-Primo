@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
 
+import { isWhatsappEnabled } from '../../lib/auth'
+
 const API = import.meta.env.VITE_API_URL
 
 const INVITE_METHODS = [
@@ -106,7 +108,9 @@ export default function CustomerLookupModal({ onAttach, onClose }) {
     <div className="clm-search-bar">
       <span className="clm-search-emoji">🔍</span>
       <input value={query} onChange={e => setQuery(e.target.value)} className="input-bare"
-        placeholder={tab === 'crm' ? t('clm.search_crm') : t('clm.search_mi')} />
+        placeholder={tab === 'crm'
+          ? t('clm.search_crm', 'Search your CRM by name, email or phone') + '…'
+          : t('clm.search_mi', 'Search Mi Italia users by name, email or phone') + '…'} />
     </div>
   )
 
@@ -173,7 +177,9 @@ export default function CustomerLookupModal({ onAttach, onClose }) {
           <div className="clm-optin-section-lbl">{t('clm.optin.covers')}</div>
           {[
             { k:'email', on:consentEmail, set:setConsentEmail, label:t('clm.optin.email_label'), desc:t('clm.optin.email_desc'), chip:'📧 Email',    chipBg:'rgba(99,91,255,.08)',  chipColor:'var(--stripe)' },
-            { k:'wa',    on:consentWa,    set:setConsentWa,    label:t('clm.optin.wa_label'),    desc:t('clm.optin.wa_desc'),    chip:'💬 WhatsApp',chipBg:'rgba(37,211,102,.1)', chipColor:'#1a9e4d' },
+            // Don't ask a customer to consent to a channel the boutique
+            // cannot send on.
+            ...(isWhatsappEnabled() ? [{ k:'wa',    on:consentWa,    set:setConsentWa,    label:t('clm.optin.wa_label'),    desc:t('clm.optin.wa_desc'),    chip:'💬 WhatsApp',chipBg:'rgba(37,211,102,.1)', chipColor:'#1a9e4d' }] : []),
             { k:'push',  on:consentPush,  set:setConsentPush,  label:t('clm.optin.push_label'),  desc:t('clm.optin.push_desc'),  chip:'🔔 Push',    chipBg:'rgba(184,149,90,.1)', chipColor:'#8A6A30' },
           ].map(c => (
             <div key={c.k} onClick={() => c.set(v => !v)} className={`clm-consent-row${c.on?' sel':''}`}>
@@ -402,7 +408,7 @@ export default function CustomerLookupModal({ onAttach, onClose }) {
             <div className="detail-divider" />
             <div className="clm-invite-lbl">{t('clm.walkin.invite_title')}</div>
             <div className="clm-method-grid">
-              {INVITE_METHODS.map(m => (
+              {INVITE_METHODS.filter(m => m.k !== 'wa' || isWhatsappEnabled()).map(m => (
                 <div key={m.k} onClick={() => setInviteMethod(m.k)} className={`clm-method-card${inviteMethod===m.k?' sel':''}`}>
                   <div className="clm-method-ico">{m.ico}</div>
                   <div className="clm-method-name">{m.name}</div>

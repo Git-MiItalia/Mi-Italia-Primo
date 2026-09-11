@@ -2,10 +2,22 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { activeLocale } from '../lib/dateHelpers'
 import StripeCheckout from '../components/ui/StripeCheckout'
 import RangeBar from '../components/ui/RangeBar'
 
 const BASE_URL = import.meta.env.VITE_API_URL
+
+/* Numbers and dates on this page were a mix of bare toLocaleString() — which
+   follows the BROWSER's locale, not the portal's — plain toFixed(2), which has
+   no locale at all, and dates pinned to 'en' / 'en-GB'. So a boutique reading
+   its own bill in Italian saw English thousands separators and English month
+   names. Grouping is forced on because Italian leaves four-digit amounts
+   ungrouped by default, which made columns read "€5311" above "€11.087". */
+const num  = (v) => (v == null ? '—' : Number(v).toLocaleString(activeLocale(), { useGrouping: true }))
+const num0 = (v) => (v == null ? '—' : Number(v).toLocaleString(activeLocale(), { maximumFractionDigits: 0, useGrouping: true }))
+const amt2 = (v) => Number(v ?? 0).toLocaleString(activeLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })
+const monthShort = (d) => new Date(d).toLocaleDateString(activeLocale(), { month: 'short' })
 
 // Ranking used to decide upgrade/downgrade direction for the action button
 const PLAN_RANK = { starter: 0, connect: 1, pro: 2 }
@@ -68,6 +80,37 @@ function MiniArch({ t, arch = [] }) {
       ))}
     </div>
   )
+}
+
+// Turns one `usage` entry — { used, limit } — into the props UsageMeter wants.
+//
+// Three distinct meanings have to survive here:
+//   limit null      → unlimited on this plan: show the count, faded full bar
+//   limit 0         → not included on this plan (e.g. WhatsApp on Starter)
+//   used null       → the backend doesn't measure it yet: show '—', never 0,
+//                     so a missing field can't be mistaken for a real zero
+// `used` above `limit` is left visible rather than clamped — a boutique over
+// its allowance should see 4 / 2, not a tidy 2 / 2.
+function meter(entry, t) {
+  const used  = entry?.used
+  const limit = entry?.limit
+  const has   = used !== null && used !== undefined
+  const n     = has ? Number(used) : null
+  const cap   = limit === null || limit === undefined ? null : Number(limit)
+
+  if (!has) return { display: '—', pct: 0, level: 'ok' }
+  if (cap === null || !Number.isFinite(cap)) {
+    return { display: num(n), pct: 100, unlimited: true, level: 'ok' }
+  }
+  if (cap === 0) {
+    return { display: t ? t('sub.page.not_included', 'Not included') : '0', pct: 0, level: 'ok' }
+  }
+  const pct = Math.min(100, Math.round((n / cap) * 100))
+  return {
+    display: `${num(n)} / ${num(cap)}`,
+    pct,
+    level: n > cap ? 'crit' : pct >= 90 ? 'crit' : pct >= 75 ? 'warn' : 'ok',
+  }
 }
 
 function UsageMeter({ label, display, hint, pct, unlimited, level = 'ok' }) {
@@ -172,7 +215,7 @@ function PlanCard({ t, plan, currentPlan, imagesLeft, onUpgrade, onUpgradeConnec
           </button>
           {plan.breakeven_eur && (
             <div className="sub-plan-breakeven">
-              {t('sub.page.breakeven', { amount: plan.breakeven_eur.toLocaleString() })}
+              {t('sub.page.breakeven', { amount: num(plan.breakeven_eur) })}
             </div>
           )}
         </>
@@ -183,23 +226,40 @@ function PlanCard({ t, plan, currentPlan, imagesLeft, onUpgrade, onUpgradeConnec
 }
 
 // ══ Topup modal ══════════════════════════════════════════════════════
+// Card details are deliberately NOT collected here. Taking a raw card number,
+// expiry and CVC through our own form would put card data through our page and
+// server, which is a PCI obligation we don't want and don't need — the boutique
+// is redirected to Stripe's hosted checkout instead, so the card never touches
+// Primo. This replaced an earlier two-step mockup that had those fields.
 function TopupModal({ t, onClose }) {
   const PACKS = [
     { images:  5, price: 10 },
     { images: 15, price: 25 },
     { images: 40, price: 60 },
   ]
-  const [step, setStep] = useState(1)
-  const [pack, setPack] = useState(PACKS[0])
-  const [cardNo, setCardNo]   = useState('')
-  const [exp, setExp]         = useState('')
-  const [cvc, setCvc]         = useState('')
-  const [name, setName]       = useState('')
-  const [country, setCountry] = useState('Italy')
-  const [zip, setZip]         = useState('')
+  const [pack, setPack]       = useState(PACKS[0])
+  const [redirecting, setRedirecting] = useState(false)
+  const [error, setError]     = useState(null)
 
-  function handlePay() {
-    // Backend not wired yet
+  async function handlePay() {
+    setRedirecting(true)
+    setError(null)
+    try {
+      const res = await apiFetch(`${BASE_URL}/boutique/subscription/topup`, {
+        method: 'POST',
+        body: JSON.stringify({ pack: String(pack.images) }),
+      }).then(r => r.json())
+
+      const url = res?.data?.checkout_url ?? res?.checkout_url
+      if (res?.success && url) {
+        window.location.href = url          // hand off to Stripe
+        return                              // keep the spinner while the browser navigates
+      }
+      setError(res?.message ?? t('sub.topup.err_checkout', 'Could not start checkout. Please try again.'))
+    } catch {
+      setError(t('common.error_network', 'Network error. Please check your connection.'))
+    }
+    setRedirecting(false)
   }
 
   return (
@@ -216,102 +276,64 @@ function TopupModal({ t, onClose }) {
           {t('sub.topup.subtitle')}
         </div>
 
-        {step === 1 && (
-          <>
-            <div className="sub-topup-grid">
-              {PACKS.map(p => (
-                <button
-                  key={p.images}
-                  className={`sub-topup-pack${pack.images === p.images ? ' on' : ''}`}
-                  onClick={() => setPack(p)}>
-                  <div className="sub-topup-pack-r">+{p.images}</div>
-                  <div className="sub-topup-pack-lbl">{t('sub.topup.images')}</div>
-                  <div className="sub-topup-pack-price">€{p.price}</div>
-                </button>
-              ))}
-            </div>
-            <div className="sub-topup-note">
-              <span className="material-symbols-outlined">info</span>
-              <span>{t('sub.topup.quality_note')}</span>
-            </div>
-            <div className="sub-topup-footer">
-              <button className="btn btn-outline btn-sm" onClick={onClose}>{t('common.cancel')}</button>
-              <button className="btn btn-primary btn-sm" onClick={() => setStep(2)}>{t('sub.topup.continue_pay')}</button>
-            </div>
-          </>
-        )}
+        <div className="sub-topup-grid">
+          {PACKS.map(p => (
+            <button
+              key={p.images}
+              className={`sub-topup-pack${pack.images === p.images ? ' on' : ''}`}
+              onClick={() => setPack(p)}>
+              <div className="sub-topup-pack-r">+{p.images}</div>
+              <div className="sub-topup-pack-lbl">{t('sub.topup.images')}</div>
+              <div className="sub-topup-pack-price">€{p.price}</div>
+            </button>
+          ))}
+        </div>
 
-        {step === 2 && (
-          <>
-            <div className="sub-pay-testbar">
-              <span className="material-symbols-outlined">science</span>
-              <span>{t('sub.topup.test_mode')}</span>
-            </div>
+        <div className="sub-pay-summary">
+          <div className="sub-pay-summary-row">
+            <span>{t('sub.topup.line_item')}</span>
+            <span>+{pack.images} {t('sub.topup.images')}</span>
+          </div>
+          <div className="sub-pay-summary-row sub-pay-summary-vat">
+            <span>{t('sub.topup.vat')}</span>
+            <span>{t('sub.topup.vat_included')}</span>
+          </div>
+          <div className="sub-pay-summary-row sub-pay-summary-total">
+            <span>{t('sub.topup.total_due')}</span>
+            <span>€{pack.price}</span>
+          </div>
+        </div>
 
-            <div className="sub-pay-summary">
-              <div className="sub-pay-summary-row">
-                <span>{t('sub.topup.line_item')}</span>
-                <span>+{pack.images} {t('sub.topup.images')}</span>
-              </div>
-              <div className="sub-pay-summary-row sub-pay-summary-vat">
-                <span>{t('sub.topup.vat')}</span>
-                <span>{t('sub.topup.vat_included')}</span>
-              </div>
-              <div className="sub-pay-summary-row sub-pay-summary-total">
-                <span>{t('sub.topup.total_due')}</span>
-                <span>€{pack.price}</span>
-              </div>
-            </div>
+        <div className="sub-topup-note">
+          <span className="material-symbols-outlined">info</span>
+          <span>{t('sub.topup.quality_note')}</span>
+        </div>
 
-            <div className="sub-pay-field-label">{t('sub.topup.card_info')}</div>
-            <div className="sub-pay-card-group">
-              <div className="sub-pay-card-number">
-                <input inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" maxLength={19}
-                  value={cardNo} onChange={e => setCardNo(e.target.value)} />
-                <span className="sub-pay-card-brands">
-                  <span className="sub-pay-brand">VISA</span>
-                  <span className="sub-pay-brand">MC</span>
-                  <span className="sub-pay-brand">AMEX</span>
-                </span>
-              </div>
-              <div className="sub-pay-card-split">
-                <input autoComplete="cc-exp" placeholder="MM / YY" maxLength={7}
-                  value={exp} onChange={e => setExp(e.target.value)} />
-                <input inputMode="numeric" autoComplete="cc-csc" placeholder="CVC" maxLength={4}
-                  value={cvc} onChange={e => setCvc(e.target.value)} />
-              </div>
-            </div>
+        <div className="sub-topup-note">
+          <span className="material-symbols-outlined">lock</span>
+          <span>{t('sub.topup.stripe_redirect_note', 'You will be taken to Stripe to pay securely. Your card details are never entered in Primo.')}</span>
+        </div>
 
-            <div className="sub-pay-field-label">{t('sub.topup.name_on_card')}</div>
-            <input className="sub-pay-input" placeholder={t('sub.topup.full_name')} autoComplete="cc-name"
-              value={name} onChange={e => setName(e.target.value)} />
+        {error && <div className="alert alert-urgent">{error}</div>}
 
-            <div className="sub-pay-field-label">{t('sub.topup.country_postal')}</div>
-            <div className="sub-pay-country-row">
-              <select className="sub-pay-input" value={country} onChange={e => setCountry(e.target.value)}>
-                <option>Italy</option><option>France</option><option>Spain</option>
-                <option>Germany</option><option>United Kingdom</option>
-              </select>
-              <input className="sub-pay-input" placeholder={t('sub.topup.postal_code')} autoComplete="postal-code"
-                value={zip} onChange={e => setZip(e.target.value)} />
-            </div>
-
-            <div className="sub-pay-testhint" dangerouslySetInnerHTML={{ __html: t('sub.topup.test_hint') }} />
-            <div className="sub-pay-stripe" dangerouslySetInnerHTML={{ __html: t('sub.topup.powered_stripe') }} />
-
-            <div className="sub-topup-footer">
-              <button className="btn btn-outline btn-sm" onClick={() => setStep(1)}>{t('common.back')}</button>
-              <button className="btn btn-primary btn-sm" onClick={handlePay}>{t('sub.topup.pay', { amount: pack.price })}</button>
-            </div>
-          </>
-        )}
+        <div className="sub-topup-footer">
+          <button className="btn btn-outline btn-sm" onClick={onClose} disabled={redirecting}>{t('common.cancel')}</button>
+          <button className="btn btn-primary btn-sm" onClick={handlePay} disabled={redirecting}>
+            {redirecting
+              ? t('sub.topup.redirecting', 'Opening Stripe') + '…'
+              : t('sub.topup.pay', { amount: pack.price })}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// ATTRIBUTION TAB — UI-only mockup (no endpoints wired yet)
+// ATTRIBUTION TAB
+//
+// Also no longer a mockup, despite what this header used to claim — it reads
+// GET /boutique/subscription/attribution below.
 // ══════════════════════════════════════════════════════════════════════
 function AttributionTab({ t }) {
   // Range labels for the Attribution tab period display
@@ -338,31 +360,120 @@ function AttributionTab({ t }) {
     return baseLabel
   })()
 
-  // Static mockup data
-  const TIERS = [
-    { key:'base',     tag: t('sub.attr.tier_base'),     range: t('sub.attr.tier_base_range'),     current:false, commission:8, status: t('sub.attr.below_buffer'),  saving: t('sub.attr.baseline') },
-    { key:'silver',   tag: t('sub.attr.tier_silver'),   range:'30–49%',                           current:true,  commission:7, status: t('sub.badge.current'),      saving:'€504/yr'   },
-    { key:'gold',     tag: t('sub.attr.tier_gold'),     range:'50–64%',                           current:false, commission:6, status: t('sub.attr.pts_away', { count: 16 }), saving:'€1,008/yr' },
-    { key:'platinum', tag: t('sub.attr.tier_platinum'), range:'≥65%',                             current:false, commission:5, status: t('sub.attr.pts_away', { count: 31 }), saving:'€1,512/yr' },
-  ]
+  // ── GET /boutique/subscription/attribution ──────────────────────────────
+  const [attr, setAttr]         = useState(null)
+  const [attrLoading, setLoad]  = useState(true)
+  const [attrError, setAttrErr] = useState(null)
 
-  const TREND_MONTHS = [
-    { key:'dec', label:'DEC', pct:12, color:'var(--mist)',              textColor:'var(--stone)' },
-    { key:'jan', label:'JAN', pct:14, color:'rgba(217,119,6,0.4)',      textColor:'#B45309' },
-    { key:'feb', label:'FEB', pct:18, color:'rgba(217,119,6,0.6)',      textColor:'#B45309' },
-    { key:'mar', label:'MAR', pct:22, color:'rgba(107,33,200,0.45)',    textColor:'var(--purple)' },
-    { key:'apr', label:'APR', pct:26, color:'rgba(107,33,200,0.65)',    textColor:'var(--purple)' },
-    { key:'may', label:'MAY', pct:34, color:'linear-gradient(180deg,var(--gold),var(--gold-dk))', textColor:'var(--gold-dk)', current:true },
-  ]
+  useEffect(() => {
+    let cancelled = false
+    // Flagging the request as in-flight is precisely what this effect is for —
+    // the rule targets state derived from props, which this isn't.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoad(true)
+    setAttrErr(null)
+    const params = new URLSearchParams({ range, compare })
+    if (range === 'custom' && customRange?.from && customRange?.to) {
+      params.set('from', customRange.from)
+      params.set('to', customRange.to)
+    }
+    apiFetch(`${BASE_URL}/boutique/subscription/attribution?${params}`)
+      .then(r => r.json())
+      .then(res => {
+        if (cancelled) return
+        if (res?.success) setAttr(res.data)
+        else setAttrErr(res?.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
+      })
+      .catch(() => { if (!cancelled) setAttrErr(t('common.error_network', 'Network error. Please check your connection.')) })
+      .finally(() => { if (!cancelled) setLoad(false) })
+    return () => { cancelled = true }
+  }, [range, compare, customRange, t])
 
-  const TRANSACTIONS = [
-    { date:'28', avBg:'rgba(184,149,90,0.15)', avColor:'var(--gold-dk)', avInit:'S', cust:'Sofia Marchetti',      item:'Silk Blouse',       sale:420,  source:{ type:'app',      label:'📱 In-app'          }, rate:8, fee:33.60 },
-    { date:'26', avBg:'rgba(99,91,255,0.1)',   avColor:'var(--stripe)',   avInit:'M', cust:'Marco Rossi',           item:'Tailored Jacket',   sale:890,  source:{ type:'walkin',   label: t('sub.attr.src_walkin') }, rate:7, fee:62.30 },
-    { date:'22', avBg:'rgba(217,119,6,0.1)',   avColor:'#B45309',         avInit:'C', cust:'Chiara De Luca',        item:'Cashmere Coat',     sale:1290, source:{ type:'digital',  label: t('sub.attr.src_email')  }, rate:7, fee:90.30 },
-    { date:'18', avBg:'var(--mist)',            avColor:'var(--stone)',    avInit:'?', cust: t('sub.attr.unidentified'), item:'Linen Trousers',    sale:380,  source:{ type:'organic',  label: t('sub.attr.src_organic') }, rate:0, fee:0     },
-    { date:'14', avBg:'rgba(184,149,90,0.15)', avColor:'var(--gold-dk)', avInit:'S', cust:'Sofia Marchetti',      item:'Leather Sandals',   sale:320,  source:{ type:'app',      label:'📱 In-app'          }, rate:8, fee:25.60 },
-    { date:'11', avBg:'rgba(0,108,53,0.1)',    avColor:'var(--green)',    avInit:'F', cust:'Francesca Bianchi',    item:'Wool Scarf',        sale:180,  source:{ type:'walkin',   label: t('sub.attr.src_walkin') }, rate:7, fee:12.60 },
-  ]
+  const idRate    = attr?.identification_rate ?? null
+  const tierInfo  = attr?.commission_tier ?? null
+  const ladder    = tierInfo?.ladder ?? []
+  const trend     = attr?.identification_rate_trend ?? []
+  const txs       = attr?.attributed_transactions ?? []
+
+  const baseRate  = ladder.find(l => l.tier === 'base')?.rate_pct ?? null
+  const tierNames = {
+    base:     t('sub.attr.tier_base',     'Base'),
+    silver:   t('sub.attr.tier_silver',   'Silver'),
+    gold:     t('sub.attr.tier_gold',     'Gold'),
+    platinum: t('sub.attr.tier_platinum', 'Platinum'),
+  }
+  const tierName = key => tierNames[key] ?? key
+
+  // The ladder gives only each tier's floor, so a band's top is the next
+  // tier's floor minus one; the last tier is open-ended.
+  function tierBand(i) {
+    const min = ladder[i]?.min_pct ?? 0
+    const next = ladder[i + 1]?.min_pct
+    return next == null ? `≥${min}%` : `${min}–${next - 1}%`
+  }
+
+  // Attributed revenue = sales that were matched to a customer. Unidentified
+  // walk-ins carry no commission, so they're excluded from the total.
+  const attributed      = txs.filter(x => x.attribution_source && x.attribution_source !== 'unidentified')
+  const attributedTotal = attributed.reduce((s, x) => s + Number(x.sale_amount || 0), 0)
+  const feesTotal       = txs.reduce((s, x) => s + Number(x.fee_charged || 0), 0)
+  const blendedRate     = attributedTotal > 0 ? (feesTotal / attributedTotal) * 100 : null
+
+  // Only meaningful over a full year — any shorter range would need annualising,
+  // which would be a guess rather than a figure.
+  const annualSaving = (tierRate) =>
+    range === '12m' && baseRate != null && attributedTotal > 0
+      ? `€${num(Math.round(((baseRate - tierRate) / 100) * attributedTotal))}/yr`
+      : '—'
+
+  const SOURCE_CLASS = { 'in-app': 'app', app: 'app', walkin: 'walkin', 'walk-in': 'walkin', email: 'digital', digital: 'digital', unidentified: 'organic', organic: 'organic' }
+  const SOURCE_LABEL = {
+    'in-app':       t('sub.attr.src_app',     'In-app'),
+    app:            t('sub.attr.src_app',     'In-app'),
+    walkin:         t('sub.attr.src_walkin',  'Identified walk-in'),
+    'walk-in':      t('sub.attr.src_walkin',  'Identified walk-in'),
+    email:          t('sub.attr.src_email',   'Email click'),
+    unidentified:   t('sub.attr.unidentified','Unidentified walk-in'),
+    organic:        t('sub.attr.src_organic', 'Organic'),
+  }
+
+  // Floor simulator — pure arithmetic against the ladder the API returned, so
+  // it needs no endpoint of its own.
+  // Empty state means "untouched", so the field falls back to the live figure.
+  // Derived rather than seeded in an effect, which would fight the user's typing
+  // and cause an extra render on every load.
+  const [simRateRaw, setSimRate]       = useState('')
+  const [simRevenueRaw, setSimRevenue] = useState('')
+  const simRate    = simRateRaw    !== '' ? simRateRaw    : (idRate != null ? String(idRate) : '')
+  const simRevenue = simRevenueRaw !== '' ? simRevenueRaw : (attributedTotal > 0 ? String(Math.round(attributedTotal)) : '')
+
+  // Highest tier whose floor the simulated rate clears.
+  const simTier = ladder.length
+    ? [...ladder].reverse().find(l => (Number(simRate) || 0) >= l.min_pct) ?? ladder[0]
+    : null
+  const simFee = simTier ? ((Number(simRevenue) || 0) * simTier.rate_pct) / 100 : 0
+
+  function exportCsv() {
+    const rows = [
+      ['Date', 'Customer', 'Item', 'Sale', 'Source', 'Rate %', 'Fee'],
+      ...txs.map(x => [
+        new Date(x.date).toISOString().slice(0, 10),
+        x.customer_name ?? '',
+        x.item ?? '',
+        x.sale_amount ?? '',
+        x.attribution_source ?? '',
+        x.commission_rate_pct ?? '',
+        x.fee_charged ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `attribution-${range}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div>
@@ -377,57 +488,84 @@ function AttributionTab({ t }) {
         onExport={() => {}}
       />
 
-      {/* Tier hero + Floor status */}
+      {attrLoading && <div className="dc-loading">{t('common.loading', 'Loading') + '…'}</div>}
+      {attrError && <div className="alert alert-urgent">{attrError}</div>}
+
+      {!attrLoading && !attrError && attr && (
+      <>
+      {/* Tier hero + identification rate */}
       <div className="grid2">
         <div>
           <div className="sub-attr-section-lbl">{t('sub.attr.current_tier')}</div>
-          <div className="tier-hero silver">
+          <div className={`tier-hero ${tierInfo?.tier ?? 'base'}`}>
             <div className="th-top">
               <div>
-                <div className="th-tier">{t('sub.attr.tier_silver')}</div>
-                <div className="th-tier-sub">{t('sub.attr.silver_desc')}</div>
+                <div className="th-tier">{tierName(tierInfo?.tier)}</div>
+                <div className="th-tier-sub">
+                  {tierInfo?.tier
+                    ? `${tierBand(ladder.findIndex(l => l.tier === tierInfo.tier))} ${t('sub.attr.tier_band_sub', 'identification rate')} · ${tierInfo.rate_pct}% ${t('sub.attr.tier_band_commission', 'attributed commission')}`
+                    : '—'}
+                </div>
               </div>
               <div className="th-right">
-                <div className="th-rate">7%</div>
+                <div className="th-rate">{tierInfo?.rate_pct != null ? `${tierInfo.rate_pct}%` : '—'}</div>
                 <div className="th-rate-lbl">{t('sub.attr.your_rate_month')}</div>
               </div>
             </div>
-            <div className="th-progress">
-              <div className="th-progress-row">
-                <span dangerouslySetInnerHTML={{ __html: t('sub.attr.progress_to_gold') }} />
-                <span>{t('sub.attr.progress_pct')}</span>
+            {tierInfo?.next_tier ? (
+              <>
+                <div className="th-progress">
+                  <div className="th-progress-row">
+                    <span>
+                      {t('sub.attr.progress_to', 'Progress to')} <strong>{tierName(tierInfo.next_tier)} ({tierInfo.next_rate_pct}%)</strong>
+                    </span>
+                    <span>
+                      {idRate}% → {t('sub.attr.need', 'need')} {ladder.find(l => l.tier === tierInfo.next_tier)?.min_pct}%
+                    </span>
+                  </div>
+                  <div className="prog">
+                    <div className="prog-fill th-prog-fill" style={{
+                      width: `${Math.min(100, Math.round((idRate / (ladder.find(l => l.tier === tierInfo.next_tier)?.min_pct || 100)) * 100))}%`,
+                    }} />
+                  </div>
+                </div>
+                <div className="th-projection">
+                  {t('sub.attr.points_to_next', '{{count}} more percentage points to reach {{tier}}.', {
+                    count: tierInfo.points_to_next_tier,
+                    tier: tierName(tierInfo.next_tier),
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="th-projection">
+                {t('sub.attr.top_tier', 'You are on the highest tier — this is the lowest commission rate available.')}
               </div>
-              <div className="prog">
-                <div className="prog-fill th-prog-fill" style={{ width:'68%' }} />
-              </div>
-            </div>
-            <div className="th-projection">
-              {t('sub.attr.projection')}
-            </div>
+            )}
           </div>
         </div>
 
         <div>
-          <div className="sub-attr-section-lbl">{t('sub.attr.floor_status')}</div>
+          <div className="sub-attr-section-lbl">{t('sub.attr.id_rate_status', 'Identification rate')}</div>
           <div className="floor-strip safe">
-            <div className="fs-ico"><span className="material-symbols-outlined">verified</span></div>
+            <div className="fs-ico"><span className="material-symbols-outlined">badge</span></div>
             <div className="fs-content">
-              <div className="fs-title">{t('sub.attr.floor_safe')}</div>
-              <div className="fs-sub" dangerouslySetInnerHTML={{ __html: t('sub.attr.floor_safe_desc') }} />
+              <div className="fs-title">{idRate != null ? `${idRate}%` : '—'}</div>
+              <div className="fs-sub">
+                {t('sub.attr.id_rate_desc', 'Share of sales matched to a Mi Italia customer over this period. The higher it goes, the lower your commission rate.')}
+              </div>
               <div className="fs-bar-wrap">
                 <div className="fs-bar-row">
-                  <span>{t('sub.attr.floor_pct')}</span>
-                  <span>{t('sub.attr.you_pct')}</span>
+                  <span>0%</span>
+                  <span>{tierInfo?.next_tier ? `${tierName(tierInfo.next_tier)} ${ladder.find(l => l.tier === tierInfo.next_tier)?.min_pct}%` : '100%'}</span>
                 </div>
                 <div className="prog fs-prog">
-                  <div className="prog-fill fs-prog-fill" style={{ width:'34%' }} />
-                  <div className="fs-floor-marker" />
+                  <div className="prog-fill fs-prog-fill" style={{ width: `${Math.min(100, idRate ?? 0)}%` }} />
                 </div>
               </div>
             </div>
             <div className="fs-right">
-              <div className="fs-rate">+19pt</div>
-              <div className="fs-buffer-lbl">{t('sub.attr.buffer')}</div>
+              <div className="fs-rate">{attributed.length}/{txs.length}</div>
+              <div className="fs-buffer-lbl">{t('sub.attr.identified_sales', 'identified')}</div>
             </div>
           </div>
         </div>
@@ -454,27 +592,35 @@ function AttributionTab({ t }) {
             </tr>
           </thead>
           <tbody>
-            {TIERS.map(ti => (
-              <tr key={ti.key} className={ti.current ? 'sub-tier-current-row' : ''}>
-                <td><span className={`tag tag-${ti.key}`}>{ti.tag}</span></td>
-                <td>
-                  <span className={ti.key === 'base' ? 'sub-tier-range-mute' : undefined}>{ti.range}</span>
-                  {ti.current && <span className="sub-tier-current-hint"> · {t('sub.attr.you_34')}</span>}
-                </td>
-                <td>
-                  <span className={`sub-tier-commission sub-tier-commission-${ti.key}`}>{ti.commission}%</span>
-                </td>
-                <td>
-                  {ti.current
-                    ? <span className="tag tag-active">{t('sub.badge.current')}</span>
-                    : <span className="sub-tier-status">{ti.status}</span>
-                  }
-                </td>
-                <td>
-                  <span className={ti.key === 'base' ? 'sub-tier-baseline' : 'sub-tier-saving'}>{ti.saving}</span>
-                </td>
-              </tr>
-            ))}
+            {ladder.map((ti, i) => {
+              const current = ti.tier === tierInfo?.tier
+              const gap     = idRate != null ? Math.round((ti.min_pct - idRate) * 10) / 10 : null
+              return (
+                <tr key={ti.tier} className={current ? 'sub-tier-current-row' : ''}>
+                  <td><span className={`tag tag-${ti.tier}`}>{tierName(ti.tier)}</span></td>
+                  <td>
+                    <span className={ti.tier === 'base' ? 'sub-tier-range-mute' : undefined}>{tierBand(i)}</span>
+                    {current && <span className="sub-tier-current-hint"> · {t('sub.attr.you_at', 'You: {{pct}}%', { pct: idRate })}</span>}
+                  </td>
+                  <td>
+                    <span className={`sub-tier-commission sub-tier-commission-${ti.tier}`}>{ti.rate_pct}%</span>
+                  </td>
+                  <td>
+                    {current
+                      ? <span className="tag tag-active">{t('sub.badge.current')}</span>
+                      : gap != null && gap > 0
+                        ? <span className="sub-tier-status">{t('sub.attr.pts_away', { count: gap })}</span>
+                        : <span className="sub-tier-status">{t('sub.attr.reached', 'Reached')}</span>
+                    }
+                  </td>
+                  <td>
+                    <span className={ti.tier === 'base' ? 'sub-tier-baseline' : 'sub-tier-saving'}>
+                      {ti.tier === 'base' ? t('sub.attr.baseline', '— baseline') : annualSaving(ti.rate_pct)}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -488,24 +634,44 @@ function AttributionTab({ t }) {
               <div className="sub-card-sub">{t('sub.attr.trend_desc')}</div>
             </div>
           </div>
-          <div className="sub-attr-trend-chart">
-            {TREND_MONTHS.map(m => (
-              <div key={m.key} className="sub-attr-trend-col">
-                <div className="sub-attr-trend-val" style={{ color: m.textColor, fontWeight: m.current ? 700 : 600 }}>
-                  {m.pct}%
-                </div>
-                <div
-                  className={`sub-attr-trend-bar${m.current ? ' current' : ''}`}
-                  style={{ height: `${m.pct * 3.2}px`, background: m.color }}
-                />
-                <div className={`sub-attr-trend-lbl${m.current ? ' current' : ''}`}>{m.label}</div>
+          {trend.length === 0 ? (
+            <div className="state-empty">{t('sub.attr.no_trend', 'No identification data for this period yet.')}</div>
+          ) : (
+            <>
+              <div className="sub-attr-trend-chart">
+                {trend.map((m, i) => {
+                  const pct     = Number(m.id_rate_pct ?? 0)
+                  const current = i === trend.length - 1
+                  const label   = monthShort(m.month).toUpperCase()
+                  return (
+                    <div key={m.month} className="sub-attr-trend-col">
+                      <div className="sub-attr-trend-val" style={{ fontWeight: current ? 700 : 600 }}>{pct}%</div>
+                      <div
+                        className={`sub-attr-trend-bar${current ? ' current' : ''}`}
+                        // Scaled against the tallest month so a short series
+                        // still fills the chart rather than sitting flat.
+                        style={{ height: `${Math.max(4, (pct / Math.max(...trend.map(x => Number(x.id_rate_pct ?? 0)), 1)) * 150)}px` }}
+                        title={t('sub.attr.trend_tooltip', '{{identified}} of {{total}} orders identified', { identified: m.identified_orders, total: m.total_orders })}
+                      />
+                      <div className={`sub-attr-trend-lbl${current ? ' current' : ''}`}>{label}</div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
-          <div className="sub-attr-trend-note">
-            <strong className="sub-attr-trend-note-up">{t('sub.attr.trend_growth')}</strong>{' '}
-            {t('sub.attr.trend_driver')}
-          </div>
+              {trend.length > 1 && (() => {
+                const first = Number(trend[0].id_rate_pct ?? 0)
+                const last  = Number(trend[trend.length - 1].id_rate_pct ?? 0)
+                const delta = Math.round((last - first) * 10) / 10
+                return (
+                  <div className="sub-attr-trend-note">
+                    <strong className={delta >= 0 ? 'sub-attr-trend-note-up' : undefined}>
+                      {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)} {t('sub.attr.points_over', 'points over')} {trend.length} {t('sub.attr.months', 'months')}.
+                    </strong>
+                  </div>
+                )
+              })()}
+            </>
+          )}
         </div>
 
         <div className="card sub-attr-card-flush">
@@ -518,27 +684,39 @@ function AttributionTab({ t }) {
           <div className="sub-sim-input-row">
             <div className="sub-sim-input-lbl">
               <span>{t('sub.attr.sim_if_rate')}</span>
-              <div className="sub-sim-input-lbl-sub">{t('sub.attr.sim_currently')}</div>
+              <div className="sub-sim-input-lbl-sub">
+                {t('sub.attr.sim_current_is', 'Currently {{pct}}% · {{tier}}', { pct: idRate ?? 0, tier: tierName(tierInfo?.tier) })}
+              </div>
             </div>
-            <input className="sub-sim-input" defaultValue="45%" />
+            <input className="sub-sim-input" type="number" min="0" max="100"
+              value={simRate} onChange={e => setSimRate(e.target.value)} />
           </div>
           <div className="sub-sim-input-row">
             <div className="sub-sim-input-lbl">
               <span>{t('sub.attr.sim_monthly_rev')}</span>
-              <div className="sub-sim-input-lbl-sub">{t('sub.attr.sim_current_avg')}</div>
+              <div className="sub-sim-input-lbl-sub">
+                {t('sub.attr.sim_avg_is', 'Your attributed total this period: €{{amount}}', { amount: num(Math.round(attributedTotal)) })}
+              </div>
             </div>
-            <input className="sub-sim-input" defaultValue="€4,200" />
+            <input className="sub-sim-input" type="number" min="0"
+              value={simRevenue} onChange={e => setSimRevenue(e.target.value)} />
           </div>
           <div className="sub-sim-result">
             <div className="sub-sim-result-ico"><span className="material-symbols-outlined">calculate</span></div>
             <div className="sub-sim-result-body">
               <div className="sub-sim-result-lbl">{t('sub.attr.sim_projected')}</div>
-              <div className="sub-sim-result-val">€294 <span className="sub-sim-result-mo">/ {t('sub.attr.month')}</span></div>
+              <div className="sub-sim-result-val">
+                €{num0(simFee)}
+                <span className="sub-sim-result-mo"> / {t('sub.attr.month')}</span>
+              </div>
             </div>
           </div>
           <div className="sub-sim-note">
-            <span dangerouslySetInnerHTML={{ __html: t('sub.attr.sim_gold_note') }} /><br />
-            <span dangerouslySetInnerHTML={{ __html: t('sub.attr.sim_platinum_note') }} />
+            {simTier
+              ? t('sub.attr.sim_at_tier', 'At {{pct}}% you would be on {{tier}}, paying {{rate}}% commission.', {
+                  pct: Number(simRate) || 0, tier: tierName(simTier.tier), rate: simTier.rate_pct,
+                })
+              : t('sub.attr.sim_no_ladder', 'Commission tiers are not available for this plan.')}
           </div>
         </div>
       </div>
@@ -550,7 +728,7 @@ function AttributionTab({ t }) {
             <div className="card-title">{t('sub.attr.tx_title')} <em>{t('sub.attr.tx_em')}</em></div>
             <div className="sub-card-sub">{t('sub.attr.tx_desc')}</div>
           </div>
-          <button className="btn btn-outline btn-sm">
+          <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={txs.length === 0}>
             <span className="material-symbols-outlined">download</span>{t('common.export')} CSV
           </button>
         </div>
@@ -564,47 +742,83 @@ function AttributionTab({ t }) {
           <div className="sub-tx-num">{t('sub.attr.col_mi_fee')}</div>
         </div>
 
-        {TRANSACTIONS.map((tx, i) => (
-          <div key={i} className="sub-tx-row">
-            <div className="sub-tx-date">{tx.date} <span className="sub-tx-date-month">May</span></div>
-            <div className="sub-tx-customer">
-              <div className="sub-tx-cust-av" style={{ background: tx.avBg, color: tx.avColor }}>{tx.avInit}</div>
-              <div>
-                <div className="sub-tx-cust-name">{tx.cust}</div>
-                <div className="sub-tx-cust-sub">{tx.item} · €{tx.sale}</div>
-              </div>
-            </div>
-            <div><span className={`sub-tx-source sub-tx-source-${tx.source.type}`}>{tx.source.label}</span></div>
-            <div className="sub-tx-amount">€{tx.sale}</div>
-            <div className="sub-tx-rate">{tx.rate}%</div>
-            <div className="sub-tx-fee">€{tx.fee.toFixed(2)}</div>
-          </div>
-        ))}
+        {txs.length === 0 && (
+          <div className="state-empty">{t('sub.attr.no_transactions', 'No transactions in this period.')}</div>
+        )}
 
-        <div className="sub-tx-row sub-tx-summary">
-          <div />
-          <div className="sub-tx-more">{t('sub.attr.tx_more', { count: 18 })}</div>
-          <div />
-          <div className="sub-tx-amount">€4,200</div>
-          <div className="sub-tx-rate sub-tx-total-rate">7%</div>
-          <div className="sub-tx-fee sub-tx-total-fee">€294.00</div>
-        </div>
+        {txs.map((tx, i) => {
+          const d      = new Date(tx.date)
+          const src    = tx.attribution_source ?? 'unidentified'
+          const sale   = Number(tx.sale_amount || 0)
+          const fee    = Number(tx.fee_charged || 0)
+          const name   = tx.customer_name || t('sub.attr.unidentified', 'Unidentified walk-in')
+          const isAnon = src === 'unidentified'
+          return (
+            <div key={`${tx.date}-${i}`} className="sub-tx-row">
+              <div className="sub-tx-date">
+                {d.getDate()} <span className="sub-tx-date-month">{monthShort(d)}</span>
+              </div>
+              <div className="sub-tx-customer">
+                <div className="sub-tx-cust-av" style={isAnon ? { background: 'var(--mist)', color: 'var(--stone)' } : undefined}>
+                  {isAnon ? '?' : name.trim().charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="sub-tx-cust-name">{name}</div>
+                  <div className="sub-tx-cust-sub">{tx.item ?? '—'}</div>
+                </div>
+              </div>
+              <div><span className={`sub-tx-source sub-tx-source-${SOURCE_CLASS[src] ?? 'organic'}`}>{SOURCE_LABEL[src] ?? src}</span></div>
+              {/* `undefined` here meant the browser's own locale, not the
+                  portal's — an Italian boutique on an English-configured
+                  machine saw "€1,234.50" while the rest of the page was in
+                  Italian. useGrouping is forced on for the same reason as
+                  Financials: Italian leaves four-digit amounts ungrouped. */}
+              <div className="sub-tx-amount">€{sale.toLocaleString(activeLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}</div>
+              <div className="sub-tx-rate">{tx.commission_rate_pct ?? 0}%</div>
+              <div className="sub-tx-fee">€{amt2(fee)}</div>
+            </div>
+          )
+        })}
+
+        {txs.length > 0 && (
+          <div className="sub-tx-row sub-tx-summary">
+            <div />
+            <div className="sub-tx-more">
+              {t('sub.attr.tx_total_count', '{{count}} transactions · {{identified}} identified', { count: txs.length, identified: attributed.length })}
+            </div>
+            <div />
+            <div className="sub-tx-amount">€{num(Math.round(attributedTotal))}</div>
+            <div className="sub-tx-rate sub-tx-total-rate">{blendedRate != null ? `${blendedRate.toFixed(1)}%` : '—'}</div>
+            <div className="sub-tx-fee sub-tx-total-fee">€{amt2(feesTotal)}</div>
+          </div>
+        )}
       </div>
+      </>
+      )}
     </div>
   )
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// BILLING TAB — UI-only mockup (no endpoints wired yet)
+// BILLING TAB
+//
+// The header used to say "UI-only mockup (no endpoints wired yet)", which is no
+// longer true and is worth correcting: everything here is real. It has no fetch
+// of its own by design — the KPIs and billing details come from the parent's
+// /boutique/subscription and /boutique/profile calls, and invoices are
+// deliberately left to Stripe (see the note further down).
 // ══════════════════════════════════════════════════════════════════════
-function BillingTab({ t }) {
-  const INVOICES = [
-    { date:'1 May',  ref:'MI-2026-05', amount:294, status:'pending',  period:'May 2026' },
-    { date:'1 Apr',  ref:'MI-2026-04', amount:382, status:'paid',     period:'Apr 2026' },
-    { date:'1 Mar',  ref:'MI-2026-03', amount:418, status:'paid',     period:'Mar 2026' },
-    { date:'1 Feb',  ref:'MI-2026-02', amount:352, status:'paid',     period:'Feb 2026' },
-    { date:'1 Jan',  ref:'MI-2026-01', amount:394, status:'paid',     period:'Jan 2026' },
-  ]
+function BillingTab({ t, onOpenPortal, portalLoading, portalError, subData, profile, navigate }) {
+  // Next charge is derivable: the plan's monthly price, due at the end of the
+  // current billing period. The other two need a backend figure, so they show
+  // '—' rather than an invented number.
+  const period      = subData?.subscription?.current_period
+  const nextChargeAt = period?.ends_at ? new Date(period.ends_at) : null
+  const planPrice   = subData?.plan_price_eur ?? subData?.subscription?.price_eur ?? null
+  const ytdPaid     = subData?.billing?.ytd_paid_eur ?? null
+  const avgMonthly  = subData?.billing?.avg_monthly_eur ?? null
+
+  const fmtEur = v => (v == null ? '—' : `€${num(v)}`)
 
   return (
     <div>
@@ -612,18 +826,26 @@ function BillingTab({ t }) {
       <div className="sub-bill-kpi-row">
         <div className="sub-bill-kpi-card">
           <div className="sub-bill-kpi-lbl">{t('sub.bill.next_charge')}</div>
-          <div className="sub-bill-kpi-val"><em>€294</em></div>
-          <div className="sub-bill-kpi-sub">{t('sub.bill.next_charge_sub')}</div>
+          <div className="sub-bill-kpi-val"><em>{fmtEur(planPrice)}</em></div>
+          <div className="sub-bill-kpi-sub">
+            {nextChargeAt
+              ? t('sub.bill.next_charge_on', 'Due {{date}}', { date: nextChargeAt.toLocaleDateString(activeLocale(), { day: 'numeric', month: 'long' }) })
+              : t('sub.bill.next_charge_unknown', 'No renewal date on file')}
+          </div>
         </div>
         <div className="sub-bill-kpi-card">
           <div className="sub-bill-kpi-lbl">{t('sub.bill.ytd_paid')}</div>
-          <div className="sub-bill-kpi-val">€1,840</div>
-          <div className="sub-bill-kpi-sub">{t('sub.bill.ytd_paid_sub')}</div>
+          <div className="sub-bill-kpi-val">{fmtEur(ytdPaid)}</div>
+          <div className="sub-bill-kpi-sub">
+            {ytdPaid == null ? t('sub.bill.not_available', 'Not available yet') : t('sub.bill.ytd_paid_sub')}
+          </div>
         </div>
         <div className="sub-bill-kpi-card">
           <div className="sub-bill-kpi-lbl">{t('sub.bill.avg_monthly')}</div>
-          <div className="sub-bill-kpi-val">€368</div>
-          <div className="sub-bill-kpi-sub sub-bill-kpi-up">{t('sub.bill.avg_monthly_sub')}</div>
+          <div className="sub-bill-kpi-val">{fmtEur(avgMonthly)}</div>
+          <div className="sub-bill-kpi-sub">
+            {avgMonthly == null ? t('sub.bill.not_available', 'Not available yet') : t('sub.bill.avg_monthly_sub')}
+          </div>
         </div>
       </div>
 
@@ -636,14 +858,17 @@ function BillingTab({ t }) {
               <div className="sub-card-sub">{t('sub.bill.auto_debit')}</div>
             </div>
           </div>
+          {/* Stripe holds the card, so it's also where it gets changed. Showing
+              a card here would mean either duplicating Stripe's data or, as
+              before, inventing one. */}
           <div className="sub-pm-card">
-            <div className="sub-pm-brand">VISA</div>
             <div className="sub-pm-info">
-              <div className="sub-pm-num">{t('sub.payment.card_number')}</div>
-              <div className="sub-pm-exp">{t('sub.bill.card_expiry')}</div>
+              <div className="sub-pm-num">{t('sub.bill.pm_in_stripe', 'Your card is held securely by Stripe')}</div>
+              <div className="sub-pm-exp">{t('sub.bill.pm_in_stripe_sub', 'Add, replace or remove a payment method in the billing portal.')}</div>
             </div>
-            <button className="btn btn-outline btn-sm">
-              <span className="material-symbols-outlined">edit</span>{t('sub.bill.update')}
+            <button className="btn btn-outline btn-sm" onClick={onOpenPortal} disabled={portalLoading}>
+              <span className="material-symbols-outlined">credit_card</span>
+              {portalLoading ? t('sub.page.opening_portal') : t('sub.bill.update')}
             </button>
           </div>
           <div className="alert info sub-pm-alert">
@@ -658,18 +883,27 @@ function BillingTab({ t }) {
               <div className="card-title">{t('sub.bill.details_title')} <em>{t('sub.bill.details_em')}</em></div>
               <div className="sub-card-sub">{t('sub.bill.details_desc')}</div>
             </div>
-            <button className="btn btn-outline btn-sm">
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/store')}>
               <span className="material-symbols-outlined">edit</span>{t('common.edit')}
             </button>
           </div>
+          {/* Read from the boutique's own profile. This previously showed a
+              different company's name, address, VAT number and codice fiscale —
+              legal identifiers a boutique could reasonably have copied out. */}
           <div className="sub-bd-body">
-            <div className="sub-bd-name">Atelier Bianchi S.r.l.</div>
-            <div className="sub-bd-addr">Via Brera 12<br />20121 Milano · Italia</div>
+            <div className="sub-bd-name">{profile?.name ?? '—'}</div>
+            <div className="sub-bd-addr">
+              {profile?.address_line1 ?? '—'}
+              {profile?.address_line2 ? <><br />{profile.address_line2}</> : null}
+              <br />
+              {[profile?.postcode, profile?.city].filter(Boolean).join(' ') || '—'}
+              {profile?.country ? ` · ${profile.country}` : ''}
+            </div>
             <div className="sub-bd-vat">
-              <div><strong>{t('sub.bill.vat_piva')}:</strong> IT12345678901</div>
-              <div><strong>{t('sub.bill.codice_fiscale')}:</strong> BNCGLA82A41F205X</div>
-              <div><strong>SDI:</strong> 0000000</div>
-              <div><strong>PEC:</strong> atelierbianchi@pec.it</div>
+              <div><strong>{t('sub.bill.vat_piva')}:</strong> {profile?.vat_number ?? '—'}</div>
+              <div><strong>{t('sub.bill.codice_fiscale')}:</strong> {profile?.codice_fiscale ?? '—'}</div>
+              <div><strong>SDI:</strong> {profile?.sdi_code ?? '—'}</div>
+              <div><strong>PEC:</strong> {profile?.pec ?? '—'}</div>
             </div>
           </div>
         </div>
@@ -684,39 +918,29 @@ function BillingTab({ t }) {
               {t('sub.bill.invoice_desc')}
             </div>
           </div>
-          <select className="sub-inv-filter">
-            <option>{t('sub.bill.filter_all')}</option>
-            <option>{t('sub.bill.filter_year')}</option>
-            <option>{t('sub.bill.filter_last_year')}</option>
-            <option>{t('sub.bill.filter_refunds')}</option>
-          </select>
         </div>
 
-        <div className="sub-inv-header">
-          <div>{t('sub.bill.col_date')}</div>
-          <div>{t('sub.bill.col_invoice')}</div>
-          <div className="sub-inv-num">{t('sub.bill.col_amount')}</div>
-          <div className="sub-inv-center">{t('sub.bill.col_status')}</div>
-          <div className="sub-inv-num">{t('sub.bill.col_period')}</div>
-          <div />
-        </div>
-
-        {INVOICES.map(inv => (
-          <div key={inv.ref} className="sub-inv-row">
-            <div className="sub-inv-date">{inv.date}</div>
-            <div className="sub-inv-ref">{inv.ref}</div>
-            <div className="sub-inv-num sub-inv-amt">€{inv.amount}</div>
-            <div className="sub-inv-center">
-              <span className={`sub-inv-status sub-inv-status-${inv.status}`}>{inv.status.toUpperCase()}</span>
+        {/* Stripe is the system of record for invoices — it already holds each
+            one with the correct VAT, a PDF and its payment status, and
+            portal-link opens it. Rebuilding a table here would mean duplicating
+            those documents and keeping them in sync forever. */}
+        <div className="sub-inv-portal">
+          <div>
+            <div className="sub-inv-portal-title">
+              {t('sub.bill.portal_title', 'Invoices are kept in Stripe')}
             </div>
-            <div className="sub-inv-num sub-inv-period">{inv.period}</div>
-            <div className="sub-inv-actions">
-              <button className="btn btn-outline btn-xs" title={t('sub.bill.download_pdf')}>
-                <span className="material-symbols-outlined">download</span>
-              </button>
+            <div className="sub-inv-portal-sub">
+              {t('sub.bill.portal_sub', 'Your full invoice history, PDF downloads and payment methods are available in the Stripe billing portal.')}
             </div>
           </div>
-        ))}
+          <button className="btn btn-primary" onClick={onOpenPortal} disabled={portalLoading}>
+            <span className="material-symbols-outlined">receipt_long</span>
+            {portalLoading
+              ? t('sub.page.opening_portal')
+              : t('sub.bill.open_portal_btn', 'View invoices in Stripe')}
+          </button>
+        </div>
+        {portalError && <div className="alert alert-urgent">{portalError}</div>}
       </div>
     </div>
   )
@@ -731,20 +955,34 @@ export default function Subscription() {
   const [tab,           setTab]           = useState('overview')
   const [subData,       setSubData]       = useState(null)
   const [plans,         setPlans]         = useState([])
+  const [subFailed,     setSubFailed]     = useState(false)
+  const [plansFailed,   setPlansFailed]   = useState(false)
   const [loading,       setLoading]       = useState(true)
   const [checkoutOpen,  setCheckoutOpen]  = useState(false)
   const [showTopup,     setShowTopup]     = useState(false)
   const [connectLoading, setConnectLoading] = useState(false)
   const [portalError,   setPortalError]   = useState('')
 
+  // Billing details (name, address, VAT) come from the boutique's own profile
+  // rather than being restated here.
+  const [profile, setProfile] = useState(null)
+
   useEffect(() => {
     Promise.all([
       apiFetch(`${BASE_URL}/boutique/subscription`).then(r => r.json()).catch(() => null),
       apiFetch(`${BASE_URL}/boutique/subscription/plans`).then(r => r.json()).catch(() => null),
+      apiFetch(`${BASE_URL}/boutique/profile`).then(r => r.json()).catch(() => null),
     ])
-      .then(([sub, plansRes]) => {
+      .then(([sub, plansRes, profRes]) => {
         if (sub?.success)      setSubData(sub.data)
         if (plansRes?.success) setPlans(plansRes.data?.plans ?? [])
+        if (profRes?.success)  setProfile(profRes.data)
+        // All three failures were swallowed. The subscription one is the
+        // serious case: `currentPlan` falls back to 'connect', so a boutique
+        // actually on Pro would be told it is on Connect — wrong plan, wrong
+        // allowances, wrong price, and nothing on screen to doubt.
+        setSubFailed(!sub?.success)
+        setPlansFailed(!plansRes?.success)
       })
       .finally(() => setLoading(false))
   }, [i18n.language])
@@ -783,7 +1021,16 @@ export default function Subscription() {
     ? t('sub.page.plan_sub_starter')
     : t('sub.page.plan_sub_connect')
 
-  const aiRendersLeft = subData?.usage?.ai_studio_renders_remaining ?? 17
+  const usage = subData?.usage ?? {}
+  // `remaining` is returned both nested and flat; fall back to limit − used so
+  // the figure is either real or absent. A hardcoded default here read as a
+  // plausible real number.
+  const renders = usage.ai_studio_renders ?? {}
+  const aiRendersLeft = renders.remaining
+    ?? usage.ai_studio_renders_remaining
+    ?? (renders.limit != null && renders.used != null
+      ? Math.max(0, Number(renders.limit) - Number(renders.used))
+      : '—')
 
   const TABS = [
     { key: 'overview',    icon: 'home',         label: t('sub.page.tab_overview')    },
@@ -806,6 +1053,15 @@ export default function Subscription() {
           <div className="sub-mod-sub">{t('sub.page.subtitle')}</div>
         </div>
       </div>
+
+      {subFailed && (
+        <div className="sub-load-error">
+          {t('sub.page.err_load', 'Could not load your subscription. The plan, allowances and prices shown below are defaults and may not be yours — reload before acting on them.')}
+        </div>
+      )}
+      {!subFailed && plansFailed && (
+        <div className="sub-load-error">{t('sub.page.err_plans', 'Could not load the available plans.')}</div>
+      )}
 
       <div className="sub-nav">
         {TABS.map(tb => (
@@ -830,7 +1086,7 @@ export default function Subscription() {
               <div className="sub-ph-stat-lbl">{t('sub.page.id_rate')}</div>
             </div>
             <div className="sub-ph-stat">
-              <div className="sub-ph-stat-val">€{(subData?.attributed_revenue_month ?? 0).toLocaleString()}</div>
+              <div className="sub-ph-stat-val">€{num(subData?.attributed_revenue_month ?? 0)}</div>
               <div className="sub-ph-stat-lbl">{t('sub.page.attr_rev_month')}</div>
             </div>
             <div className="sub-ph-right">
@@ -858,34 +1114,39 @@ export default function Subscription() {
             <div className="sub-usage-grid">
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_contacts')}</div>
-                <UsageMeter label={t('sub.page.total_contacts')} display="847 / 1,500"  pct={56}  hint={t('sub.page.contacts_hint')}     level="ok" />
-                <UsageMeter label={t('sub.page.item_savers')}    display="541"          pct={100} unlimited hint={t('sub.page.savers_hint')} level="ok" />
+                <UsageMeter label={t('sub.page.total_contacts')} {...meter(usage.contacts, t)}    hint={t('sub.page.contacts_hint')} />
+                <UsageMeter label={t('sub.page.item_savers')}    {...meter(usage.item_savers, t)} hint={t('sub.page.savers_hint')} />
               </div>
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_campaigns')}</div>
-                <UsageMeter label={t('sub.page.email_campaigns')} display={`4 / ${t('sub.page.unlimited')}`}   pct={100} unlimited hint={t('sub.page.email_hint')}    level="ok" />
-                <UsageMeter label={t('sub.page.wa_sends')}        display={`389 / ${t('sub.page.unlimited')}`} pct={100} unlimited hint={t('sub.page.wa_hint')} level="ok" />
+                <UsageMeter label={t('sub.page.email_campaigns')} {...meter(usage.email_campaigns, t)} hint={t('sub.page.email_hint')} />
+                <UsageMeter label={t('sub.page.wa_sends')}        {...meter(usage.whatsapp_sends, t)}  hint={t('sub.page.wa_hint')} />
               </div>
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_ai')}</div>
-                <div className="sub-um sub-um-with-topup">
-                  <div className="sub-um-hdr">
-                    <div className="sub-um-lbl">{t('sub.page.ai_renders')}</div>
-                    <div className="sub-um-val">19 / 25</div>
-                  </div>
-                  <div className="sub-um-track">
-                    <div className="sub-um-fill warn" style={{ width: '76%' }} />
-                  </div>
-                  <div className="sub-um-hint warn">
-                    {t('sub.page.renders_hint', { count: aiRendersLeft })}
-                  </div>
-                  <button className="sub-um-topup" onClick={() => setShowTopup(true)}>
-                    <span className="material-symbols-outlined">add_shopping_cart</span>
-                    {t('sub.page.buy_more_images')}
-                  </button>
-                </div>
-                <UsageMeter label={t('sub.page.ai_messages')} display="142 / 500" pct={28} hint={t('sub.page.ai_msg_hint')} level="ok" />
-                <UsageMeter label={t('sub.page.translation_langs')} display="3 / 8" pct={38} hint={t('sub.page.langs_hint')} level="ok" />
+                {(() => {
+                  const m = meter(usage.ai_studio_renders, t)
+                  return (
+                    <div className="sub-um sub-um-with-topup">
+                      <div className="sub-um-hdr">
+                        <div className="sub-um-lbl">{t('sub.page.ai_renders')}</div>
+                        <div className="sub-um-val">{m.display}</div>
+                      </div>
+                      <div className="sub-um-track">
+                        <div className={`sub-um-fill ${m.level}`} style={{ width: `${m.pct}%` }} />
+                      </div>
+                      <div className={`sub-um-hint ${m.level}`}>
+                        {t('sub.page.renders_hint', { count: aiRendersLeft })}
+                      </div>
+                      <button className="sub-um-topup" onClick={() => setShowTopup(true)}>
+                        <span className="material-symbols-outlined">add_shopping_cart</span>
+                        {t('sub.page.buy_more_images')}
+                      </button>
+                    </div>
+                  )
+                })()}
+                <UsageMeter label={t('sub.page.ai_messages')}      {...meter(usage.ai_messages, t)}           hint={t('sub.page.ai_msg_hint')} />
+                <UsageMeter label={t('sub.page.translation_langs')} {...meter(usage.translation_languages, t)} hint={t('sub.page.langs_hint')} />
               </div>
             </div>
           </div>
@@ -957,7 +1218,17 @@ export default function Subscription() {
       {tab === 'attribution' && <AttributionTab t={t} />}
 
       {/* ── BILLING ── */}
-      {tab === 'billing' && <BillingTab t={t} />}
+      {tab === 'billing' && (
+        <BillingTab
+          t={t}
+          onOpenPortal={handleUpgradeConnect}
+          portalLoading={connectLoading}
+          portalError={portalError}
+          subData={subData}
+          profile={profile}
+          navigate={navigate}
+        />
+      )}
 
       {checkoutOpen && (
         <StripeCheckout

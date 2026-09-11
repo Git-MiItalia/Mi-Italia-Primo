@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { PR_TODAY, PR_MONTHS, sameDay, fmtDate } from '../../lib/dateHelpers'
+import { useTranslation } from 'react-i18next'
+import { PR_TODAY, sameDay, fmtDate, monthNames, weekdayInitials } from '../../lib/dateHelpers'
 
 /**
  * Custom date range picker — 2-month calendar view + preset shortcuts.
@@ -12,6 +13,9 @@ import { PR_TODAY, PR_MONTHS, sameDay, fmtDate } from '../../lib/dateHelpers'
  *   onApply({ start, end }) — parent handles applied date range
  */
 export default function RangePicker({ open, onClose, onApply }) {
+  const { t } = useTranslation()
+  const PR_MONTHS = monthNames()
+  const WEEKDAYS  = weekdayInitials()
   const [leftYear,     setLeftYear]     = useState(PR_TODAY.getFullYear())
   const [leftMonth,    setLeftMonth]    = useState(PR_TODAY.getMonth() - 1)
   const [start,        setStart]        = useState(null)
@@ -99,14 +103,14 @@ export default function RangePicker({ open, onClose, onApply }) {
   const rightMonth = leftMonth === 11 ? 0 : leftMonth + 1
   const rightYear  = leftMonth === 11 ? leftYear + 1 : leftYear
 
-  const selLabel = !start        ? 'Select a start date'
-                 : start && !end ? `${fmtDate(start)} → select end date`
+  const selLabel = !start        ? t('rangepicker.select_start', 'Select a start date')
+                 : start && !end ? t('rangepicker.select_end', { date: fmtDate(start), defaultValue: '{{date}} → select end date' })
                  :                 `${fmtDate(start)} – ${fmtDate(end)}`
 
   return (
     <div className="prange-picker open" onClick={e => e.stopPropagation()}>
       <div className="prange-pk-hdr">
-        <div className="prange-pk-title">Custom date range</div>
+        <div className="prange-pk-title">{t('common.custom_date_range', 'Custom date range')}</div>
         <div className="prange-pk-sel">{selLabel}</div>
       </div>
       <div className="prange-pk-months">
@@ -117,7 +121,7 @@ export default function RangePicker({ open, onClose, onApply }) {
             <div style={{ width: 24 }} />
           </div>
           <div className="prange-pk-wd">
-            {['Mo','Tu','We','Th','Fr','Sa','Su'].map(w => <div key={w} className="prange-pk-wdc">{w}</div>)}
+            {WEEKDAYS.map((w, wi) => <div key={wi} className="prange-pk-wdc">{w}</div>)}
           </div>
           <div className="prange-pk-days">{renderMonth(leftYear, leftMonth)}</div>
         </div>
@@ -128,7 +132,7 @@ export default function RangePicker({ open, onClose, onApply }) {
             <button className="prange-pk-navbtn" onClick={() => shift(1)}>→</button>
           </div>
           <div className="prange-pk-wd">
-            {['Mo','Tu','We','Th','Fr','Sa','Su'].map(w => <div key={w} className="prange-pk-wdc">{w}</div>)}
+            {WEEKDAYS.map((w, wi) => <div key={wi} className="prange-pk-wdc">{w}</div>)}
           </div>
           <div className="prange-pk-days">{renderMonth(rightYear, rightMonth)}</div>
         </div>
@@ -136,10 +140,10 @@ export default function RangePicker({ open, onClose, onApply }) {
       <div className="prange-pk-foot">
         <div className="prange-pk-presets">
           {[
-            { k: 'this-month',   label: 'This month' },
-            { k: 'last-month',   label: 'Last month' },
-            { k: 'last-quarter', label: 'Last quarter' },
-            { k: 'ytd',          label: 'Year to date' },
+            { k: 'this-month',   label: t('rangepicker.this_month',   'This month') },
+            { k: 'last-month',   label: t('rangepicker.last_month',   'Last month') },
+            { k: 'last-quarter', label: t('rangepicker.last_quarter', 'Last quarter') },
+            { k: 'ytd',          label: t('rangepicker.ytd',          'Year to date') },
           ].map(p => (
             <button
               key={p.k}
@@ -150,12 +154,12 @@ export default function RangePicker({ open, onClose, onApply }) {
           ))}
         </div>
         <div className="prange-pk-actions">
-          <button className="prange-pk-cancel" onClick={onClose}>Cancel</button>
+          <button className="prange-pk-cancel" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
           <button
             className="prange-pk-apply"
             disabled={!start || !end}
             onClick={() => start && end && onApply({ start, end })}>
-            Apply
+            {t('common.apply', 'Apply')}
           </button>
         </div>
       </div>

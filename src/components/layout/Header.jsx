@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useLangStore from '../../store/langStore'
+import useNotifStore from '../../store/notifStore'
 
 const titleKeys = {
   '/dashboard':         'sidebar.dashboard',
@@ -18,6 +19,7 @@ const titleKeys = {
   '/promotions':        'sidebar.promotions',
   '/analytics':         'sidebar.analytics',
   '/financials':        'sidebar.financials',
+  '/markdowns':         'sidebar.markdowns',
   '/reports':           'sidebar.reports',
   '/subscription':      'sidebar.subscription',
   '/store':             'sidebar.store_profile',
@@ -38,6 +40,7 @@ const titleKeys = {
 const titleDefaults = {
   '/tryon':             'AI Model Studio',
   '/integrations':      'Integrations',
+  '/markdowns':         'Aging & Markdowns',
   '/locations/new':     'Add a Location',
 }
 
@@ -54,6 +57,7 @@ function Header() {
   const lang       = useLangStore(state => state.lang)
   const setLang    = useLangStore(state => state.setLang)
   const activeLang = LANGUAGES.find(l => l.code === lang) ?? LANGUAGES[0]
+  const unreadCount = useNotifStore(s => s.unreadCount)
 
   const titleKey = titleKeys[pathname] ?? 'Primo'
 
@@ -82,7 +86,7 @@ function Header() {
 
                 <div className="notif-btn" onClick={() => navigate('/notifications')}>
                   <span className="material-symbols-outlined">notifications</span>
-                  <div className="notif-dot" />
+                  {unreadCount > 0 && <div className="notif-dot" />}
                 </div>
               </div>
             </div>

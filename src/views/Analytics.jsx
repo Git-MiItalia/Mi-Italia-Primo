@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
 
 const API = import.meta.env.VITE_API_URL
 
 /* ── formatting helpers (per-view convention — see POS.jsx, Discounts.jsx) ── */
 function fmtNum(n, loc) { return Number(n ?? 0).toLocaleString(loc) }
-function fmtEUR(n, loc) { return n != null ? `€${Number(n).toLocaleString(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—' }
+function fmtEUR(n, loc) { return n != null ? `€${Number(n).toLocaleString(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}` : '—' }
 function fmtDateShort(iso, loc) { return iso ? new Date(iso).toLocaleDateString(loc, { day: 'numeric', month: 'short' }) : '' }
 function fmtDateLong(iso, loc) { return iso ? new Date(iso).toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' }) : '' }
 function median(arr) {
@@ -15,10 +16,9 @@ function median(arr) {
   const mid = Math.floor(s.length / 2)
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
-function countryFlag(code) {
-  if (!code || code.toUpperCase() === 'GB' || code.toUpperCase() === 'UK') return null
-  return code.toUpperCase().replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)))
-}
+// (countryFlag removed — the geo endpoint reports cities, not countries, and
+//  deriving a flag from the first two letters of a city name produced the
+//  Romanian flag for "Roma".)
 
 /* ── CSV export helpers (ported from Reports.jsx) ── */
 function csvEscape(v) {
@@ -36,7 +36,7 @@ function triggerDownload(text, filename) {
   URL.revokeObjectURL(url)
 }
 
-const TRAFFIC_ICON  = { app: 'smartphone', web: 'language', search: 'search', referral: 'share', social: 'favorite' }
+const TRAFFIC_ICON  = { app: 'smartphone', web: 'language', search: 'search', referral: 'share', social: 'favorite', external: 'public', direct: 'arrow_forward' }
 const CHANNEL_ICON  = { email: 'mail', whatsapp: 'chat' }
 const KPI_ICONS      = { views: 'visibility', visitors: 'group', saves: 'bookmark', discovery_reserve: 'event_available' }
 const QUADRANT_META = {
@@ -54,124 +54,6 @@ QUADRANT_META.hidden_gem         = QUADRANT_META.expose
 QUADRANT_META.dead_stock         = QUADRANT_META.markdown
 QUADRANT_META.unclassified       = QUADRANT_META.early
 
-/* ── Static sample data — Sartoria Belloni, transcribed from the design source
-   (primo-analytics-discovery.html) so every section can be previewed before
-   the backend endpoints in the handoff spec exist. Used only as a fallback:
-   once `dailyTrend` (or the matching per-section field) comes back from the
-   real API, the real value wins automatically — see the `extended`/`??`
-   checks in the Analytics() component below. Remove once every endpoint in
-   the handoff is live. ── */
-function mockDailyTrend(days) {
-  const views = [88,102,96,120,134,118,142,156,138,150,168,175,160,182,190,178,196,205,188,210,224,208,232,246,228,252,268,244,270,288]
-  const saves = [9,12,10,14,16,13,18,20,15,19,22,24,20,25,28,24,30,32,27,33,36,31,38,41,34,40,44,38,42,47]
-  const out = []
-  for (let i = 0; i < days; i++) {
-    const day = new Date(); day.setDate(day.getDate() - (days - 1 - i))
-    out.push({ day: day.toISOString().slice(0, 10), views: views[i % views.length], saves: saves[i % saves.length] })
-  }
-  return out
-}
-function mockHeatmapGrid() {
-  const compact = [
-    [1,2,2,3,3,2,2,3,4,3,2,1],
-    [1,2,3,3,4,3,3,4,5,4,2,1],
-    [2,2,3,4,4,3,3,5,6,5,3,1],
-    [2,3,3,4,5,4,4,6,7,6,3,2],
-    [2,3,4,5,5,4,5,7,8,7,4,2],
-    [4,6,7,8,9,8,7,9,10,8,5,3],
-    [3,4,5,6,6,5,4,5,5,4,2,1],
-  ]
-  return compact.map(row => {
-    const full = Array(24).fill(0)
-    row.forEach((v, i) => { full[10 + i] = v })
-    return full
-  })
-}
-const MOCK = {
-  stats: { totalViews: 4182, uniqueVisitors: 2346, favorites: 524, discoveryReserveRate: 4.5 },
-  deltas: {
-    totalViews:           { changePct: 27,  direction: 'up' },
-    uniqueVisitors:        { changePct: 19,  direction: 'up' },
-    favorites:             { changePct: 16,  direction: 'up' },
-    discoveryReserveRate:  { changePct: 0.6, direction: 'up' },
-  },
-  dailyTrend: mockDailyTrend(30),
-  discoveryFunnel: [
-    { stage: 'views',           count: 4182, pct: 100  },
-    { stage: 'deepViews',       count: 1506, pct: 36   },
-    { stage: 'saves',           count: 524,  pct: 12.5 },
-    { stage: 'productClicks',   count: 388,  pct: 9.3  },
-    { stage: 'reserveRequests', count: 188,  pct: 4.5  },
-  ],
-  geoBreakdown: [
-    { countryCode: 'IT', countryName: 'Italia',          views: 1840, pct: 100 },
-    { countryCode: 'GB', countryName: 'United Kingdom',  views: 642,  pct: 35  },
-    { countryCode: 'DE', countryName: 'Deutschland',     views: 508,  pct: 28  },
-    { countryCode: 'FR', countryName: 'France',          views: 396,  pct: 22  },
-    { countryCode: 'JP', countryName: 'Japan',            views: 284,  pct: 15  },
-  ],
-  discoveryTrafficSources: [
-    { source: 'app',      views: 2118, pct: 100 },
-    { source: 'web',      views: 986,  pct: 47  },
-    { source: 'search',   views: 604,  pct: 29  },
-    { source: 'referral', views: 312,  pct: 15  },
-    { source: 'social',   views: 162,  pct: 8   },
-  ],
-  topProducts: [
-    { name: 'Cashmere Trench Coat',   category: 'Outerwear · Loro Piana',  views: 842, reserves: 34 },
-    { name: 'Bordeaux Silk Dress',    category: 'Ready-to-Wear · SS26',    views: 716, reserves: 28 },
-    { name: 'Structured Leather Tote', category: 'Bags · Nero',            views: 588, reserves: 19 },
-    { name: 'Hand-fringed Scarf',     category: 'Accessories · Sasso',     views: 472, reserves: 15 },
-    { name: "Suede Derby Shoes",      category: "Men's Shoes · Doucal's",  views: 394, reserves: 11 },
-  ],
-  reserveStats: { requests: 188, reservedValue: 94200, pickupRatePct: 76 },
-  lostDemand: {
-    unstockedSearches: [
-      { term: 'cashmere cape',           count: 214, trendPct: 38 },
-      { term: 'velvet smoking jacket',   count: 156, trendPct: 22 },
-      { term: 'silk foulard',            count: 128, trendPct: 15 },
-      { term: 'wide-leg wool trousers',  count: 96,  trendPct: 9  },
-    ],
-    outOfStockViews: {
-      total: 312,
-      items: [
-        { productName: 'Bordeaux Silk Dress',   variant: '40', views: 118 },
-        { productName: 'Cashmere Trench Coat',  variant: '42', views: 104 },
-        { productName: 'Suede Derby',           variant: '43', views: 90  },
-      ],
-    },
-    sizeMisses: { status: 'pending', reason: 'regia_fit_v2' },
-  },
-  matrix: [
-    { productId: 'CT', name: 'Cashmere Trench Coat',    viewsNormalized: 842, sellThroughPct: 78, daysOnPlatform: 120, quadrant: 'reorder' },
-    { productId: 'BD', name: 'Bordeaux Silk Dress',      viewsNormalized: 716, sellThroughPct: 34, daysOnPlatform: 88,  quadrant: 'fix'      },
-    { productId: 'LT', name: 'Structured Leather Tote',  viewsNormalized: 588, sellThroughPct: 62, daysOnPlatform: 140, quadrant: 'reorder' },
-    { productId: 'HS', name: 'Hand-fringed Scarf',       viewsNormalized: 214, sellThroughPct: 71, daysOnPlatform: 95,  quadrant: 'expose'  },
-    { productId: 'WB', name: 'Wool Beret',               viewsNormalized: 150, sellThroughPct: 22, daysOnPlatform: 160, quadrant: 'markdown' },
-    { productId: 'SD', name: 'Suede Derby Shoes',        viewsNormalized: 394, sellThroughPct: 44, daysOnPlatform: 110, quadrant: 'markdown' },
-    { productId: 'CK', name: 'SS26 Capsule Knit',        viewsNormalized: 96,  sellThroughPct: 8,  daysOnPlatform: 12,  quadrant: 'early'    },
-  ],
-  savesAging: {
-    buckets: [
-      { key: '0-7',  count: 186, hot: false },
-      { key: '8-30', count: 214, hot: false },
-      { key: '31-60', count: 78, hot: true  },
-      { key: '60+',  count: 46,  hot: true  },
-    ],
-    backInStockConversionPct: 31,
-    suppressedCount: 14,
-    callList: [
-      { customerId: 'c1', name: 'Sofia Marchetti',   item: 'Cashmere Trench Coat', variant: '40', daysSaved: 41, channels: ['email', 'whatsapp'] },
-      { customerId: 'c2', name: 'Federica Lombardi', item: 'Structured Leather Tote', variant: '',  daysSaved: 38, channels: ['whatsapp'] },
-      { customerId: 'c3', name: 'Marco Rossi',        item: 'Suede Derby Shoes',    variant: '43', daysSaved: 52, channels: ['email'] },
-      { customerId: 'c4', name: 'Chiara De Luca',     item: 'Hand-fringed Scarf',  variant: '',   daysSaved: 64, channels: ['email', 'whatsapp'] },
-    ],
-  },
-  heatmap: (() => {
-    const end = new Date(), start = new Date(); start.setDate(end.getDate() - 90)
-    return { grid: mockHeatmapGrid(), windowStart: start.toISOString().slice(0, 10), windowEnd: end.toISOString().slice(0, 10), windowDays: 90 }
-  })(),
-}
 
 /* ── API response adapters ─────────────────────────────────────────────
    The backend response shapes differ from what the components consume.
@@ -181,24 +63,45 @@ const MOCK = {
 // Funnel: API → {key, label, count, ofPrevious, ofTop}  →  {stage, count, pct}
 function adaptFunnel(apiFunnel) {
   if (!apiFunnel?.length) return apiFunnel
-  const KEY_TO_STAGE = { visits: 'views', productViews: 'deepViews', saves: 'saves', reserves: 'productClicks', orders: 'reserveRequests' }
+  // Each backend key maps to its own stage — the old mapping shifted `reserves`
+  // into a fabricated "product clicks" stage (the API sends no click data at
+  // all) and pushed `orders` into the reserve row, so both read as the wrong
+  // metric on screen.
+  const KEY_TO_STAGE = { visits: 'views', productViews: 'deepViews', saves: 'saves', reserves: 'reserveRequests', orders: 'orders' }
   const top = apiFunnel[0]?.count || 1
   return apiFunnel.map(f => ({
     stage: KEY_TO_STAGE[f.key] ?? f.key,
+    // The API labels each stage itself ("Boutique visits", "Reservations", …) —
+    // prefer that over our own mapping so the row can never say the wrong metric.
+    label: f.label ?? null,
     count: f.count,
-    pct:   Math.round((f.count / top) * 1000) / 10,
+    pct:   f.ofTop ?? Math.round((f.count / top) * 1000) / 10,
   }))
 }
 
-// Geo: API → {city, cityKey, visitors, reserves, orders, revenue}  →  {countryCode, countryName, views, pct}
+// Geo: API → {city, cityKey, visitors, reserves, orders, revenue}
+//          →  {cityKey, cityName, unknown, views, pct}
+//
+// This endpoint reports CITIES, not countries. The old adapter took the first
+// two letters of the city as a country code and the list rendered it as a
+// flag emoji, so "Roma" showed the Romanian flag and the "unknown" bucket
+// showed the United Nations flag. There is no country in this payload at all,
+// so no flag is derived any more.
 function adaptGeo(apiGeo) {
   if (!apiGeo?.length) return apiGeo
-  const maxViews = Math.max(...apiGeo.map(g => (g.visitors || 0) + (g.reserves || 0) + (g.orders || 0)), 1)
-  return apiGeo.map(g => {
-    const views = (g.visitors || 0) + (g.reserves || 0) + (g.orders || 0)
+  const total = g => (g.visitors || 0) + (g.reserves || 0) + (g.orders || 0)
+  const maxViews = Math.max(...apiGeo.map(total), 1)
+  return apiGeo.map((g, i) => {
+    const views = total(g)
+    const raw = (g.city ?? '').trim()
     return {
-      countryCode: (g.cityKey ?? g.city ?? '').toUpperCase().slice(0, 2),
-      countryName: g.city ?? 'Unknown',
+      // cityKey is the API's own stable id; fall back to the index so two
+      // cities can never collide on a React key.
+      cityKey:  g.cityKey ?? raw.toLowerCase() ?? `geo${i}`,
+      // The API sends the literal string "unknown" for untracked visitors —
+      // flagged here so the row can show a translated label instead.
+      unknown:  !raw || raw.toLowerCase() === 'unknown',
+      cityName: raw,
       views,
       pct: Math.round(views / maxViews * 100),
     }
@@ -209,10 +112,15 @@ function adaptGeo(apiGeo) {
 function adaptTraffic(apiTraffic) {
   if (!apiTraffic?.length) return apiTraffic
   const maxViews = Math.max(...apiTraffic.map(t => t.views || 0), 1)
+  // Pass the source through as-is. It used to rename `external` → `app` and
+  // `direct` → `search`, which mislabelled the row: the API currently returns a
+  // single `external` bucket covering all outside traffic (app, website and
+  // search together), so calling it "App" made app traffic look double-counted
+  // and search look like it was never recorded.
   return apiTraffic.map(t => ({
-    source: t.source === 'external' ? 'app' : t.source === 'direct' ? 'search' : t.source,
+    source: t.source,
     views:  t.views,
-    pct:    Math.round((t.views || 0) / maxViews * 100),
+    pct:    t.share ?? Math.round((t.views || 0) / maxViews * 100),
   }))
 }
 
@@ -220,11 +128,20 @@ function adaptTraffic(apiTraffic) {
 //                    →  {total, items: [{productName, variant, views}]}
 function adaptLostDemand(apiLD) {
   if (!apiLD) return apiLD
-  const oosItems = apiLD.outOfStockViews ?? []
+  // `outOfStockViews` is the per-product detail list and can be empty even when
+  // the API has counted OOS views — the headline number lives in
+  // `summary.outOfStockViews`, so trust that first and only fall back to summing
+  // the list when no summary is present.
+  const oosItems = Array.isArray(apiLD.outOfStockViews) ? apiLD.outOfStockViews : []
+  const summaryTotal = apiLD.summary?.outOfStockViews
   return {
-    unstockedSearches: apiLD.unstockedSearches ?? [],
+    // Searches come back keyed on `searches`, not `count`.
+    unstockedSearches: (apiLD.unstockedSearches ?? []).map(s => ({
+      ...s,
+      count: s.searches ?? s.count ?? 0,
+    })),
     outOfStockViews: {
-      total: oosItems.reduce((s, o) => s + (o.views || 0), 0),
+      total: summaryTotal ?? oosItems.reduce((s, o) => s + (o.views || 0), 0),
       items: oosItems.map(o => ({
         productName: o.name ?? o.productName ?? '—',
         variant:     o.variant ?? '',
@@ -253,6 +170,7 @@ function adaptSavesAging(apiSA) {
     ...apiSA,
     buckets: (apiSA.buckets ?? []).map((b, i) => ({
       key:   b.key ?? b.label ?? `b${i}`,
+      label: b.label ?? null,
       count: b.saves ?? b.count ?? 0,
       hot:   i >= 2,
     })),
@@ -324,6 +242,7 @@ function CardHead({ icon, title, sub }) {
 }
 
 /* ── KPI strip ── */
+const KPI_LABELS = { views: 'Views', visitors: 'Visitors', saves: 'Saves', discovery_reserve: 'Discovery Reserve Rate' }
 function KpiStrip({ stats, deltas, loading, loc, t }) {
   const tiles = [
     { key: 'views',              val: stats.totalViews,           delta: deltas.totalViews,              pct: false },
@@ -337,7 +256,7 @@ function KpiStrip({ stats, deltas, loading, loc, t }) {
         <div className="stat-card" key={k.key}>
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined an-card-icon">{KPI_ICONS[k.key]}</span>
-            {t(`analytics.kpi.${k.key}`)}
+            {t(`analytics.kpi.${k.key}`, KPI_LABELS[k.key])}
           </div>
           <div className="stat-val">
             {loading ? '—' : k.val == null ? '—' : k.pct ? `${k.val}%` : fmtNum(k.val, loc)}
@@ -353,7 +272,7 @@ function KpiStrip({ stats, deltas, loading, loc, t }) {
    matching the design source exactly) ── */
 function TrendChart({ trend, loading, t, loc }) {
   if (!loading && (!trend || trend.length === 0)) {
-    return <EmptyState icon="show_chart">{t('analytics.no_trend_data')}</EmptyState>
+    return <EmptyState icon="show_chart">{t('analytics.no_trend_data', 'No trend data available yet.')}</EmptyState>
   }
   if (loading || !trend) return null
 
@@ -403,9 +322,13 @@ function TrendChart({ trend, loading, t, loc }) {
 }
 
 /* ── Discovery funnel ── */
+const FUNNEL_STAGE_LABELS = { views: 'Views', deep_views: 'Product Views', saves: 'Saves', reserves: 'Reserve Requests', orders: 'Orders' }
+function funnelLabel(f, t) {
+  return f.label ?? t(`analytics.funnel.${stageKey(f.stage)}`, FUNNEL_STAGE_LABELS[stageKey(f.stage)] ?? f.stage)
+}
 function DiscoveryFunnel({ funnel, loading, t, loc }) {
   if (!loading && (!funnel || funnel.length === 0)) {
-    return <EmptyState icon="filter_alt">{t('analytics.no_funnel_data')}</EmptyState>
+    return <EmptyState icon="filter_alt">{t('analytics.no_funnel_data', 'No funnel data available yet.')}</EmptyState>
   }
   if (loading || !funnel) return null
   let biggestDrop = null
@@ -418,7 +341,7 @@ function DiscoveryFunnel({ funnel, loading, t, loc }) {
       <div className="an-df-list">
         {funnel.map((f, i) => (
           <div className="an-df-row" key={f.stage}>
-            <div className="an-df-name">{t(`analytics.funnel.${stageKey(f.stage)}`)}</div>
+            <div className="an-df-name">{funnelLabel(f, t)}</div>
             <div className="an-df-bar-track">
               <div className={`an-df-bar${i === funnel.length - 1 ? ' last' : ''}`} style={{ width: `${Math.max(f.pct ?? 0, 4)}%` }} />
             </div>
@@ -429,9 +352,10 @@ function DiscoveryFunnel({ funnel, loading, t, loc }) {
       {biggestDrop && (
         <div className="an-df-note">
           {t('analytics.funnel.drop_note', {
-            from: t(`analytics.funnel.${stageKey(biggestDrop.from.stage)}`),
-            to: t(`analytics.funnel.${stageKey(biggestDrop.to.stage)}`),
+            from: funnelLabel(biggestDrop.from, t),
+            to: funnelLabel(biggestDrop.to, t),
             pct: biggestDrop.to.pct,
+            defaultValue: 'Biggest drop-off: {{from}} → {{to}} ({{pct}}% continue)',
           })}
         </div>
       )}
@@ -439,22 +363,25 @@ function DiscoveryFunnel({ funnel, loading, t, loc }) {
   )
 }
 function stageKey(stage) {
-  return { views: 'views', deepViews: 'deep_views', saves: 'saves', productClicks: 'clicks', reserveRequests: 'reserves' }[stage] ?? stage
+  return { views: 'views', deepViews: 'deep_views', saves: 'saves', reserveRequests: 'reserves', orders: 'orders' }[stage] ?? stage
 }
 
 /* ── Geography + traffic (shared row-list layout) ── */
 function GeoList({ geo, loading, t, loc }) {
-  if (!loading && (!geo || geo.length === 0)) return <EmptyState icon="public">{t('analytics.no_geo_data')}</EmptyState>
+  if (!loading && (!geo || geo.length === 0)) return <EmptyState icon="public">{t('analytics.no_geo_data', 'No geography data available yet.')}</EmptyState>
   if (loading || !geo) return null
   return (
     <div className="an-rl-list">
       {geo.map(g => {
-        const flag = countryFlag(g.countryCode)
         return (
-          <div className="an-rl-row" key={g.countryCode}>
-            {flag ? <span className="an-rl-flag">{flag}</span> : <span className="an-rl-badge">{g.countryCode}</span>}
+          <div className="an-rl-row" key={g.cityKey}>
+            <span className="material-symbols-outlined an-card-icon">
+              {g.unknown ? 'help' : 'location_on'}
+            </span>
             <div>
-              <div className="an-rl-name">{g.countryName}</div>
+              <div className="an-rl-name">
+                {g.unknown ? t('analytics.geo.unknown_city', 'Unknown location') : g.cityName}
+              </div>
               <div className="an-rl-track"><div className="an-rl-fill" style={{ width: `${g.pct}%` }} /></div>
             </div>
             <div className="an-rl-val">{fmtNum(g.views, loc)}</div>
@@ -464,8 +391,9 @@ function GeoList({ geo, loading, t, loc }) {
     </div>
   )
 }
+const TRAFFIC_SOURCE_LABELS = { app: 'App', web: 'Web', search: 'Search', referral: 'Referral', social: 'Social', external: 'App & Web', direct: 'Direct' }
 function TrafficList({ traffic, loading, t, loc }) {
-  if (!loading && (!traffic || traffic.length === 0)) return <EmptyState icon="alt_route">{t('analytics.no_traffic_data')}</EmptyState>
+  if (!loading && (!traffic || traffic.length === 0)) return <EmptyState icon="alt_route">{t('analytics.no_traffic_data', 'No traffic data available yet.')}</EmptyState>
   if (loading || !traffic) return null
   return (
     <div className="an-rl-list">
@@ -473,7 +401,7 @@ function TrafficList({ traffic, loading, t, loc }) {
         <div className="an-rl-row" key={tr.source}>
           <span className="an-rl-ico"><span className="material-symbols-outlined">{TRAFFIC_ICON[tr.source] ?? 'link'}</span></span>
           <div>
-            <div className="an-rl-name">{t(`analytics.traffic.${tr.source}`)}</div>
+            <div className="an-rl-name">{t(`analytics.traffic.${tr.source}`, TRAFFIC_SOURCE_LABELS[tr.source])}</div>
             <div className="an-rl-track"><div className="an-rl-fill" style={{ width: `${tr.pct}%` }} /></div>
           </div>
           <div className="an-rl-val">{fmtNum(tr.views, loc)}</div>
@@ -485,7 +413,7 @@ function TrafficList({ traffic, loading, t, loc }) {
 
 /* ── Most-viewed pieces ── */
 function ProductsList({ products, loading, t, loc }) {
-  if (!loading && (!products || products.length === 0)) return <EmptyState icon="visibility">{t('analytics.no_product_data')}</EmptyState>
+  if (!loading && (!products || products.length === 0)) return <EmptyState icon="visibility">{t('analytics.no_product_data', 'No product data available yet.')}</EmptyState>
   if (loading || !products) return null
   return (
     <div>
@@ -496,8 +424,8 @@ function ProductsList({ products, loading, t, loc }) {
             <div className="an-prod-name">{p.name}</div>
             <div className="an-prod-meta">{p.category ?? '—'}</div>
           </div>
-          <div className="an-prod-stat"><div className="an-prod-stat-v">{fmtNum(p.views, loc)}</div><div className="an-prod-stat-l">{t('analytics.products.views')}</div></div>
-          <div className="an-prod-stat"><div className="an-prod-stat-v res">{p.reserves ?? '—'}</div><div className="an-prod-stat-l">{t('analytics.products.reserves')}</div></div>
+          <div className="an-prod-stat"><div className="an-prod-stat-v">{fmtNum(p.views, loc)}</div><div className="an-prod-stat-l">{t('analytics.products.views', 'Views')}</div></div>
+          <div className="an-prod-stat"><div className="an-prod-stat-v res">{p.reserves ?? '—'}</div><div className="an-prod-stat-l">{t('analytics.products.reserves', 'Reserves')}</div></div>
         </div>
       ))}
     </div>
@@ -542,38 +470,38 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
         <div className="an-card-hdr-l">
           <span className="material-symbols-outlined an-card-icon">search_off</span>
           <div>
-            <div className="card-title">{t('analytics.lost_demand.title_pre')} <em>{t('analytics.lost_demand.title_em')}</em></div>
-            <div className="an-card-sub">{t('analytics.lost_demand.sub')}</div>
+            <div className="card-title">{t('analytics.lost_demand.title_pre', 'Lost')} <em>{t('analytics.lost_demand.title_em', 'Demand')}</em></div>
+            <div className="an-card-sub">{t('analytics.lost_demand.sub', "What customers wanted but couldn't get.")}</div>
           </div>
         </div>
         <button className="btn btn-primary btn-sm" onClick={downloadBuySheet}>
-          <span className="material-symbols-outlined">download</span>{t('analytics.lost_demand.buy_sheet')}
+          <span className="material-symbols-outlined">download</span>{t('analytics.lost_demand.buy_sheet', 'Download Buy Sheet')}
         </button>
       </div>
 
       <div className="an-ld-grid3">
         <div>
-          <div className="an-ld-sublabel">{t('analytics.lost_demand.searches')}</div>
-          {searches.length === 0 ? <EmptyState icon="search_off">{t('analytics.no_search_data')}</EmptyState> : (
+          <div className="an-ld-sublabel">{t('analytics.lost_demand.searches', 'Unstocked Searches')}</div>
+          {searches.length === 0 ? <EmptyState icon="search_off">{t('analytics.no_search_data', 'No search data available yet.')}</EmptyState> : (
             <>
               {searches.map(s => (
                 <div className="an-ld-search-row" key={s.term}>
-                  <div><div className="an-ld-term">{s.term}</div><div className="an-ld-term-sub">{fmtNum(s.count, loc)} {t('analytics.lost_demand.searches_unit')}</div></div>
+                  <div><div className="an-ld-term">{s.term}</div><div className="an-ld-term-sub">{fmtNum(s.count, loc)} {t('analytics.lost_demand.searches_unit', 'searches')}</div></div>
                   <div className="an-ld-count">{s.count}</div>
                   <div className="an-ld-trend">{s.trendPct != null ? `↑ ${s.trendPct}%` : '—'}</div>
                 </div>
               ))}
-              <div className="an-ld-floor-note">{t('analytics.lost_demand.floor_note')}</div>
+              <div className="an-ld-floor-note">{t('analytics.lost_demand.floor_note', 'Only showing search terms with meaningful volume.')}</div>
             </>
           )}
         </div>
 
         <div>
-          <div className="an-ld-sublabel">{t('analytics.lost_demand.oos')}</div>
-          {!oos ? <EmptyState icon="visibility_off">{t('analytics.no_oos_data')}</EmptyState> : (
+          <div className="an-ld-sublabel">{t('analytics.lost_demand.oos', 'Out-of-Stock Views')}</div>
+          {!oos ? <EmptyState icon="visibility_off">{t('analytics.no_oos_data', 'No out-of-stock view data available yet.')}</EmptyState> : (
             <>
               <div className="an-ld-oos-count">{fmtNum(oos.total, loc)}</div>
-              <div className="an-ld-oos-sub">{t('analytics.lost_demand.oos_sub')}</div>
+              <div className="an-ld-oos-sub">{t('analytics.lost_demand.oos_sub', 'Views on products that were sold out at the time.')}</div>
               <div className="an-ld-oos-items">
                 {(oos.items ?? []).map((o, i) => (
                   <div className="an-ld-oos-item" key={i}><span>{o.productName}{o.variant ? ` · ${o.variant}` : ''}</span><b>{o.views}</b></div>
@@ -585,14 +513,14 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
 
         <div>
           <div className="an-ld-sublabel">
-            <span>{t('analytics.lost_demand.sizes')}</span>{' '}
-            <span className="an-ld-v2tag">{t('analytics.lost_demand.sizes_pending_tag')}</span>
+            <span>{t('analytics.lost_demand.sizes', 'Size Misses')}</span>{' '}
+            <span className="an-ld-v2tag">{t('analytics.lost_demand.sizes_pending_tag', 'Coming Soon')}</span>
           </div>
           {sizePending ? (
-            <PendingBanner>{t('analytics.pending.size_misses')}</PendingBanner>
+            <PendingBanner>{t('analytics.pending.size_misses', 'Size-miss tracking is coming soon.')}</PendingBanner>
           ) : (
             <>
-              <div className="an-ld-size-row hdr"><div>{t('analytics.lost_demand.sizes_piece')}</div><div style={{ textAlign: 'center' }}>{t('analytics.lost_demand.sizes_size')}</div><div style={{ textAlign: 'right' }}>{t('analytics.lost_demand.sizes_missed')}</div></div>
+              <div className="an-ld-size-row hdr"><div>{t('analytics.lost_demand.sizes_piece', 'Piece')}</div><div style={{ textAlign: 'center' }}>{t('analytics.lost_demand.sizes_size', 'Size')}</div><div style={{ textAlign: 'right' }}>{t('analytics.lost_demand.sizes_missed', 'Missed')}</div></div>
               {sizeMisses.map((z, i) => (
                 <div className="an-ld-size-row" key={i}>
                   <div>{z.piece}</div>
@@ -602,7 +530,7 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
               ))}
             </>
           )}
-          <div className="an-consent-note"><span className="material-symbols-outlined">lock</span><span>{t('analytics.lost_demand.sizes_note')}</span></div>
+          <div className="an-consent-note"><span className="material-symbols-outlined">lock</span><span>{t('analytics.lost_demand.sizes_note', 'Size data is only shown once enough customers have opted in.')}</span></div>
         </div>
       </div>
     </div>
@@ -610,18 +538,24 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
 }
 
 /* ── Visibility vs conversion matrix ── */
-function MatrixChart({ matrix, loading, t }) {
-  if (!loading && (!matrix || matrix.length === 0)) return <EmptyState icon="scatter_plot">{t('analytics.no_matrix_data')}</EmptyState>
+const MATRIX_VERDICT_LABELS = { reorder: 'Reorder', fix: 'Fix', expose: 'Expose', markdown: 'Markdown', early: 'Too Early' }
+function MatrixChart({ matrix, thresholds, loading, t }) {
+  if (!loading && (!matrix || matrix.length === 0)) return <EmptyState icon="scatter_plot">{t('analytics.no_matrix_data', 'No visibility/conversion data available yet.')}</EmptyState>
   if (loading || !matrix) return null
 
   const W = 520, H = 300, pad = 40, iw = W - pad - 18, ih = H - pad - 14
   const maxViews = Math.max(...matrix.map(m => m.viewsNormalized), 1)
-  const midX = median(matrix.map(m => m.viewsNormalized))
-  const midY = median(matrix.map(m => m.sellThroughPct))
+  // Prefer the server's medians. It assigns each product's quadrant against
+  // its own thresholds, computed over every active product in the window —
+  // not just the ones returned here. Recomputing from the visible rows can
+  // land the dashed split in a different place than the colours, so a "star"
+  // would render inside the wrong quadrant.
+  const midX = thresholds?.viewsNormalizedMedian ?? median(matrix.map(m => m.viewsNormalized))
+  const midY = thresholds?.sellThroughPctMedian  ?? median(matrix.map(m => m.sellThroughPct))
   const xAt = v => pad + iw * Math.min(v, maxViews) / maxViews
   const yAt = s => 14 + ih - ih * s / 100
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-  const verdictLabel = q => t(`analytics.matrix.verdict.${q}`)
+  const verdictLabel = q => t(`analytics.matrix.verdict.${q}`, MATRIX_VERDICT_LABELS[q])
 
   return (
     <>
@@ -642,8 +576,8 @@ function MatrixChart({ matrix, loading, t }) {
             </g>
           )
         })}
-        <text className="an-axis-lbl" x={pad + iw / 2} y={H - 2} textAnchor="middle">{t('analytics.matrix.axis_views')} →</text>
-        <text className="an-axis-lbl" x="12" y={14 + ih / 2} transform={`rotate(-90 12 ${14 + ih / 2})`} textAnchor="middle">{t('analytics.matrix.axis_sell')} →</text>
+        <text className="an-axis-lbl" x={pad + iw / 2} y={H - 2} textAnchor="middle">{t('analytics.matrix.axis_views', 'Views')} →</text>
+        <text className="an-axis-lbl" x="12" y={14 + ih / 2} transform={`rotate(-90 12 ${14 + ih / 2})`} textAnchor="middle">{t('analytics.matrix.axis_sell', 'Sell-Through %')} →</text>
       </svg>
       <div className="an-mx-legend">
         {matrix.map(m => {
@@ -651,20 +585,29 @@ function MatrixChart({ matrix, loading, t }) {
           return (
             <div className="an-mx-leg-row" key={m.productId}>
               <div className="an-mx-leg-dot" style={{ background: meta.dashed ? 'var(--mist)' : meta.color, color: meta.dashed ? 'var(--stone)' : 'var(--white)', border: meta.dashed ? '1px dashed var(--stone)' : undefined }}>{initials(m.name)}</div>
-              <div>{m.name} · {m.viewsNormalized} {t('analytics.matrix.axis_views').toLowerCase()} · {m.sellThroughPct}% · {m.daysOnPlatform}d</div>
+              <div>{m.name} · {m.viewsNormalized} {t('analytics.matrix.axis_views', 'Views').toLowerCase()} · {m.sellThroughPct}% · {m.daysOnPlatform}{t('common.days_abbrev', 'd')}</div>
               <div className={`an-mx-verdict ${m.quadrant}`}>{verdictLabel(m.quadrant)}</div>
             </div>
           )
         })}
-        <div className="an-mx-note">{t('analytics.matrix.threshold_note')}</div>
+        <div className="an-mx-note">{t('analytics.matrix.threshold_note', 'Dashed line marks the median split between high and low performers.')}</div>
       </div>
     </>
   )
 }
 
 /* ── Saves aging ── */
+// Fallback only — the real label comes from the bucket's own key/label so the
+// boundaries on screen always match however the backend actually buckets them.
+const AGING_BUCKET_LABELS = { 1: '0–7 days', 2: '8–30 days', 3: '31–90 days', 4: '90+ days' }
+function bucketLabel(b, i) {
+  const raw = b.label ?? b.key
+  if (!raw) return AGING_BUCKET_LABELS[i + 1]
+  // Backend sends ranges like "0-7" / "90+" — render them as readable days.
+  return /^\d+(-\d+|\+)$/.test(String(raw)) ? `${String(raw).replace('-', '–')} days` : String(raw)
+}
 function SavesAging({ savesAging, loading, t }) {
-  if (!loading && !savesAging) return <EmptyState icon="history">{t('analytics.no_aging_data')}</EmptyState>
+  if (!loading && !savesAging) return <EmptyState icon="history">{t('analytics.no_aging_data', 'No saves-aging data available yet.')}</EmptyState>
   if (loading || !savesAging) return null
   const buckets  = savesAging.buckets ?? []
   const callList = savesAging.callList ?? []
@@ -674,37 +617,97 @@ function SavesAging({ savesAging, loading, t }) {
         {buckets.map((b, i) => (
           <div className={`an-age-cell${b.hot ? ' hot' : ''}`} key={b.key ?? i}>
             <div className="an-age-val">{b.count}</div>
-            <div className="an-age-lbl">{t(`analytics.aging.b${i + 1}`)}</div>
+            <div className="an-age-lbl">{bucketLabel(b, i)}</div>
           </div>
         ))}
       </div>
-      <div className="an-ld-sublabel">{t('analytics.aging.call_list')}</div>
-      {callList.length === 0 ? <div className="an-card-sub">{t('analytics.no_call_list')}</div> : callList.map((c, i) => (
+      <div className="an-ld-sublabel">{t('analytics.aging.call_list', 'Call List')}</div>
+      {callList.length === 0 ? <div className="an-card-sub">{t('analytics.no_call_list', 'No customers to call right now.')}</div> : callList.map((c, i) => (
         <div className="an-call-row" key={c.customerId ?? i}>
           <div><div className="an-call-name">{c.name}</div><div className="an-call-item">{c.item}{c.variant ? ` · ${c.variant}` : ''}</div></div>
-          <div className="an-call-days">{c.daysSaved} {t('analytics.aging.days')}</div>
-          <div className="an-call-channels">{(c.channels ?? []).map(ch => <span key={ch} className="material-symbols-outlined">{CHANNEL_ICON[ch] ?? 'chat'}</span>)}</div>
+          <div className="an-call-days">{c.daysSaved} {t('analytics.aging.days', 'days')}</div>
+          <div className="an-call-channels">{(c.channels ?? []).filter(ch => ch !== 'whatsapp' || isWhatsappEnabled()).map(ch => <span key={ch} className="material-symbols-outlined">{CHANNEL_ICON[ch] ?? 'chat'}</span>)}</div>
         </div>
       ))}
       {savesAging.backInStockConversionPct != null && (
         <div className="an-bis-line">
-          <b>{t('analytics.aging.bis_line_label')}</b>{' '}
-          {t('analytics.aging.bis_line_mid')}{' '}
+          <b>{t('analytics.aging.bis_line_label', 'Back-in-stock conversion:')}</b>{' '}
+          {t('analytics.aging.bis_line_mid', 'of notified customers,')}{' '}
           <b>{savesAging.backInStockConversionPct}%</b>{' '}
-          {t('analytics.aging.bis_line_end')}
+          {t('analytics.aging.bis_line_end', 'went on to purchase within 30 days.')}
         </div>
       )}
+      {/* The API says WHY each saver is withheld — suppressedBreakdown splits
+          it into noConsent vs notACustomer. The old note claimed a privacy
+          reporting threshold for both, which is wrong for notACustomer: those
+          people simply aren't registered with the boutique, and no amount of
+          consent would surface them. Only fall back to the generic wording
+          when no breakdown is sent. */}
       <div className="an-consent-note">
         <span className="material-symbols-outlined">lock</span>
-        <span>{savesAging.suppressedCount != null ? `${savesAging.suppressedCount} ` : ''}{t('analytics.aging.note')}</span>
+        <span>{suppressedNote(t, savesAging)}</span>
       </div>
     </>
   )
 }
 
+/** Why savers were withheld from the call list, using the API's own breakdown. */
+function suppressedNote(t, savesAging) {
+  const total = savesAging?.suppressedCount
+  if (total == null || total === 0) return t('analytics.aging.note_none', 'Every saver who can be contacted is listed above.')
+  const noConsent    = savesAging?.suppressedBreakdown?.noConsent
+  const notACustomer = savesAging?.suppressedBreakdown?.notACustomer
+  if (noConsent > 0 && notACustomer > 0) {
+    return t('analytics.aging.note_both', { count: total, noConsent, notACustomer,
+      defaultValue: '{{count}} saver(s) hidden — {{noConsent}} without marketing consent, {{notACustomer}} not registered with your boutique.' })
+  }
+  if (notACustomer > 0) {
+    return t('analytics.aging.note_not_customer', { count: notACustomer,
+      defaultValue: '{{count}} saver(s) hidden — they are not registered as your customers, so you have no way to contact them.' })
+  }
+  if (noConsent > 0) {
+    return t('analytics.aging.note_no_consent', { count: noConsent,
+      defaultValue: '{{count}} saver(s) hidden — they have not given marketing consent.' })
+  }
+  return `${total} ${t('analytics.aging.note', 'customers suppressed to protect individual privacy (below reporting threshold).')}`
+}
+
 /* ── Walk-in heatmap (v1 transactions+pickups, v2 gated app-presence) ── */
 function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, presenceLoading, t, lang, loc }) {
-  const hours = Array.from({ length: 12 }, (_, i) => 10 + i)
+  // The hour columns were hardcoded to 10:00–21:00 while the API returns a
+  // full 24-hour grid, so every event before 10am was simply not drawn. On
+  // live data that hid 71 of 134 events — including the single busiest hour
+  // of the week (Wednesday 09:00, 21 events), which the API itself reports
+  // as the peak. The range is derived from the data now: first to last hour
+  // that actually has activity, widened to a readable minimum span.
+  const hours = useMemo(() => {
+    const grid = (hmSource === 'presence' ? presence?.grid : heatmap?.grid) ?? []
+    let lo = 24, hi = -1
+    for (const row of grid) {
+      for (let h = 0; h < (row?.length ?? 0); h++) {
+        // null means "suppressed": real activity the privacy floor is hiding.
+        // It has to widen the range like any other busy hour — skipping it
+        // pushed the suppressed cell outside the visible columns, so the one
+        // thing the privacy rule exists to show never appeared.
+        const busy = row[h] === null || row[h] > 0
+        if (busy) { if (h < lo) lo = h; if (h > hi) hi = h }
+      }
+    }
+    if (hi < lo) { lo = 10; hi = 21 }              // no data — keep the old window
+    while (hi - lo < 7) { if (lo > 0) lo--; if (hi < 23) hi++ }  // never fewer than 8 columns
+    return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)
+  }, [heatmap, presence, hmSource])
+
+  // Shade against the busiest cell, the way the transactions grid does. This
+  // was hardcoded to `v / 10`, so every hour with 10+ visitors came out the
+  // same shade and the real peak was indistinguishable from a middling one.
+  // Suppressed cells are null and are skipped.
+  const presencePeak = useMemo(() => {
+    let peak = 0
+    for (const row of presence?.grid ?? []) for (const v of row ?? []) if (v > peak) peak = v
+    return peak || 1
+  }, [presence])
+
   const days = lang === 'it' ? ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
   return (
@@ -713,50 +716,69 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
         <div className="an-card-hdr-l">
           <span className="material-symbols-outlined an-card-icon">schedule</span>
           <div>
-            <div className="card-title">{t('analytics.heatmap.title_pre')} <em>{t('analytics.heatmap.title_em')}</em></div>
+            <div className="card-title">{t('analytics.heatmap.title_pre', 'Walk-In')} <em>{t('analytics.heatmap.title_em', 'Heatmap')}</em></div>
             <div className="an-card-sub">
               {t('analytics.heatmap.sub', {
                 range: heatmap ? `${fmtDateLong(heatmap.windowStart, loc)} – ${fmtDateLong(heatmap.windowEnd, loc)}` : '…',
+                defaultValue: '{{range}}',
               })}
             </div>
           </div>
         </div>
         <div className="an-hm-src-toggle">
           <div className={`an-hm-src-chip${hmSource === 'tx' ? ' act' : ''}`} onClick={() => setHmSource('tx')}>
-            <span className="material-symbols-outlined">point_of_sale</span>{t('analytics.heatmap.src_tx')}
+            <span className="material-symbols-outlined">point_of_sale</span>{t('analytics.heatmap.src_tx', 'Transactions')}
           </div>
           <div className={`an-hm-src-chip${hmSource === 'presence' ? ' act' : ''}`} onClick={() => setHmSource('presence')}>
-            <span className="material-symbols-outlined">location_on</span>{t('analytics.heatmap.src_presence')}<span className="an-ld-v2tag">V2</span>
+            <span className="material-symbols-outlined">location_on</span>{t('analytics.heatmap.src_presence', 'App Presence')}<span className="an-ld-v2tag">V2</span>
           </div>
         </div>
       </div>
 
       {hmSource === 'tx' ? (
-        !loading && !heatmap ? <EmptyState icon="schedule">{t('analytics.no_heatmap_data')}</EmptyState> : loading || !heatmap ? null : (
+        !loading && !heatmap ? <EmptyState icon="schedule">{t('analytics.no_heatmap_data', 'No heatmap data available yet.')}</EmptyState> : loading || !heatmap ? null : (
           <>
-            <div className="an-hm-grid">
+            <div className="an-hm-grid" style={{ '--an-hm-cols': hours.length }}>
               <div className="an-hm-lbl" />
-              {hours.map(h => <div className="an-hm-hour" key={h}>{h}</div>)}
+              {hours.map(h => <div className="an-hm-hour" key={h}>{String(h).padStart(2, '0')}:00</div>)}
               {days.map((d, di) => (
                 <Fragment key={di}>
                   <div className="an-hm-lbl">{d}</div>
                   {hours.map(h => {
                     const v = heatmap.grid?.[di]?.[h] ?? 0
                     const a = v / (heatmap.peak || 1)
-                    return <div className="an-hm-cell" key={h} style={{ background: `rgba(179,148,90,${(0.06 + a * 0.85).toFixed(2)})` }} title={`${v} events`} />
+                    return <div className="an-hm-cell" key={h} style={{ background: `rgba(179,148,90,${(0.06 + a * 0.85).toFixed(2)})` }} title={t('analytics.heatmap.cell_tooltip', { count: v, hour: String(h).padStart(2, '0'), defaultValue: '{{count}} event(s) at {{hour}}:00' })} />
                   })}
                 </Fragment>
               ))}
             </div>
-            <div className="an-hm-note">{t('analytics.heatmap.note')}</div>
+            {/* Say what a cell actually is. Every occurrence of that weekday
+                inside the window is summed into one square, so "Wednesday
+                09:00 = 21" is 21 events across ~13 Wednesdays, not 21 on one
+                morning. Without this the grid reads like a calendar. */}
+            <div className="an-hm-note">
+              {t('analytics.heatmap.note_aggregate', {
+                weeks: heatmap?.window?.days ? Math.round(heatmap.window.days / 7) : null,
+                defaultValue: 'Each square combines every occurrence of that weekday and hour across the whole period — about {{weeks}} of each. Darker means busier. It shows when you are reliably busy, not what happened on one date.',
+              })}
+              {/* peak.day is an English weekday name from the API; use the
+                  localised label off `days` via peak.dow (0 = Monday) so the
+                  sentence doesn't switch language mid-way. */}
+              {days[heatmap?.peak?.dow] && heatmap.peak.hour != null && (
+                <> {t('analytics.heatmap.note_peak', {
+                  day: days[heatmap.peak.dow], hour: String(heatmap.peak.hour).padStart(2, '0'), count: heatmap.peak.events,
+                  defaultValue: 'Busiest: {{day}} at {{hour}}:00 ({{count}} events).',
+                })}</>
+              )}
+            </div>
           </>
         )
       ) : (
         presenceLoading || !presence ? null : !presence.unlocked ? (
           <div className="an-hm-gate">
-            <div className="an-hm-grid">
+            <div className="an-hm-grid" style={{ '--an-hm-cols': hours.length }}>
               <div className="an-hm-lbl" />
-              {hours.map(h => <div className="an-hm-hour" key={h}>{h}</div>)}
+              {hours.map(h => <div className="an-hm-hour" key={h}>{String(h).padStart(2, '0')}:00</div>)}
               {days.map((d, di) => (
                 <Fragment key={di}>
                   <div className="an-hm-lbl">{d}</div>
@@ -767,25 +789,46 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
             <div className="an-hm-gate-overlay">
               <div className="an-hm-gate-card">
                 <span className="material-symbols-outlined">lock</span>
-                <div className="an-hm-gate-t">{t('analytics.heatmap.gate_title')}</div>
+                <div className="an-hm-gate-t">{t('analytics.heatmap.gate_title', 'Unlock App Presence Data')}</div>
+                {/* These two are not a fraction. Live data returns
+                    opted_in 30 / identified_base 3 / pct 10 — the opted-in
+                    pool is the bigger number, so rendering "30 / 3" read as
+                    "30 out of 3". Label each one, and use the pct the API
+                    already calculates. */}
                 <div className="an-hm-gate-s">
-                  {t('analytics.pending.presence')} ({presence.coverage?.opted_in ?? 0} / {presence.coverage?.identified_base ?? 0})
+                  {t('analytics.presence.coverage', {
+                    optedIn:    presence.coverage?.opted_in ?? 0,
+                    identified: presence.coverage?.identified_base ?? 0,
+                    pct:        presence.coverage?.pct ?? 0,
+                    defaultValue: '{{optedIn}} shopper(s) opted in · {{identified}} seen in your boutique ({{pct}}%)',
+                  })}
+                </div>
+                {/* The gate used to show a bare "3 / 30" with no target, so
+                    there was no way to tell what unlocks it. Prefer the
+                    server's own explanation when it sends one. */}
+                <div className="an-hm-gate-s">
+                  {presence.message || (presence.k_floor
+                    ? t('analytics.presence.gate_hint', { k: presence.k_floor, defaultValue: 'An hour appears once at least {{k}} opted-in customers have been seen in it. Below that it stays hidden, so no single visitor can be identified.' })
+                    : t('analytics.presence.gate_hint_generic', 'Too few opted-in customers so far. Hours appear once enough people have been seen to keep them anonymous.'))}
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="an-hm-grid">
+          <div className="an-hm-grid" style={{ '--an-hm-cols': hours.length }}>
             <div className="an-hm-lbl" />
-            {hours.map(h => <div className="an-hm-hour" key={h}>{h}</div>)}
+            {hours.map(h => <div className="an-hm-hour" key={h}>{String(h).padStart(2, '0')}:00</div>)}
             {days.map((d, di) => (
               <Fragment key={di}>
                 <div className="an-hm-lbl">{d}</div>
                 {hours.map(h => {
                   const v = presence.grid?.[di]?.[h]
                   return v == null
-                    ? <div className="an-hm-cell" key={h} style={{ background: 'var(--mist)' }} title={`suppressed (below k=${presence.k_floor})`} />
-                    : <div className="an-hm-cell" key={h} style={{ background: `rgba(179,148,90,${(0.06 + Math.min(v / 10, 1) * 0.85).toFixed(2)})` }} title={`${v} visits`} />
+                    ? <div className="an-hm-cell" key={h} style={{ background: 'var(--mist)' }}
+                        title={t('analytics.presence.suppressed', { k: presence.k_floor, defaultValue: 'Hidden — fewer than {{k}} people, too few to show without identifying someone' })} />
+                    : <div className="an-hm-cell" key={h}
+                        style={{ background: `rgba(179,148,90,${(0.06 + (v / presencePeak) * 0.85).toFixed(2)})` }}
+                        title={t('analytics.presence.cell_tooltip', { count: v, hour: String(h).padStart(2, '0'), defaultValue: '{{count}} visit(s) at {{hour}}:00' })} />
                 })}
               </Fragment>
             ))}
@@ -800,13 +843,13 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
 function ReservePickupCard({ reserve, loading, t, loc }) {
   return (
     <div className="an-reserve-card">
-      <div className="an-reserve-tag">{t('analytics.reserve.tag')}</div>
-      <div className="an-reserve-title">{t('analytics.reserve.title_pre')} <em>{t('analytics.reserve.title_em')}</em></div>
-      <div className="an-reserve-sub">{t('analytics.reserve.sub')}</div>
+      <div className="an-reserve-tag">{t('analytics.reserve.tag', 'Reserve & Pickup')}</div>
+      <div className="an-reserve-title">{t('analytics.reserve.title_pre', 'Reserve &')} <em>{t('analytics.reserve.title_em', 'Pickup')}</em></div>
+      <div className="an-reserve-sub">{t('analytics.reserve.sub', 'Customers who reserved items to try or buy in-store.')}</div>
       <div className="an-reserve-stats">
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtNum(reserve.requests, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.requests')}</div></div>
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtEUR(reserve.reservedValue, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.value')}</div></div>
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : `${reserve.pickupRatePct}%`}</div><div className="an-reserve-stat-l">{t('analytics.reserve.pickup_rate')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtNum(reserve.requests, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.requests', 'Requests')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtEUR(reserve.reservedValue, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.value', 'Reserved Value')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : `${reserve.pickupRatePct}%`}</div><div className="an-reserve-stat-l">{t('analytics.reserve.pickup_rate', 'Pickup Rate')}</div></div>
       </div>
     </div>
   )
@@ -814,6 +857,7 @@ function ReservePickupCard({ reserve, loading, t, loc }) {
 
 /* ══════════════════════════════════════════════════════════════════════ */
 
+const RANGE_LABELS = { 7: '7 Days', 30: '30 Days', 90: '90 Days' }
 export default function Analytics() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language?.startsWith('it') ? 'it' : 'en'
@@ -826,6 +870,12 @@ export default function Analytics() {
   const [savesAging, setSavesAging] = useState(null)
   const [heatmap, setHeatmap] = useState(null)
   const [loadingMain, setLoadingMain] = useState(true)
+
+  const [failedCount, setFailedCount] = useState(0)
+  const [totalCount, setTotalCount]   = useState(0)
+  // Bumped by Retry. `days` can't do this job — setting state to the value it
+  // already holds is a no-op in React, so the effect would never re-run.
+  const [reloadKey, setReloadKey] = useState(0)
 
   const [hmSource, setHmSource] = useState('tx')
   const [presence, setPresence] = useState(null)
@@ -840,17 +890,28 @@ export default function Analytics() {
       apiFetch(`${API}/boutique/analytics/matrix?days=${days}`).then(r => r.json()),
       apiFetch(`${API}/boutique/analytics/saves-aging?days=${days}`).then(r => r.json()),
       apiFetch(`${API}/boutique/analytics/heatmap`).then(r => r.json()),
-    ]).then(([m, ld, mx, sa, hm]) => {
+    ]).then(results => {
       if (cancelled) return
-      setMain(m.status === 'fulfilled' && m.value?.success ? m.value.data : null)
-      setLostDemand(ld.status === 'fulfilled' && ld.value?.success ? ld.value.data : null)
-      setMatrix(mx.status === 'fulfilled' && mx.value?.success ? mx.value.data : null)
-      setSavesAging(sa.status === 'fulfilled' && sa.value?.success ? sa.value.data : null)
-      setHeatmap(hm.status === 'fulfilled' && hm.value?.success ? hm.value.data : null)
+      const [m, ld, mx, sa, hm] = results
+      const dataOf = r => (r.status === 'fulfilled' && r.value?.success ? r.value.data : null)
+      setMain(dataOf(m))
+      setLostDemand(dataOf(ld))
+      setMatrix(dataOf(mx))
+      setSavesAging(dataOf(sa))
+      setHeatmap(dataOf(hm))
+      // allSettled swallows everything, so a dead backend used to look exactly
+      // like a quiet month. Count the calls that genuinely failed (rejected, or
+      // success:false) and say so — the per-section empty states can't tell the
+      // difference between "no data yet" and "we never got an answer".
+      // Store the count, not the sentence: building the message here would
+      // capture `t` in the effect (and freeze the wording at load time, so it
+      // would stay in the old language after a switch).
+      setFailedCount(results.filter(r => r.status === 'rejected' || !r.value?.success).length)
+      setTotalCount(results.length)
       setLoadingMain(false)
     })
     return () => { cancelled = true }
-  }, [days, lang])
+  }, [days, lang, reloadKey])
 
   useEffect(() => {
     if (hmSource !== 'presence' || presence) return
@@ -862,37 +923,59 @@ export default function Analytics() {
       .finally(() => setPresenceLoading(false))
   }, [hmSource, presence])
 
-  // `extended` is true once the backend ships the new discovery fields (see
-  // the handoff spec) — until then every section below falls back to the
-  // static Sartoria Belloni sample data so the page can be previewed in full.
-  const extended     = main?.dailyTrend != null
-  const stats         = extended ? { ...MOCK.stats,  ...main.stats  } : MOCK.stats
-  const deltas        = extended ? { ...MOCK.deltas, ...main.deltas } : MOCK.deltas
-  const dailyTrend    = extended ? main.dailyTrend               : MOCK.dailyTrend
-  const funnel        = extended ? adaptFunnel(main.discoveryFunnel)     : MOCK.discoveryFunnel
-  const geo           = extended ? adaptGeo(main.geoBreakdown)           : MOCK.geoBreakdown
-  const traffic       = extended ? adaptTraffic(main.discoveryTrafficSources) : MOCK.discoveryTrafficSources
-  const topProducts   = extended && main.topProducts?.length     ? main.topProducts : MOCK.topProducts
-  const reserveStats  = extended ? adaptReserve(main.reserveStats)       : MOCK.reserveStats
-  const lostDemandData = lostDemand ? adaptLostDemand(lostDemand) : MOCK.lostDemand
-  const matrixData     = matrix   ? adaptMatrix(matrix)                  : MOCK.matrix
-  const savesAgingData = savesAging ? adaptSavesAging(savesAging)        : MOCK.savesAging
-  const heatmapData    = heatmap    ?? MOCK.heatmap
+  // Every value below used to fall back to the static "Sartoria Belloni"
+  // sample data whenever the backend didn't answer — with nothing on screen
+  // saying so. Invented revenue, invented top products, and a call list of
+  // four customers who don't exist, all rendered exactly like real figures.
+  //
+  // Nothing falls back now, and the sample data has been deleted outright.
+  // Each section already has its own "no data yet" empty state, so a missing
+  // or failed response shows that instead. An empty panel is recoverable in
+  // front of a client; a convincing wrong number is not.
+  const stats          = main?.stats  ?? {}
+  const deltas         = main?.deltas ?? {}
+  const dailyTrend     = main?.dailyTrend ?? null
+  const funnel         = main?.discoveryFunnel ? adaptFunnel(main.discoveryFunnel) : null
+  const geo            = main?.geoBreakdown ? adaptGeo(main.geoBreakdown) : null
+  const traffic        = main?.discoveryTrafficSources ? adaptTraffic(main.discoveryTrafficSources) : null
+  const topProducts    = main?.topProducts?.length ? main.topProducts : null
+  const reserveStats   = main?.reserveStats ? adaptReserve(main.reserveStats) : null
+  const lostDemandData = lostDemand ? adaptLostDemand(lostDemand) : null
+  const matrixData     = matrix     ? adaptMatrix(matrix)         : null
+  const savesAgingData = savesAging ? adaptSavesAging(savesAging) : null
+  const heatmapData    = heatmap    ?? null
 
   const matrixReorder = useMemo(() => (matrixData ?? []).filter(m => m.quadrant === 'reorder'), [matrixData])
+  // The cell shading scales against the busiest cell. The API reports that
+  // itself as an object — peak: {day, dow, hour, events} — so take its count
+  // when present and only scan the grid as a fallback. `peak` is flattened to
+  // a number here because that is what the shading maths expects.
   const heatmapWithPeak = useMemo(() => {
     if (!heatmapData?.grid) return heatmapData
-    let peak = 1
-    for (const row of heatmapData.grid) for (const v of row) if (v > peak) peak = v
-    return { ...heatmapData, peak }
+    let peak = heatmapData.peak?.events ?? 0
+    if (!peak) for (const row of heatmapData.grid) for (const v of row) if (v > peak) peak = v
+    return { ...heatmapData, peak: peak || 1 }
   }, [heatmapData])
 
   return (
     <>
+      {!loadingMain && failedCount > 0 && (
+        <div className="alert alert-red">
+          <span className="material-symbols-outlined">error</span>
+          <div style={{ flex: 1 }}>
+            {failedCount >= totalCount
+              ? t('analytics.err_all', 'Could not load analytics. Please try again.')
+              : t('analytics.err_partial', { count: failedCount, defaultValue: '{{count}} section(s) failed to load — the panels below may be incomplete.' })}
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={() => setReloadKey(k => k + 1)}>
+            {t('common.retry', 'Retry')}
+          </button>
+        </div>
+      )}
       <div className="an-range-bar">
         {[7, 30, 90].map(d => (
           <button key={d} className={`btn btn-sm ${days === d ? 'btn-primary' : 'btn-outline'}`} onClick={() => setDays(d)}>
-            {t(`analytics.range.${d}`)}
+            {t(`analytics.range.${d}`, RANGE_LABELS[d])}
           </button>
         ))}
       </div>
@@ -904,13 +987,13 @@ export default function Analytics() {
           <div className="an-card-hdr-l">
             <span className="material-symbols-outlined an-card-icon">show_chart</span>
             <div>
-              <div className="card-title">{t('analytics.trend.title_pre')} <em>{t('analytics.trend.title_em')}</em></div>
-              <div className="an-card-sub">{t('analytics.trend.sub')}</div>
+              <div className="card-title">{t('analytics.trend.title_pre', 'Discovery')} <em>{t('analytics.trend.title_em', 'Trend')}</em></div>
+              <div className="an-card-sub">{t('analytics.trend.sub', 'Daily views and saves over time.')}</div>
             </div>
           </div>
           <div className="an-legend">
-            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--gold)' }} />{t('analytics.trend.views')}</div>
-            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--porpora)' }} />{t('analytics.trend.saves')}</div>
+            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--gold)' }} />{t('analytics.trend.views', 'Views')}</div>
+            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--porpora)' }} />{t('analytics.trend.saves', 'Saves')}</div>
           </div>
         </div>
         <TrendChart trend={dailyTrend} loading={loadingMain} t={t} loc={loc} />
@@ -918,22 +1001,22 @@ export default function Analytics() {
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="filter_alt" title={<>{t('analytics.funnel.title_pre')} <em>{t('analytics.funnel.title_em')}</em></>} sub={t('analytics.funnel.sub')} />
+          <CardHead icon="filter_alt" title={<>{t('analytics.funnel.title_pre', 'Discovery')} <em>{t('analytics.funnel.title_em', 'Funnel')}</em></>} sub={t('analytics.funnel.sub', 'From view to reserve request.')} />
           <DiscoveryFunnel funnel={funnel} loading={loadingMain} t={t} loc={loc} />
         </div>
         <div className="card">
-          <CardHead icon="public" title={<>{t('analytics.geo.title_pre')} <em>{t('analytics.geo.title_em')}</em></>} sub={t('analytics.geo.sub')} />
+          <CardHead icon="public" title={<>{t('analytics.geo.title_pre', 'Views by')} <em>{t('analytics.geo.title_em', 'Geography')}</em></>} sub={t('analytics.geo.sub', 'Where your online visitors are coming from.')} />
           <GeoList geo={geo} loading={loadingMain} t={t} loc={loc} />
         </div>
       </div>
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="alt_route" title={<>{t('analytics.traffic.title_pre')} <em>{t('analytics.traffic.title_em')}</em></>} sub={t('analytics.traffic.sub')} />
+          <CardHead icon="alt_route" title={<>{t('analytics.traffic.title_pre', 'Traffic')} <em>{t('analytics.traffic.title_em', 'Sources')}</em></>} sub={t('analytics.traffic.sub', 'How customers are discovering your boutique.')} />
           <TrafficList traffic={traffic} loading={loadingMain} t={t} loc={loc} />
         </div>
         <div className="card">
-          <CardHead icon="visibility" title={<>{t('analytics.products.title_pre')} <em>{t('analytics.products.title_em')}</em></>} sub={t('analytics.products.sub')} />
+          <CardHead icon="visibility" title={<>{t('analytics.products.title_pre', 'Most-Viewed')} <em>{t('analytics.products.title_em', 'Products')}</em></>} sub={t('analytics.products.sub', 'Your most-viewed pieces this period.')} />
           <ProductsList products={topProducts} loading={loadingMain} t={t} loc={loc} />
         </div>
       </div>
@@ -942,11 +1025,11 @@ export default function Analytics() {
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="scatter_plot" title={<>{t('analytics.matrix.title_pre')} <em>{t('analytics.matrix.title_em')}</em></>} sub={t('analytics.matrix.sub')} />
-          <MatrixChart matrix={matrixData} loading={loadingMain} t={t} />
+          <CardHead icon="scatter_plot" title={<>{t('analytics.matrix.title_pre', 'Visibility vs.')} <em>{t('analytics.matrix.title_em', 'Conversion')}</em></>} sub={t('analytics.matrix.sub', 'Views vs. sell-through rate, by product.')} />
+          <MatrixChart matrix={matrixData} thresholds={matrix?.thresholds} loading={loadingMain} t={t} />
         </div>
         <div className="card">
-          <CardHead icon="history" title={<>{t('analytics.aging.title_pre')} <em>{t('analytics.aging.title_em')}</em></>} sub={t('analytics.aging.sub')} />
+          <CardHead icon="history" title={<>{t('analytics.aging.title_pre', 'Saves')} <em>{t('analytics.aging.title_em', 'Aging')}</em></>} sub={t('analytics.aging.sub', 'How long saved items sit before selling or aging out.')} />
           <SavesAging savesAging={savesAgingData} loading={loadingMain} t={t} />
         </div>
       </div>
@@ -962,7 +1045,7 @@ export default function Analytics() {
 
       <div className="an-foot-note">
         <span className="material-symbols-outlined">tips_and_updates</span>
-        <div>{t('analytics.footer.note')}</div>
+        <div>{t('analytics.footer.note', 'Data updates daily. Figures reflect the selected date range.')}</div>
       </div>
     </>
   )

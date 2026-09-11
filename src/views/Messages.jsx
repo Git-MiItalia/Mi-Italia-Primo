@@ -5,6 +5,13 @@ import { apiFetch } from '../lib/api'
 const API = import.meta.env.VITE_API_URL
 
 const QUICK_REPLY_KEYS = ['reserve_link', 'size_guide', 'stock_update', 'shipping_info', 'thank_you']
+const QUICK_REPLY_DEFAULTS = {
+  reserve_link:  'Here\'s your reservation link: ',
+  size_guide:    'You can find our size guide here: ',
+  stock_update:  'This item is back in stock!',
+  shipping_info: 'Your order ships within 2-3 business days.',
+  thank_you:     'Thank you so much!',
+}
 
 function AvatarPlaceholder({ size = 18 }) {
   return (
@@ -34,16 +41,16 @@ export default function Messages() {
     const now = new Date()
     const diffDays = Math.floor((now - d) / 86400000)
     if (diffDays === 0) return d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
-    if (diffDays === 1) return t('messages.yesterday')
+    if (diffDays === 1) return t('messages.yesterday', 'Yesterday')
     if (diffDays < 7)  return d.toLocaleDateString('en', { weekday: 'short' })
     return d.toLocaleDateString('en', { day: 'numeric', month: 'short' })
   }
 
   function getStatusLabel(status) {
-    if (status === 'sending')   return <span className="msg-status-lbl sending">{t('messages.status.sending')}</span>
-    if (status === 'sent')      return <span className="msg-status-lbl sent">{t('messages.status.sent')}</span>
-    if (status === 'delivered') return <span className="msg-status-lbl delivered">{t('messages.status.delivered')}</span>
-    if (status === 'read')      return <span className="msg-status-lbl read">{t('messages.status.read')}</span>
+    if (status === 'sending')   return <span className="msg-status-lbl sending">{t('messages.status.sending', 'Sending') + '…'}</span>
+    if (status === 'sent')      return <span className="msg-status-lbl sent">{t('messages.status.sent', 'Sent')}</span>
+    if (status === 'delivered') return <span className="msg-status-lbl delivered">{t('messages.status.delivered', 'Delivered')}</span>
+    if (status === 'read')      return <span className="msg-status-lbl read">{t('messages.status.read', 'Read')}</span>
     return null
   }
 
@@ -134,15 +141,15 @@ export default function Messages() {
   const unreadTotal = conversations.filter(c => c.unread_count > 0).length
 
   function convName(c) {
-    return c.customer_name || c.customer_phone || t('messages.unknown_contact')
+    return c.customer_name || c.customer_phone || t('messages.unknown_contact', 'Unknown contact')
   }
 
   function convMeta(c) {
     const parts = []
     if (c.customer_phone) parts.push(`+${c.customer_phone}`)
     if (c.product_name)   parts.push(c.product_name)
-    if (!c.within_window) parts.push(t('messages.outside_window'))
-    return parts.join(' · ') || t('messages.wa_label')
+    if (!c.within_window) parts.push(t('messages.outside_window', 'Outside reply window'))
+    return parts.join(' · ') || t('messages.wa_label', 'WhatsApp')
   }
 
   return (
@@ -151,9 +158,9 @@ export default function Messages() {
       {/* ── Sidebar ── */}
       <div className="msg-sidebar">
         <div className="msg-sidebar-hdr">
-          <div className="msg-sidebar-title">{t('messages.title')}</div>
+          <div className="msg-sidebar-title">{t('messages.title', 'Messages')}</div>
           <div className="msg-sidebar-badges">
-            <span className="msg-wa-badge">{t('messages.wa_label')}</span>
+            <span className="msg-wa-badge">{t('messages.wa_label', 'WhatsApp')}</span>
             {unreadTotal > 0 && <span className="sb-badge msg-unread-count">{unreadTotal}</span>}
           </div>
         </div>
@@ -161,7 +168,7 @@ export default function Messages() {
         <div className="msg-search">
           <div className="msg-search-inner">
             <span className="material-symbols-outlined">search</span>
-            <input placeholder={t('messages.search_placeholder')} />
+            <input placeholder={t('messages.search_placeholder', 'Search conversations…')} />
           </div>
         </div>
 
@@ -173,7 +180,7 @@ export default function Messages() {
           )}
           {!loadingConvos && conversations.length === 0 && (
             <div className="msg-empty msg-empty-list">
-              {t('messages.no_conversations')}
+              {t('messages.no_conversations', 'No conversations yet')}
             </div>
           )}
           {conversations.map(c => (
@@ -207,23 +214,23 @@ export default function Messages() {
             </div>
             <div className="msg-main-actions">
               <button className="btn btn-sm btn-outline">
-                <span className="material-symbols-outlined">person</span>{t('messages.view_profile')}
+                <span className="material-symbols-outlined">person</span>{t('messages.view_profile', 'View Profile')}
               </button>
               <button className="btn btn-sm btn-whatsapp">
-                <span className="material-symbols-outlined">open_in_new</span>{t('messages.open_wa')}
+                <span className="material-symbols-outlined">open_in_new</span>{t('messages.open_wa', 'Open in WhatsApp')}
               </button>
             </div>
           </div>
 
           <div className="msg-body" ref={bodyRef}>
-            <div className="msg-date-divider">{t('messages.today_divider', { date: new Date().toLocaleDateString('en', { month:'long', day:'numeric', year:'numeric' }) })}</div>
+            <div className="msg-date-divider">{t('messages.today_divider', { date: new Date().toLocaleDateString('en', { month:'long', day:'numeric', year:'numeric' }), defaultValue: '{{date}}' })}</div>
 
             {loadingMsgs ? (
               <div className="msg-empty">
                 <span className="material-symbols-outlined msg-empty-icon-md">sync</span>
               </div>
             ) : (activeConvo.messages ?? []).length === 0 ? (
-              <div className="msg-empty">{t('messages.start_of_convo', { name: convName(activeConvo) })}</div>
+              <div className="msg-empty">{t('messages.start_of_convo', { name: convName(activeConvo), defaultValue: 'This is the beginning of your conversation with {{name}}.' })}</div>
             ) : (
               (activeConvo.messages ?? []).map((m, idx, arr) => {
                 const type = m.direction === 'outbound' ? 'sent' : 'received'
@@ -239,7 +246,7 @@ export default function Messages() {
                       {m.template_name && (
                         <div className="msg-template-ref">
                           <span className="material-symbols-outlined msg-template-icon">auto_awesome</span>
-                          {t('messages.template_ref', { name: m.template_name })}
+                          {t('messages.template_ref', { name: m.template_name, defaultValue: 'Sent via template: {{name}}' })}
                         </div>
                       )}
                       <div className={`msg-bubble ${type}${m.status === 'sending' ? ' sending' : ''}`}>
@@ -262,13 +269,13 @@ export default function Messages() {
           {!activeConvo.within_window && (
             <div className="msg-window-warn">
               <span className="material-symbols-outlined">schedule</span>
-              {t('messages.window_warn')}
+              {t('messages.window_warn', 'This conversation is outside the 24-hour reply window — only template messages can be sent until the customer replies.')}
             </div>
           )}
 
           <div className="msg-quick-replies">
             {QUICK_REPLY_KEYS.map((key, i) => {
-              const label = t(`messages.quick_replies.${key}`)
+              const label = t(`messages.quick_replies.${key}`, QUICK_REPLY_DEFAULTS[key])
               return (
                 <div key={key} onClick={() => setInput(label)} className={`msg-quick-chip${i === 0 ? ' msg-quick-wa' : ''}`}>
                   {label}
@@ -281,13 +288,13 @@ export default function Messages() {
             <textarea
               className="msg-input-box"
               rows={1}
-              placeholder={activeConvo.within_window ? t('messages.input_placeholder') : t('messages.outside_window_placeholder')}
+              placeholder={activeConvo.within_window ? t('messages.input_placeholder', 'Type a message…') : t('messages.outside_window_placeholder', 'Outside reply window — only templates can be sent')}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               disabled={!activeConvo.within_window || sending}
             />
-            <button className="btn btn-sm btn-outline" title={t('messages.attach_product')}>
+            <button className="btn btn-sm btn-outline" title={t('messages.attach_product', 'Attach product')}>
               <span className="material-symbols-outlined msg-attach-icon">attach_file</span>
             </button>
             <button
@@ -304,8 +311,8 @@ export default function Messages() {
           <div className="msg-main msg-main-empty">
             <div className="msg-empty-center">
               <span className="material-symbols-outlined msg-empty-icon-lg">chat</span>
-              <div className="msg-empty-title">{t('messages.empty_title')}</div>
-              <div className="msg-empty-sub">{t('messages.empty_sub')}</div>
+              <div className="msg-empty-title">{t('messages.empty_title', 'Select a conversation')}</div>
+              <div className="msg-empty-sub">{t('messages.empty_sub', 'Choose a conversation from the list to view messages.')}</div>
             </div>
           </div>
         )

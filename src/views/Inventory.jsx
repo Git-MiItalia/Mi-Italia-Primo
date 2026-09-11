@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { csvRow, triggerDownload } from '../lib/csv'
 import CategorySelectorDropdown from '../components/product/CategorySelectorDropdown'
 import RestockGrid from '../components/product/RestockGrid'
 import useNotifStore from '../store/notifStore'
@@ -14,13 +15,37 @@ function loadRestocks(setRestocks) {
   apiFetch(`${API}/boutique/inventory/restocks`)
     .then(r => r.json())
     .then(res => setRestocks(res.data?.restocks ?? []))
+    // Without this an unreachable API left the previous list on screen, so a
+    // stale restock history looked like the current one.
+    .catch(() => setRestocks([]))
 }
 
-function stockBadge(total, warn, crit) {
-  if (total === 0)   return { cls:'out', icon:'error',   label:'Out of Stock' }
-  if (total <= crit) return { cls:'low', icon:'warning', label:'Critical'     }
-  if (total <= warn) return { cls:'low', icon:'warning', label:'Low'          }
-  return                    { cls:'in',  icon:null,      label:'In Stock'     }
+// Internal grouping sentinel for variants with no colour set. Never displayed —
+// rows keyed to it render an empty colour cell — so it must NOT be translated:
+// the value is compared by identity when the rows are built.
+const NO_COLOUR = '__no_colour__'
+
+// English fallbacks for stockBadge's keys, used only if a key is ever absent.
+const BADGE_FALLBACK = {
+  not_for_sale: 'Not for sale',
+  out_of_stock: 'Out of Stock',
+  critical:     'Critical',
+  low_stock:    'Low Stock',
+  in_stock:     'In Stock',
+}
+
+// `hasActive` false means every size of this row is switched off, so the row
+// isn't out of stock — it isn't on sale at all. Saying "Out of Stock" there
+// would send someone off to restock a size that wouldn't sell anyway.
+//
+// Returns a key, not a label — this runs outside the component so it has no
+// `t`, and hardcoding the label here kept every stock badge in English.
+function stockBadge(total, minQty, warn, crit, hasActive = true) {
+  if (!hasActive)     return { cls:'out', icon:'block',   key:'not_for_sale' }
+  if (total === 0)    return { cls:'out', icon:'error',   key:'out_of_stock' }
+  if (minQty <= crit) return { cls:'low', icon:'warning', key:'critical'     }
+  if (minQty <= warn) return { cls:'low', icon:'warning', key:'low_stock'    }
+  return                     { cls:'in',  icon:null,      key:'in_stock'     }
 }
 
 function imgUrl(raw) {
@@ -54,31 +79,68 @@ export default function Inventory() {
   const [restockGrid,      setRestockGrid]      = useState({ productId:'', cells:{} })
   const [restockSuccess,   setRestockSuccess]   = useState(null) // null | 'restock' | 'decrease'
   const [decreaseConfirm,  setDecreaseConfirm]  = useState(null) // null | { items:[...], pendingIncreases:[...] }
-  const [category,         setCategory]         = useState(null)
+  const [loadFailed,       setLoadFailed]       = useState(false)
+  // Guards every stock write. All three submit paths were fire-and-forget, so a
+  // double-click sent the same restock or decrease twice.
+  const [submitting,       setSubmitting]       = useState(false)
+
+  const [reloadTick, setReloadTick] = useState(0)
+  // { l1, l2, l3, l4 } from CategorySelectorDropdown, or null for "no filter".
+  const [category,   setCategory]   = useState(null)
+
+  function toast(msg) {
+    setSaveToast(msg)
+    setTimeout(() => setSaveToast(''), 3000)
+  }
+
+  function retryLoad() {
+    setLoading(true)
+    setLoadFailed(false)
+    setReloadTick(n => n + 1)
+  }
 
   // Load inventory, settings and restocks on mount
   useEffect(() => {
     apiFetch(`${API}/boutique/inventory`)
       .then(r => r.json())
       .then(res => {
-        setApiStats(res.data.stats)
+        // `res.data.stats` threw outright when the payload had no `data`, and
+        // nothing checked `success` — an error body became an empty inventory.
+        if (res.success === false || !res.data) throw new Error(res.message || 'inventory request failed')
+        setApiStats(res.data.stats ?? {})
         setAllProducts(res.data.products ?? [])
-        setLoading(false)
+        setLoadFailed(false)
       })
+      .catch(() => {
+        setApiStats({})
+        setAllProducts([])
+        setLoadFailed(true)
+      })
+      // `loading` used to be cleared only on success, so any failure left the
+      // page spinning on "Loading…" permanently with no way out.
+      .finally(() => setLoading(false))
 
     apiFetch(`${API}/boutique/inventory/settings`)
       .then(r => r.json())
       .then(res => {
-        if (res.success) {
-          setWarnThreshold(res.data.low_stock_warning_threshold  ?? 3)
-          setCritThreshold(res.data.low_stock_critical_threshold ?? 1)
-          setAutoHide(res.data.auto_hide_out_of_stock            ?? true)
-        }
+        if (!res.success) throw new Error(res.message || 'inventory settings failed')
+        setWarnThreshold(res.data.low_stock_warning_threshold  ?? 3)
+        setCritThreshold(res.data.low_stock_critical_threshold ?? 1)
+        setAutoHide(res.data.auto_hide_out_of_stock            ?? true)
       })
-      .catch(() => {})
+      // Failing silently meant the low/critical stock badges were drawn
+      // against default thresholds rather than the boutique's configured ones.
+      // i18n.t, not the hook's t: using t here would make it a dependency
+      // of this fetch effect and re-run the whole load on every re-render.
+      .catch(() => toast(i18n.t('inventory.err_settings', 'Could not load your stock thresholds — showing the defaults.')))
 
     loadRestocks(setRestocks)
-  }, [i18n.language])
+    // `i18n` is only read inside the catch above, to translate a toast at the
+    // moment it fires. Listing it as a dependency would be harmless but
+    // misleading — the reload is driven by the language VALUE and reloadTick,
+    // not by the i18n instance, which never changes identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i18n.language, reloadTick])
 
   // Mark stock notifications as read on mount
   useEffect(() => {
@@ -89,8 +151,13 @@ export default function Inventory() {
       .filter(n => !n.read_at && !n.is_read && n.type?.toLowerCase().includes('stock'))
       .forEach(n => {
         apiFetch(`${API}/boutique/notifications/${n.id}/read`, { method:'PUT', body: JSON.stringify({}) })
+          .catch(() => {}) // best-effort; a failed read-receipt shouldn't surface
         markRead(n.id)
       })
+    // Deliberately runs once, gated by hasMarkedRead. Depending on the full
+    // `notifications` array or `markRead` would re-enter on every store update
+    // and re-PUT receipts that were already sent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications.length])
 
   // ── Derive table rows and columns ─────────────────────────────────────────
@@ -113,21 +180,31 @@ export default function Inventory() {
     allProducts.forEach(p => {
       const colourMap = {}
       p.variants?.forEach(v => {
-        const key = v.colour ?? 'No Colour'
+        const key = v.colour ?? NO_COLOUR
         if (!colourMap[key]) colourMap[key] = []
         colourMap[key].push(v)
       })
       Object.entries(colourMap).forEach(([colour, variants]) => {
-        const total = variants.reduce((s, v) => s + v.stock_qty, 0)
+        // Totals and thresholds only count sizes that are switched on — an
+        // inactive size can't be sold, so counting its units overstates what's
+        // available and its qty must not drive the low/critical badge.
+        const sellable = variants.filter(v => v.is_active !== false)
+        const total    = sellable.reduce((s, v) => s + v.stock_qty, 0)
+        const minQty   = sellable.length > 0 ? Math.min(...sellable.map(v => v.stock_qty)) : 0
         rows.push({
           rowKey:      `${p.id}::${colour}`,
           productId:   p.id,
           productName: p.name,
           sku:         p.sku,
           img:         imgUrl(p.main_photo),
-          colour:      colour === 'No Colour' ? '' : colour,
+          colour:      colour === NO_COLOUR ? '' : colour,
+          // "Women's / Tops / Blouse" when the API sends it. Same field POS
+          // filters on; /boutique/inventory does not return it yet.
+          categoryPath: p.category_path ?? p.category ?? '',
           variants,
           total,
+          minQty,
+          hasActive:   sellable.length > 0,
         })
       })
     })
@@ -140,18 +217,51 @@ export default function Inventory() {
     return rows
   }, [allProducts])
 
+  // The dropdown can only filter if the API actually labels each product. Drive
+  // the control off the data rather than a hardcoded "coming soon", so it turns
+  // itself on the moment /boutique/inventory starts sending category_path.
+  const categoryFilterReady = useMemo(
+    () => tableRows.some(r => r.categoryPath),
+    [tableRows],
+  )
+
+  // The selector yields { l1, l2, l3 }; category_path is those joined by " / ".
+  // Compare on the selected prefix so picking just a division matches every
+  // style beneath it.
+  const categoryPrefix = [category?.l1, category?.l2, category?.l3]
+    .filter(Boolean)
+    .join(' / ')
+    .toLowerCase()
+
   const filteredRows = useMemo(() => {
     return tableRows.filter(row => {
       const matchSearch = row.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           row.sku.toLowerCase().includes(searchQuery.toLowerCase())
-      const badge = stockBadge(row.total, warnThreshold, critThreshold)
+      const badge = stockBadge(row.total, row.minQty, warnThreshold, critThreshold, row.hasActive)
       const matchFilter =
         filterStatus === 'all' ? true :
         filterStatus === 'low' ? badge.cls === 'low' :
         filterStatus === 'out' ? badge.cls === 'out' : true
-      return matchSearch && matchFilter
+      const matchCategory =
+        !categoryPrefix || row.categoryPath.toLowerCase().startsWith(categoryPrefix)
+      return matchSearch && matchFilter && matchCategory
     })
-  }, [tableRows, searchQuery, filterStatus, warnThreshold, critThreshold])
+  }, [tableRows, searchQuery, filterStatus, warnThreshold, critThreshold, categoryPrefix])
+
+  // Exports what's on screen. It used to export `tableRows`, so filtering to
+  // "Out of Stock" and clicking Export silently handed back the whole catalogue.
+  // Quoting comes from lib/csv — the old `r.join(',')` corrupted every row after
+  // a product name containing a comma.
+  function exportCsv() {
+    const header = [
+      t('inventory.table.product'),
+      t('inventory.table.colour', 'Colour'),
+      t('inventory.table.sku'),
+      t('inventory.table.total'),
+    ]
+    const body = filteredRows.map(r => [r.productName, r.colour, r.sku, r.total])
+    triggerDownload([csvRow(header), ...body.map(csvRow)].join('\n'), 'inventory.csv')
+  }
 
   function getCell(row, sizeLabel) {
     return row.variants.find(v => v.size_label === sizeLabel) ?? null
@@ -203,7 +313,8 @@ export default function Inventory() {
   // alongside them (from a mixed grid submit) are sent together as POST /restocks
   // so both halves of one "Add Restock" click apply atomically. ─────────────────
   function submitDecreaseConfirm() {
-    if (!decreaseConfirm) return
+    if (!decreaseConfirm || submitting) return
+    setSubmitting(true)
     const calls = [
       apiFetch(`${API}/boutique/inventory`, {
         method: 'PUT',
@@ -217,18 +328,41 @@ export default function Inventory() {
       ),
     ]
     Promise.all(calls).then(results => {
-      if (!results[0]?.success) return
+      // Bailing silently here left the modal open with no explanation, which
+      // read as a dead button. Every call has to land, not just the PUT.
+      if (results.some(r => r?.success === false)) throw new Error('stock update failed')
       const hadIncreases = decreaseConfirm.pendingIncreases.length > 0
       setDecreaseConfirm(null)
       setRestockSuccess(hadIncreases ? 'restock' : 'decrease')
-      apiFetch(`${API}/boutique/inventory`)
-        .then(r => r.json())
-        .then(res2 => {
-          setAllProducts(res2.data.products ?? [])
-          setApiStats(res2.data.stats ?? {})
-        })
+      refreshInventory()
       if (hadIncreases) loadRestocks(setRestocks)
     })
+      .catch(() => {
+        toast(t('common.error_generic'))
+        // A stock write is several requests, so a failure can be partial: some
+        // deltas already applied. Without re-reading, the next Save recomputes
+        // deltas from stale quantities and re-posts the ones that succeeded,
+        // adding the same restock twice.
+        refreshInventory()
+      })
+      .finally(() => setSubmitting(false))
+  }
+
+  // Re-read inventory after a write. Shared by all three submit paths, which
+  // had three copies of this with no error handling between them.
+  function refreshInventory() {
+    apiFetch(`${API}/boutique/inventory`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success === false || !res.data) throw new Error(res.message || 'inventory refresh failed')
+        setAllProducts(res.data.products ?? [])
+        setApiStats(res.data.stats ?? {})
+      })
+      // This re-read is what stops the next Save recomputing deltas from
+      // stale quantities and re-posting a restock twice (see the save
+      // handler's comment). Swallowing its failure left pre-save numbers on
+      // screen as though they were current, with that bug armed again.
+      .catch(() => toast(t('inventory.err_refresh', 'Saved, but the figures on screen could not be refreshed. Please reload before editing stock again.')))
   }
 
   // ── Save All Changes (Stock by Variant table edits) ───────────────────────
@@ -238,10 +372,10 @@ export default function Inventory() {
   // as submitRestockGrid originally had). Decreases still go through the
   // absolute PUT, unlogged — the backend rejects negative qty_added. ────────
   function saveChanges() {
+    if (submitting) return
     const entries = Object.entries(changes).map(([variant_id, stock_qty]) => ({ variant_id, stock_qty }))
     if (!entries.length) {
-      setSaveToast('No changes to save.')
-      setTimeout(() => setSaveToast(''), 3000)
+      toast(t('inventory.no_changes', 'No changes to save.'))
       return
     }
 
@@ -268,30 +402,40 @@ export default function Inventory() {
       }).then(r => r.json()))
     })
 
+    setSubmitting(true)
     Promise.all(calls).then(results => {
-      const putResult = absoluteUpdates.length ? results[0] : null
-      setSaveMsg(putResult?.message || 'Changes saved.')
+      // Only results[0] (the PUT) used to be inspected, so a rejected restock
+      // POST still reported "Changes saved." while the stock hadn't moved.
+      if (results.some(r => r?.success === false)) throw new Error('stock update failed')
+      // The backend message was rendered raw, so a French boutique saw whatever
+      // language the API replied in. The local string is always translated.
+      setSaveMsg(t('inventory.changes_saved', 'Changes saved.'))
       setTimeout(() => setSaveMsg(''), 3000)
       setChanges({})
-      apiFetch(`${API}/boutique/inventory`)
-        .then(r => r.json())
-        .then(res2 => {
-          setAllProducts(res2.data.products ?? [])
-          setApiStats(res2.data.stats ?? {})
-        })
+      refreshInventory()
       if (restockIncreases.length) loadRestocks(setRestocks)
     })
+      .catch(() => {
+        toast(t('common.error_generic'))
+        // A stock write is several requests, so a failure can be partial: some
+        // deltas already applied. Without re-reading, the next Save recomputes
+        // deltas from stale quantities and re-posts the ones that succeeded,
+        // adding the same restock twice.
+        refreshInventory()
+      })
+      .finally(() => setSubmitting(false))
   }
 
   function saveThresholds() {
+    if (submitting) return
     if (!Number.isFinite(warnThreshold) || !Number.isFinite(critThreshold) ||
         warnThreshold < 0 || critThreshold < 0) {
-      setThresholdMsg('Please enter valid, non-negative numbers.')
+      setThresholdMsg(t('inventory.thresholds.error_invalid', 'Please enter valid, non-negative numbers.'))
       setTimeout(() => setThresholdMsg(''), 3000)
       return
     }
     if (warnThreshold < critThreshold) {
-      setThresholdMsg('Warning threshold must be greater than or equal to the critical threshold.')
+      setThresholdMsg(t('inventory.thresholds.error_order', 'Warning threshold must be greater than or equal to the critical threshold.'))
       setTimeout(() => setThresholdMsg(''), 3000)
       return
     }
@@ -304,12 +448,17 @@ export default function Inventory() {
     })
       .then(r => r.json())
       .then(res => {
-        if (res.success) {
-          setThresholdMsg(res.message)
-          setTimeout(() => setThresholdMsg(''), 3000)
-        }
+        if (res.success === false) throw new Error(res.message || 'settings save failed')
+        // Was `res.message` — the raw backend string, untranslated.
+        setThresholdMsg(t('inventory.thresholds.saved', 'Thresholds saved.'))
+        setTimeout(() => setThresholdMsg(''), 3000)
       })
-      .catch(() => {})
+      // Previously swallowed, so a failed save looked exactly like a successful
+      // one that simply showed no message.
+      .catch(() => {
+        setThresholdMsg(t('common.error_generic'))
+        setTimeout(() => setThresholdMsg(''), 3000)
+      })
   }
 
   // Only the auto-hide flag is sent here, so only it should be applied back —
@@ -326,9 +475,17 @@ export default function Inventory() {
       .then(res => {
         if (res.success) {
           setAutoHide(res.data.auto_hide_out_of_stock ?? next)
+          return
         }
+        // A rejected save used to leave the switch flipped, so it looked saved
+        // until the next reload. Put it back and say so.
+        setAutoHide(!next)
+        toast(res.message || t('common.error_generic'))
       })
-      .catch(() => setAutoHide(!next))
+      .catch(() => {
+        setAutoHide(!next)
+        toast(t('common.error_network'))
+      })
   }
 
   // ── Restock modal openers ─────────────────────────────────────────────────
@@ -361,6 +518,7 @@ export default function Inventory() {
   // double-applies the increment). Decreases require confirmation first, same
   // as the inline table's decrease flow — see submitDecreaseConfirm. ────────
   function submitRestockGrid() {
+    if (submitting) return
     const product = allProducts.find(p => p.id === restockGrid.productId)
     if (!product) return
 
@@ -384,8 +542,9 @@ export default function Inventory() {
     })
 
     if (!restockIncreases.length && !decreaseItems.length) {
-      setSaveToast('No changes to save.')
-      setTimeout(() => setSaveToast(''), 3000)
+      // Was a hardcoded English literal, while the identical message in
+      // saveChanges went through t() — same string, two code paths.
+      toast(t('inventory.no_changes', 'No changes to save.'))
       return
     }
 
@@ -395,22 +554,30 @@ export default function Inventory() {
       return
     }
 
+    setSubmitting(true)
     Promise.all(restockIncreases.map(inc =>
       apiFetch(`${API}/boutique/inventory/restocks`, {
         method: 'POST',
         body: JSON.stringify(inc)
       }).then(r => r.json())
-    )).then(() => {
+    )).then(results => {
+      // Nothing was checked here at all — the ✅ success modal appeared even
+      // when every POST had failed and no stock had moved.
+      if (results.some(r => r?.success === false)) throw new Error('restock failed')
       setShowRestockModal(false)
       setRestockSuccess('restock')
-      apiFetch(`${API}/boutique/inventory`)
-        .then(r => r.json())
-        .then(res2 => {
-          setAllProducts(res2.data.products ?? [])
-          setApiStats(res2.data.stats ?? {})
-        })
+      refreshInventory()
       loadRestocks(setRestocks)
     })
+      .catch(() => {
+        toast(t('common.error_generic'))
+        // A stock write is several requests, so a failure can be partial: some
+        // deltas already applied. Without re-reading, the next Save recomputes
+        // deltas from stale quantities and re-posts the ones that succeeded,
+        // adding the same restock twice.
+        refreshInventory()
+      })
+      .finally(() => setSubmitting(false))
   }
 
   return (
@@ -434,18 +601,10 @@ export default function Inventory() {
           </h2>
         </div>
         <div className="inv-topbar-actions">
-          <button className="btn btn-outline" onClick={() => {
-            const rows = [['Product', 'Colour', 'SKU', 'Total Stock']]
-            tableRows.forEach(r => rows.push([r.productName, r.colour, r.sku, r.total]))
-            const csv = rows.map(r => r.join(',')).join('\n')
-            const a = document.createElement('a')
-            a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }))
-            a.download = 'inventory.csv'
-            a.click()
-          }}>
+          <button className="btn btn-outline" onClick={exportCsv}>
             <span className="material-symbols-outlined">download</span>{t('inventory.export_btn')}
           </button>
-          <button ref={saveBtnRef} className="btn btn-primary" onClick={saveChanges}>
+          <button ref={saveBtnRef} className="btn btn-primary" onClick={saveChanges} disabled={submitting}>
             <span className="material-symbols-outlined">save</span>{t('inventory.save_btn')}
           </button>
         </div>
@@ -457,11 +616,15 @@ export default function Inventory() {
       <div className="inv-grid">
         {[
           { cls:'ok',       lbl: t('inventory.stats.total_units'),  val: apiStats.total_units ?? '—',           sub: '' },
-          { cls:'warn',     lbl: t('inventory.stats.low_stock'),    val: apiStats.low_stock_products ?? '—',    sub: t('inventory.stats.low_stock_sub') },
+          // The old copy hardcoded "(≤ 2 units)", so the card below could be set
+          // to 6 and this line still said 2. Read the live threshold instead.
+          { cls:'warn',     lbl: t('inventory.stats.low_stock'),    val: apiStats.low_stock_products ?? '—',    sub: t('inventory.stats.low_stock_sub_n', 'Below threshold (≤ {{n}} units)', { n: warnThreshold }) },
           { cls:'critical', lbl: t('inventory.stats.out_of_stock'), val: apiStats.out_of_stock_variants ?? '—', sub: t('inventory.stats.out_of_stock_sub') },
           { cls:'ok',       lbl: t('inventory.stats.avg_stock'),    val: apiStats.avg_stock_per_variant ?? '—', sub: t('inventory.stats.avg_stock_sub') },
-        ].map(s => (
-          <div key={s.lbl} className={`inv-stat ${s.cls}`}>
+        ].map((s, i) => (
+          // Keyed by position, not by the translated label — two labels can
+          // collide once a locale renders them the same.
+          <div key={i} className={`inv-stat ${s.cls}`}>
             <div className="inv-stat-lbl">{s.lbl}</div>
             <div className="inv-stat-val">{s.val}</div>
             <div className="inv-stat-sub">{s.sub}</div>
@@ -493,19 +656,43 @@ export default function Inventory() {
           </div>
         </div>
 
-        {/* Category selector */}
+        {/* The filter itself is wired; whether it can run depends on the API
+            labelling each product. /boutique/inventory returns only
+            id/name/sku/status/photo/variants today, so `categoryFilterReady` is
+            false and the control stays inert — but it activates by itself the
+            moment category_path starts arriving, with no further change here. */}
         <div className="inv-cat-selector">
           <div className="inv-cat-selector-lbl">
             <span className="material-symbols-outlined">category</span>
-            Filter by category (coming soon)
+            {t('inventory.filter_category', 'Filter by category')}
+            {!categoryFilterReady && (
+              <>{' '}<span className="inv-cat-soon">({t('common.coming_soon', 'coming soon')})</span></>
+            )}
+            {categoryFilterReady && categoryPrefix && (
+              <>
+                {' '}
+                <button className="btn btn-sm btn-outline inv-cat-clear" onClick={() => setCategory(null)}>
+                  {t('inventory.clear_category', 'Clear')}
+                </button>
+              </>
+            )}
           </div>
-          <CategorySelectorDropdown onChange={(cat) => setCategory(cat)} />
+          <div className={categoryFilterReady ? undefined : 'inv-cat-selector-off'}
+               aria-disabled={categoryFilterReady ? undefined : 'true'}>
+            <CategorySelectorDropdown onChange={categoryFilterReady ? setCategory : undefined} />
+          </div>
         </div>
 
         {loading ? (
           <div className="inv-cat-prompt">
             <span className="material-symbols-outlined">hourglass_empty</span>
-            <div>Loading inventory…</div>
+            <div>{t('inventory.loading')}</div>
+          </div>
+        ) : loadFailed ? (
+          <div className="inv-cat-prompt">
+            <span className="material-symbols-outlined">cloud_off</span>
+            <div>{t('common.error_generic')}</div>
+            <button className="btn btn-outline btn-sm" onClick={retryLoad}>{t('common.refresh')}</button>
           </div>
         ) : (
           <div className="inv-tbl-scroll">
@@ -525,7 +712,7 @@ export default function Inventory() {
               </thead>
               <tbody>
                 {filteredRows.map((row) => {
-                  const badge = stockBadge(row.total, warnThreshold, critThreshold)
+                  const badge = stockBadge(row.total, row.minQty, warnThreshold, critThreshold, row.hasActive)
                   return (
                     <tr key={row.rowKey} className={row.total === 0 ? 'row-out' : ''}>
                       <td style={{ position:'sticky', left:0, background:'var(--card)', zIndex:1 }}>
@@ -541,16 +728,27 @@ export default function Inventory() {
                       {allSizeCols.map(size => {
                         const cell = getCell(row, size)
                         if (!cell) return <td key={size} className="inv-empty-cell">—</td>
-                        const cls = cell.stock_qty === 0 ? 'zero' : cell.stock_qty <= critThreshold ? 'crit' : cell.stock_qty <= warnThreshold ? 'warn' : ''
+                        const inactive = cell.is_active === false
+                        // A switched-off size gets no low/critical colouring — it
+                        // isn't on sale, so the warning would be noise. Stock stays
+                        // editable so it can be restocked before being switched on.
+                        const cls = inactive
+                          ? ''
+                          : cell.stock_qty === 0 ? 'zero' : cell.stock_qty <= critThreshold ? 'crit' : cell.stock_qty <= warnThreshold ? 'warn' : ''
                         return (
                           <td key={size} style={{ textAlign:'center' }}>
                             <input
                               key={`${cell.id}-${cell.stock_qty}`}
-                              className={`inv-qty-input${cls ? ' ' + cls : ''}`}
+                              className={`inv-qty-input${cls ? ' ' + cls : ''}${inactive ? ' inv-qty-inactive' : ''}`}
                               defaultValue={cell.stock_qty}
                               onChange={e => QtyChange(cell.id, e.target.value)}
                               onBlur={e => QtyBlur(e, row, cell)}
                             />
+                            {inactive && (
+                              <div className="inv-cell-inactive">
+                                {t('inventory.table.inactive', 'Off')}
+                              </div>
+                            )}
                           </td>
                         )
                       })}
@@ -558,7 +756,7 @@ export default function Inventory() {
                       <td>
                         <span className={`stock-badge ${badge.cls}`}>
                           {badge.icon && <span className="material-symbols-outlined inv-badge-icon">{badge.icon}</span>}
-                          {badge.label}
+                          {t(`inventory.badge.${badge.key}`, BADGE_FALLBACK[badge.key])}
                         </span>
                       </td>
                     </tr>
@@ -567,7 +765,7 @@ export default function Inventory() {
                 {filteredRows.length === 0 && (
                   <tr>
                     <td colSpan={allSizeCols.length + 4} className="inv-empty-row">
-                      No products found.
+                      {t('inventory.empty')}
                     </td>
                   </tr>
                 )}
@@ -623,7 +821,7 @@ export default function Inventory() {
           </div>
 
           {thresholdMsg && <div className="inv-threshold-msg">{thresholdMsg}</div>}
-          <button className="btn btn-primary btn-sm inv-threshold-save" onClick={saveThresholds}>
+          <button className="btn btn-primary btn-sm inv-threshold-save" onClick={saveThresholds} disabled={submitting}>
             {t('inventory.thresholds.save_btn')}
           </button>
         </div>
@@ -649,10 +847,17 @@ export default function Inventory() {
                   <td className="inv-restock-product">{r.product_name}</td>
                   <td>{r.size_label}{r.colour ? ` · ${r.colour}` : ''}</td>
                   <td className={`inv-restock-qty${r.qty_added < 0 ? ' neg' : ''}`}>{r.qty_added > 0 ? '+' : ''}{r.qty_added}</td>
-                  <td>{new Date(r.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</td>
+                  <td>{new Date(r.created_at).toLocaleDateString(i18n.language, { day:'2-digit', month:'short', year:'numeric' })}</td>
                   <td>{r.added_by}</td>
                 </tr>
               ))}
+              {restocks.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="empty">
+                    {t('inventory.restock.empty', 'No restock entries yet.')}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -666,7 +871,7 @@ export default function Inventory() {
             <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
               <div className="modal-hdr">
                 <span className="modal-title">
-                  Add Restock <em>Entry</em>
+                  {t('inventory.restock.modal.title_add', 'Add Restock')} <em>{t('inventory.restock.modal.title_add_em', 'Entry')}</em>
                 </span>
                 <span className="modal-close" onClick={() => setShowRestockModal(false)}>
                   <span className="material-symbols-outlined">close</span>
@@ -692,9 +897,7 @@ export default function Inventory() {
               )}
               <div className="modal-footer">
                 <button className="btn btn-outline" onClick={() => setShowRestockModal(false)}>{t('common.cancel')}</button>
-                <button className="btn btn-primary" disabled={!restockGrid.productId} onClick={submitRestockGrid}>
-                  Add Restock
-                </button>
+                <button className="btn btn-primary" disabled={!restockGrid.productId || submitting} onClick={submitRestockGrid}>{t('inventory.restock.modal.submit_add', 'Add Restock')}</button>
               </div>
             </div>
           </div>
@@ -707,10 +910,12 @@ export default function Inventory() {
           <div className="modal modal-sm inv-success-modal" onClick={e => e.stopPropagation()}>
             <div className="inv-success-emoji">✅</div>
             <div className="inv-success-title">
-              {restockSuccess === 'decrease' ? <>Stock <em>Updated</em></> : <>Restock <em>Logged</em></>}
+              {restockSuccess === 'decrease'
+                ? <>{t('inventory.stock_updated.title', 'Stock')} <em>{t('inventory.stock_updated.title_em', 'Updated')}</em></>
+                : <>{t('inventory.restock_success.title')} <em>{t('inventory.restock_success.title_em')}</em></>}
             </div>
-            <div className="inv-success-sub">Stock has been updated successfully.</div>
-            <button className="btn btn-primary inv-success-btn" onClick={() => setRestockSuccess(null)}>Done</button>
+            <div className="inv-success-sub">{t('inventory.restock_success.message')}</div>
+            <button className="btn btn-primary inv-success-btn" onClick={() => setRestockSuccess(null)}>{t('inventory.restock_success.done')}</button>
           </div>
         </div>
       )}
@@ -721,18 +926,18 @@ export default function Inventory() {
           <div className="modal modal-sm inv-success-modal" onClick={e => e.stopPropagation()}>
             <div className="inv-success-emoji">⚠️</div>
             <div className="inv-success-title">
-              Confirm Stock <em>Decrease</em>
+              {t('inventory.decrease_confirm.title', 'Confirm Stock')} <em>{t('inventory.decrease_confirm.title_em', 'Decrease')}</em>
             </div>
             <div className="inv-success-sub">
               {decreaseConfirm.items.map(i => (
                 <div key={i.variantId}>
-                  {i.productName} — {i.variantLabel}: {i.oldQty} → {i.newQty} units.
+                  {t('inventory.decrease_confirm.line', '{{product}} — {{variant}}: {{from}} → {{to}} units.', { product: i.productName, variant: i.variantLabel, from: i.oldQty, to: i.newQty })}
                 </div>
               ))}
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setDecreaseConfirm(null)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary" onClick={submitDecreaseConfirm}>Yes, Proceed</button>
+              <button className="btn btn-primary" disabled={submitting} onClick={submitDecreaseConfirm}>{t('inventory.decrease_confirm.proceed', 'Yes, Proceed')}</button>
             </div>
           </div>
         </div>

@@ -2,14 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
 import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import useLangStore from '../store/langStore'
 import ReturnsDefaultModal from '../components/settings/ReturnsDefaultModal'
 import PolicyEditorModal from '../components/settings/PolicyEditorModal'
 import ClassMappingModal from '../components/settings/ClassMappingModal'
-import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, findById } from '../lib/returnsPolicy/model'
-import { isLawfulOnline, buildClassMap } from '../lib/returnsPolicy/engine'
+import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, PROTECTED_POLICY_IDS, findById } from '../lib/returnsPolicy/model'
+import { isLawfulOnline } from '../lib/returnsPolicy/engine'
+import { fetchPolicies, savePolicies, fetchClasses, saveClassMap } from '../lib/returnsPolicy/api'
 import { useCategoryTree } from '../lib/categoryTree'
 
 const API      = import.meta.env.VITE_API_URL
@@ -27,8 +29,30 @@ const isVideoType = (t) => typeof t === 'string' && t.startsWith('video/')
 
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
 
+const MAX_SLOTS_PER_DAY = 2
+
+// Hours are held as an array of slots per day so a midday closure can be
+// expressed — 10:00–15:00 then 17:00–20:00. A single interval per day made
+// that impossible, which is normal for Italian boutiques.
 function defaultHours() {
-  return Object.fromEntries(DAYS.map(d => [d, { open:'10:00', close:'19:00' }]))
+  return Object.fromEntries(DAYS.map(d => [d, [{ open:'10:00', close:'19:00' }]]))
+}
+
+// Accepts every shape the API has used: an array of slots, a single
+// {open, close} object, or a legacy "10:00-19:00" string.
+function normaliseDay(value) {
+  if (Array.isArray(value)) {
+    const slots = value
+      .filter(s => s && (s.open || s.close))
+      .map(s => ({ open: s.open ?? '', close: s.close ?? '' }))
+    return slots.length ? slots.slice(0, MAX_SLOTS_PER_DAY) : [{ open:'Closed', close:'' }]
+  }
+  if (value && typeof value === 'object') return [{ open: value.open ?? '', close: value.close ?? '' }]
+  if (typeof value === 'string' && value.includes('-')) {
+    const [open, close] = value.split('-')
+    return [{ open: open?.trim() ?? '', close: close?.trim() ?? '' }]
+  }
+  return [{ open:'Closed', close:'' }]
 }
 
 export default function StoreProfile() {
@@ -65,7 +89,9 @@ export default function StoreProfile() {
   const [description, setDescription] = useState('')
   const [hours, setHours]             = useState(defaultHours())
 
-  const [founderCardEnabled, setFounderCardEnabled] = useState(true)
+  // Off by default: the founder card publishes a person's name, title and
+  // photo, so it is opted into rather than out of.
+  const [founderCardEnabled, setFounderCardEnabled] = useState(false)
   const [founderName, setFounderName]     = useState('')
   const [founderTitle, setFounderTitle]   = useState('')
   const [founderPhotoUrl, setFounderPhotoUrl] = useState(null)
@@ -82,6 +108,7 @@ export default function StoreProfile() {
   // ─── Media gallery (photos + videos) ─────────────────────
   const [media, setMedia]                 = useState([])
   const [mediaLoading, setMediaLoading]   = useState(true)
+  const [mediaFailed, setMediaFailed]     = useState(false)
   const [uploading, setUploading]         = useState(false)
   const [uploadError, setUploadError]     = useState(null)
   const [showAllPhotosModal, setShowAllPhotosModal] = useState(false)
@@ -126,9 +153,14 @@ export default function StoreProfile() {
       window.open(SOCIAL_VALUES[key], '_blank', 'noopener,noreferrer')
     }
   }
+  // Persist immediately — the popover's Save used to only update local state, so a
+  // refresh before pressing the card's Save silently discarded the link.
   function saveSocialDraft() {
-    SOCIAL_SETTERS[openSocial]?.(socialDraft)
+    const key = openSocial
+    if (!key) return
+    SOCIAL_SETTERS[key]?.(socialDraft)
     setOpenSocial(null)
+    saveSocialLinks({ [key]: socialDraft }, { exitEditMode: false })
   }
 
   const [terminal, setTerminal]       = useState('none')
@@ -145,14 +177,50 @@ export default function StoreProfile() {
   const [defaultPolicyId, setDefaultPolicyId] = useState(BASELINE_POLICY_ID)
   const [rpSaving, setRpSaving]       = useState(false)
   const [rpSaved, setRpSaved]         = useState(false)
+  const [rpError, setRpError]         = useState('')
   const [rpModal, setRpModal]         = useState(null) // { type:'default' } | { type:'policy', id } | { type:'class', classId }
+  // Which ids the server refuses to delete. Read from the API rather than
+  // hardcoded, so adding a sixth seed backend-side needs no frontend change.
+  const [protectedIds, setProtectedIds] = useState(PROTECTED_POLICY_IDS)
+  const [policiesFailed, setPoliciesFailed] = useState(false)
 
-  // Load profile
+  // Returns config comes from its own two endpoints, not the profile.
+  useEffect(() => {
+    let cancelled = false
+    fetchPolicies()
+      .then(({ policies: list, defaultPolicyId: def, protectedIds: ids }) => {
+        if (cancelled) return
+        if (list.length) setPolicies(list)
+        if (def) setDefaultPolicyId(def)
+        if (ids.length) setProtectedIds(ids)
+      })
+      // "Seeds already on screen; nothing to undo" was too generous. Every
+      // policy action rebuilds the whole list from `policies` and PUTs it —
+      // handleSavePolicy does [...policies, draft] — so if this load failed
+      // and `policies` is still the hardcoded seed set, the next edit writes
+      // those seeds over the boutique's real configuration. Saving is refused
+      // until a load has actually succeeded.
+      .catch(() => { if (!cancelled) setPoliciesFailed(true) })
+    fetchClasses()
+      .then(list => { if (!cancelled) setReturnsClasses(list) })
+      .catch(() => { if (!cancelled) setPoliciesFailed(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Load profile.
+  //
+  // setLoading(false) used to sit at the end of this success branch, with an
+  // early `return` above it and no .catch at all. So any failure — a rejected
+  // request or success:false — left `loading` true forever, and since the whole
+  // page is replaced by the "Loading profile…" screen while that flag is set,
+  // Store Profile became permanently unusable with nothing explaining why.
+  // Cleared in .finally now, with the failure said out loud.
+  const [profileFailed, setProfileFailed] = useState(false)
   useEffect(() => {
     apiFetch(`${API}/boutique/profile`)
       .then(r => r.json())
       .then(res => {
-        if (!res.success) return
+        if (!res.success) { setProfileFailed(true); return }
         const d = res.data
         setProfile(d)
         setName(d.name ?? '')
@@ -164,7 +232,7 @@ export default function StoreProfile() {
         setWhatsapp(d.whatsapp ?? '')
         setEmail(d.email ?? '')
         setDescription(d.description ?? '')
-        setFounderCardEnabled(d.founder_card_enabled ?? true)
+        setFounderCardEnabled(d.founder_card_enabled ?? false)
         setFounderName(d.founder_name ?? '')
         setFounderTitle(d.founder_title ?? '')
         setFounderPhotoUrl(d.founder_photo_url ? `${IMG_BASE}${d.founder_photo_url}` : null)
@@ -182,33 +250,21 @@ export default function StoreProfile() {
         setYoutubeUrl(social.youtube ?? '')
         setLinkedinUrl(social.linkedin ?? '')
         setXUrl(social.x ?? '')
-        if (Array.isArray(d.returns_policies_json) && d.returns_policies_json.length) {
-          setPolicies(d.returns_policies_json)
-        }
-        if (d.returns_classes_json) {
-          setReturnsClasses(RETURNS_CLASSES.map(c => ({
-            ...c,
-            map: Object.prototype.hasOwnProperty.call(d.returns_classes_json, c.id) ? d.returns_classes_json[c.id] : c.map,
-          })))
-        }
-        if (d.returns_default_policy_id) setDefaultPolicyId(d.returns_default_policy_id)
+        // Returns config is NOT read from the profile — it has its own
+        // endpoints, loaded in the effect below.
         if (d.opening_hours_json) {
           const raw = d.opening_hours_json
           const parsed = {}
           DAYS.forEach(day => {
-            const short = day.slice(0,3)
-            if (raw[day]) {
-              parsed[day] = typeof raw[day] === 'object' ? raw[day] : { open: raw[day].split('-')[0], close: raw[day].split('-')[1] }
-            } else if (raw[short]) {
-              parsed[day] = typeof raw[short] === 'object' ? raw[short] : { open: raw[short].split('-')[0], close: raw[short].split('-')[1] }
-            } else {
-              parsed[day] = { open: 'Closed', close: '' }
-            }
+            const short = day.slice(0, 3)   // some records use 'mon' rather than 'monday'
+            parsed[day] = normaliseDay(raw[day] ?? raw[short])
           })
           setHours(parsed)
         }
-        setLoading(false)
+        setProfileFailed(false)
       })
+      .catch(() => setProfileFailed(true))
+      .finally(() => setLoading(false))
   }, [])
 
   // Load media list
@@ -216,15 +272,23 @@ export default function StoreProfile() {
     apiFetch(`${API}/boutique/media`)
       .then(r => r.json())
       .then(res => {
-        if (res?.success) setMedia(res.data?.media ?? [])
+        if (res?.success) { setMedia(res.data?.media ?? []); setMediaFailed(false) }
+        // An empty gallery and a failed gallery looked identical, so a merchant
+        // would re-upload photos they already had.
+        else setMediaFailed(true)
       })
-      .catch(() => {})
+      .catch(() => setMediaFailed(true))
       .finally(() => setMediaLoading(false))
   }, [])
 
   function saveProfile() {
     setSaving(true)
-    const hours_json = Object.fromEntries(DAYS.map(d => [d, hours[d]]))
+    // Send an array of slots per day. Blank rows are dropped so a half-filled
+    // second slot never persists as an open-ended interval.
+    const hours_json = Object.fromEntries(DAYS.map(d => [
+      d,
+      (hours[d] ?? []).filter(s => (s.open ?? '').trim() || (s.close ?? '').trim()),
+    ]))
     apiFetch(`${API}/boutique/profile`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -264,7 +328,9 @@ export default function StoreProfile() {
     })
   }
 
-  function saveSocialLinks() {
+  // `overrides` lets the popover persist the link it just captured without waiting
+  // for its setState to land — reading the state here would still see the old value.
+  function saveSocialLinks(overrides, { exitEditMode = true } = {}) {
     setSocialSaving(true)
     apiFetch(`${API}/boutique/profile`, {
       method: 'PUT',
@@ -272,48 +338,87 @@ export default function StoreProfile() {
         social_links_json: {
           instagram: instagramUrl, facebook: facebookUrl, tiktok: tiktokUrl, pinterest: pinterestUrl,
           youtube: youtubeUrl, linkedin: linkedinUrl, x: xUrl,
+          ...overrides,
         },
       }),
     }).then(r => r.json()).then(res => {
       setSocialSaving(false)
       if (res.success) {
         setSocialSaved(true)
-        setSocialEditMode(false)
+        if (exitEditMode) setSocialEditMode(false)
         setTimeout(() => setSocialSaved(false), 2000)
       }
     })
   }
 
-  function saveReturnsPolicy() {
+  // Returns config has its own endpoint. Writing it into PUT /boutique/profile
+  // was accepted but never applied, so the store default reverted on every
+  // refresh. `override` carries the value a just-fired action produced, because
+  // setState is async and reading state here would persist the previous one.
+  function saveReturnsPolicy(override = {}) {
+    // Refuse rather than PUT the seed defaults over real data — see the load
+    // effect above.
+    if (policiesFailed) {
+      setRpError(t('store_profile.returns.err_stale', 'Your returns policies could not be loaded, so they cannot be saved — reload the page first, otherwise you would overwrite them with the defaults.'))
+      return
+    }
     setRpSaving(true)
-    apiFetch(`${API}/boutique/profile`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        returns_default_policy_id: defaultPolicyId,
-        returns_policies_json: policies,
-        returns_classes_json: buildClassMap(returnsClasses),
-      }),
-    }).then(r => r.json()).then(res => {
-      setRpSaving(false)
-      if (res.success) { setRpSaved(true); setTimeout(() => setRpSaved(false), 2000) }
-    })
+    setRpError('')
+    savePolicies(override.policies ?? policies, override.defaultPolicyId ?? defaultPolicyId)
+      .then(saved => {
+        // Trust the server's echo — it is the authority on what was stored.
+        setPolicies(saved.policies)
+        if (saved.defaultPolicyId) setDefaultPolicyId(saved.defaultPolicyId)
+        setRpSaved(true)
+        setTimeout(() => setRpSaved(false), 2000)
+      })
+      .catch(err => setRpError(err.message || t('common.error_generic')))
+      .finally(() => setRpSaving(false))
   }
 
+  // Each of these four used to change local state only. The modals say "Set as
+  // default", "Save mapping" and "Save changes", so the screen looked saved —
+  // but nothing reached the server until the separate Save in the card header
+  // was found and pressed, and a refresh silently threw the change away.
   function handleSetDefault(id) {
     setDefaultPolicyId(id)
+    saveReturnsPolicy({ defaultPolicyId: id })
   }
 
   function handleSavePolicy(draft, isNew) {
-    setPolicies(prev => isNew ? [...prev, draft] : prev.map(p => p.id === draft.id ? draft : p))
+    const next = isNew ? [...policies, draft] : policies.map(p => p.id === draft.id ? draft : p)
+    setPolicies(next)
+    saveReturnsPolicy({ policies: next })
   }
 
   function handleRemovePolicy(id) {
-    setPolicies(prev => prev.filter(p => p.id !== id))
+    const nextPolicies = policies.filter(p => p.id !== id)
+    const orphaned     = returnsClasses.filter(c => c.map === id)
+    // The editor hides Remove for the current default, but keep the safety net:
+    // a dangling defaultPolicyId leaves every product resolving to a policy
+    // that no longer exists, and the banner showing "—".
+    const nextDefault  = defaultPolicyId === id ? BASELINE_POLICY_ID : defaultPolicyId
+    setPolicies(nextPolicies)
     setReturnsClasses(prev => prev.map(c => c.map === id ? { ...c, map: null } : c))
+    setDefaultPolicyId(nextDefault)
+    saveReturnsPolicy({ policies: nextPolicies, defaultPolicyId: nextDefault })
+    // Classes live behind their own endpoint, so any class pointing at the
+    // deleted policy has to be cleared there too or the server keeps the
+    // orphaned mapping.
+    Promise.all(orphaned.map(c => saveClassMap(c.id, null)))
+      .catch(err => setRpError(err.message || t('common.error_generic')))
   }
 
+  // Partial write — the classes endpoint takes one row at a time, which is
+  // exactly what the "Change" modal produces.
   function handleSaveClassMap(classId, newMap) {
-    setReturnsClasses(prev => prev.map(c => c.id === classId ? { ...c, map: newMap } : c))
+    const prev = returnsClasses
+    setReturnsClasses(prev.map(c => c.id === classId ? { ...c, map: newMap } : c))
+    setRpError('')
+    saveClassMap(classId, newMap).catch(err => {
+      setReturnsClasses(prev)
+      setRpError(err.message || t('common.error_generic'))
+    })
   }
 
   function rpName(item) { return lang === 'it' ? item.it : item.en }
@@ -473,8 +578,28 @@ export default function StoreProfile() {
       })
   }
 
-  function updateHour(day, field, value) {
-    setHours(prev => ({ ...prev, [day]: { ...prev[day], [field]: value } }))
+  function updateHour(day, index, field, value) {
+    setHours(prev => {
+      const slots = [...(prev[day] ?? [])]
+      slots[index] = { ...slots[index], [field]: value }
+      return { ...prev, [day]: slots }
+    })
+  }
+
+  function addSlot(day) {
+    setHours(prev => {
+      const slots = prev[day] ?? []
+      if (slots.length >= MAX_SLOTS_PER_DAY) return prev
+      return { ...prev, [day]: [...slots, { open: '', close: '' }] }
+    })
+  }
+
+  function removeSlot(day, index) {
+    setHours(prev => {
+      const slots = (prev[day] ?? []).filter((_, i) => i !== index)
+      // Never leave a day with no rows — there'd be nothing to type into.
+      return { ...prev, [day]: slots.length ? slots : [{ open: 'Closed', close: '' }] }
+    })
   }
 
   const photoCount = media.filter(m => m.media_type === 'image').length
@@ -542,6 +667,14 @@ export default function StoreProfile() {
 
   return (
     <>
+    {/* The fields below would be blank on a failed load, and saving them would
+        write those blanks over the boutique's real details — so this warns
+        before that can happen. */}
+    {profileFailed && (
+      <div className="sp-load-error">
+        {t('store_profile.err_load', 'Could not load your store profile. The fields below may be blank or out of date — reload the page before saving, or you risk overwriting your details.')}
+      </div>
+    )}
     <div className="grid2">
 
       {/* ══ LEFT COLUMN ══ */}
@@ -593,7 +726,10 @@ export default function StoreProfile() {
               )}
             </div>
 
-            <div className="form-group">
+            {/* The saved number is deliberately NOT cleared server-side when
+                the entitlement is off — only hidden — so switching WhatsApp
+                back on restores it rather than losing it. */}
+            {isWhatsappEnabled() && <div className="form-group">
               <label className="form-lbl">{t('store_profile.details.whatsapp_label', 'WhatsApp')}</label>
               <PhoneInput
                 international
@@ -607,7 +743,7 @@ export default function StoreProfile() {
                   {t('store_profile.details.invalid_phone', 'Not a valid phone number')}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
           <div className="form-group">
             <label className="form-lbl">{t('store_profile.details.bio_label', 'Store Bio')}</label>
@@ -616,14 +752,41 @@ export default function StoreProfile() {
           <div className="form-group">
             <label className="form-lbl">{t('store_profile.details.hours_label', 'Opening Hours')}</label>
             <div className="sp-hours-list">
-              {DAYS.map(day => (
-                <div key={day} className="sp-hours-row">
-                  <span className="sp-hours-day">{DAY_LABELS[day]}</span>
-                  <input className="form-input sp-hours-input" value={hours[day]?.open ?? ''} onChange={e => updateHour(day, 'open', e.target.value)} placeholder={t('store_profile.details.hours_open_placeholder', '10:00')} />
-                  <span className="sp-hours-sep">–</span>
-                  <input className="form-input sp-hours-input" value={hours[day]?.close ?? ''} onChange={e => updateHour(day, 'close', e.target.value)} placeholder={t('store_profile.details.hours_close_placeholder', '19:00 or Closed')} />
-                </div>
-              ))}
+              {DAYS.map(day => {
+                const slots = hours[day] ?? []
+                return (
+                  <div key={day} className="sp-hours-day-block">
+                    {slots.map((slot, i) => (
+                      <div key={i} className="sp-hours-row">
+                        {/* Day name only on the first row, so a split day reads
+                            as one day with two intervals. */}
+                        <span className="sp-hours-day">{i === 0 ? DAY_LABELS[day] : ''}</span>
+                        <input className="form-input sp-hours-input" value={slot.open ?? ''}
+                          onChange={e => updateHour(day, i, 'open', e.target.value)}
+                          placeholder={t('store_profile.details.hours_open_placeholder', '10:00')} />
+                        <span className="sp-hours-sep">–</span>
+                        <input className="form-input sp-hours-input" value={slot.close ?? ''}
+                          onChange={e => updateHour(day, i, 'close', e.target.value)}
+                          placeholder={t('store_profile.details.hours_close_placeholder', '19:00 or Closed')} />
+                        {i === 0 && slots.length < MAX_SLOTS_PER_DAY ? (
+                          <button type="button" className="sp-hours-slot-btn" onClick={() => addSlot(day)}
+                            title={t('store_profile.details.hours_add_slot', 'Add a second opening (for a midday closure)')}>
+                            <span className="material-symbols-outlined">add</span>
+                          </button>
+                        ) : i > 0 ? (
+                          <button type="button" className="sp-hours-slot-btn" onClick={() => removeSlot(day, i)}
+                            title={t('store_profile.details.hours_remove_slot', 'Remove this opening')}>
+                            <span className="material-symbols-outlined">close</span>
+                          </button>
+                        ) : <span className="sp-hours-slot-spacer" />}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="form-hint">
+              {t('store_profile.details.hours_hint', 'Closing for lunch? Press + to add a second opening for that day.')}
             </div>
           </div>
           <div className="sp-card-footer-actions">
@@ -648,7 +811,7 @@ export default function StoreProfile() {
                   <span className="material-symbols-outlined">edit</span>
                 </button>
               )}
-              <button className="btn btn-sm btn-primary" onClick={saveSocialLinks} disabled={socialSaving}>
+              <button className="btn btn-sm btn-primary" onClick={() => saveSocialLinks()} disabled={socialSaving}>
                 {socialSaved ? `✓ ${t('common.saved', 'Saved')}` : socialSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
               </button>
             </div>
@@ -759,6 +922,11 @@ export default function StoreProfile() {
               {rpSaved ? `✓ ${t('common.saved', 'Saved')}` : rpSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
             </button>
           </div>
+          {rpError && (
+            <div className="alert alert-red">
+              <span className="material-symbols-outlined">error</span>{rpError}
+            </div>
+          )}
 
           <div className="rp-banner">
             <div>
@@ -924,6 +1092,8 @@ export default function StoreProfile() {
 
             {mediaLoading ? (
               <div className="sp-media-loading">{t('store_profile.photo.loading_media', 'Loading media…')}</div>
+            ) : mediaFailed ? (
+              <div className="sp-load-error">{t('store_profile.photo.err_media', 'Could not load your photo library — any photos you have already uploaded are not shown.')}</div>
             ) : (
               <>
                 <div className="sp-media-grid">
@@ -1107,6 +1277,7 @@ export default function StoreProfile() {
       <PolicyEditorModal
         policy={rpModal.id ? findById(policies, rpModal.id) : null}
         isCurrentDefault={rpModal.id === defaultPolicyId}
+        protectedIds={protectedIds}
         onSave={handleSavePolicy}
         onRemove={handleRemovePolicy}
         onClose={() => setRpModal(null)}

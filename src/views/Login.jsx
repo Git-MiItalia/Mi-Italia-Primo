@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import boutiqueBg from '../assets/pexels-rachel-claire-5531541.jpg'
 import PrimoLogo from '../assets/PrimoLogo.svg'
-import { setStaff } from '../lib/auth'
+import { setStaff, setWhatsappEnabled } from '../lib/auth'
 import useLangStore from '../store/langStore'
 const API = import.meta.env.VITE_API_URL
 
@@ -34,6 +34,9 @@ export default function Login() {
         if (res.success) {
           localStorage.setItem('primo_token', res.data.token)
           setStaff(res.data.staff)
+          // Boutique entitlement — drives whether the Messages tab and every
+          // WhatsApp field/action render at all.
+          setWhatsappEnabled(res.data.whatsapp_enabled)
           navigate('/')
         } else {
           setError(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))

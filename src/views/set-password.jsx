@@ -63,7 +63,7 @@ export default function SetPassword() {
           <p className="auth-subtitle">{t('reset_password.subtitle', 'Choose a secure password for your account')}</p>
 
           {error   && <div className="alert alert-urgent auth-alert">{error}</div>}
-          {success && <div className="alert alert-success auth-alert">{t('reset_password.success', 'Password set! Redirecting to login…')}</div>}
+          {success && <div className="alert alert-success auth-alert">{t('reset_password.success', 'Password set! Redirecting to login') + '…'}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">

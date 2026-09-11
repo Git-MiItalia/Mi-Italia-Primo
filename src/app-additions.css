@@ -2,6 +2,8 @@
 
 /* Empty / loading states */
 .state-empty{padding:30px;text-align:center;color:var(--stone);font-size:11px;font-style:italic;}
+.res-pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px solid var(--mist);}
+.res-pager-lbl{font-size:11px;color:var(--stone);}
 .state-loading{padding:30px;text-align:center;color:var(--stone);}
 .state-empty-sm{padding:14px 18px;color:var(--stone);font-size:11px;font-style:italic;}
 
@@ -695,10 +697,15 @@
 .an-hm-src-chip  { padding:6px 12px; border:1px solid var(--line); border-radius:0; font-size:10px; font-weight:500; background:var(--white); color:var(--stone); cursor:pointer; display:flex; align-items:center; gap:5px; }
 .an-hm-src-chip.act { border-color:var(--deep); color:var(--deep); background:var(--cream); }
 .an-hm-src-chip .material-symbols-outlined { font-size:13px; }
-.an-hm-grid      { display:grid; grid-template-columns:44px repeat(12,1fr); gap:3px; }
+/* Column count comes from the data — the visible hour range is derived from
+   when the boutique actually trades, so it is set inline via --an-hm-cols.
+   The 12 here is only a fallback for when the variable is missing. */
+.an-hm-grid      { display:grid; grid-template-columns:44px repeat(var(--an-hm-cols,12),1fr); gap:3px; }
 .an-hm-cell      { aspect-ratio:1.5; border-radius:0; background:var(--mist); }
 .an-hm-lbl       { font-size:8.5px; color:var(--stone); display:flex; align-items:center; }
-.an-hm-hour      { font-size:8px; color:var(--stone); text-align:center; padding-bottom:3px; }
+/* "09:00" rather than a bare "9" — a lone number in a column header reads as
+   a date. Nowrap so the colon can never break onto a second line. */
+.an-hm-hour      { font-size:8px; color:var(--stone); text-align:center; padding-bottom:3px; white-space:nowrap; }
 .an-hm-note      { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:10.5px; color:var(--stone); line-height:1.6; }
 .an-hm-note b    { color:var(--deep); }
 .an-hm-gate      { position:relative; }
@@ -917,6 +924,7 @@
 .fin-fee-sec-lbl{font-size:10px;font-weight:600;color:var(--stone);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
  
 .fin-period-row     { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+.fin-load-error     { background:#fdf2f2; border:1px solid #e7c3c3; color:#8c2f2f; font-size:12px; padding:9px 12px; margin-bottom:14px; }
 .fin-period-select  { max-width: 200px; }
  
 .fin-strip          { display: flex; gap: 12px; margin-bottom: 18px; }
@@ -1007,6 +1015,8 @@
 .inv-sku{font-size:10px;color:var(--stone);}
 .inv-empty-cell{color:var(--stone);font-size:11px;}
 .inv-total{font-weight:700;}
+.inv-qty-input.inv-qty-inactive{color:var(--stone);border-style:dashed;opacity:.65;}
+.inv-cell-inactive{font-size:8px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--stone);margin-top:2px;}
 .inv-badge-icon{font-size:10px;}
 .inv-table-footer{padding:12px 16px;border-top:1px solid var(--mist);display:flex;align-items:center;justify-content:space-between;}
 .inv-table-hint{font-size:10px;color:var(--stone);}
@@ -1036,6 +1046,10 @@
 .inv-cat-selector{padding:14px 0 10px;border-bottom:1px solid var(--mist);margin-bottom:14px;}
 .inv-cat-selector-lbl{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:var(--stone);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;}
 .inv-cat-selector-lbl .material-symbols-outlined{font-size:14px;}
+/* The category filter has no backend field to filter on yet. Rather than leave
+   a live-looking dropdown that quietly does nothing, it reads as disabled. */
+.inv-cat-soon{text-transform:none;letter-spacing:0;font-weight:400;font-style:italic;opacity:0.75;}
+.inv-cat-selector-off{pointer-events:none;opacity:0.45;filter:grayscale(1);}
 .inv-cat-prompt{display:flex;align-items:center;gap:10px;padding:24px;color:var(--stone);font-size:11px;justify-content:center;}
 .inv-cat-prompt .material-symbols-outlined{font-size:24px;opacity:0.3;}
 
@@ -1388,6 +1402,8 @@
 .ct-panel-ch .material-symbols-outlined { font-size:14px; }
 .ct-panel-ch.act  { color:var(--deep); border-bottom-color:var(--deep); font-weight:600; }
 .ct-panel-ch-soon { opacity:0.5; cursor:default; }
+/* Nothing switches when these are clicked, so they must not invite a click. */
+.ct-panel-ch-static { cursor:default; }
 .ct-soon-badge    { font-size:7px; font-weight:700; color:var(--gold); border:1px solid var(--gold); border-radius:0; padding:1px 4px; margin-left:3px; }
 .ct-panel-section-lbl { font-size:8.5px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--stone); margin:16px 0 8px; }
 .ct-panel-rows    { display:flex; flex-direction:column; gap:6px; }
@@ -1884,6 +1900,11 @@
 .notif-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .notif-arrow      { font-size: 13px; color: var(--stone); }
 .notif-pref-row   { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--card); border-radius:0; margin-bottom: 6px; }
+.notif-prefs-pending { margin-bottom: 10px; }
+.sub-inv-portal{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;background:var(--card);flex-wrap:wrap;}
+.sub-inv-portal-title{font-size:12px;font-weight:700;margin-bottom:4px;}
+.sub-inv-portal-sub{font-size:11px;line-height:1.5;color:var(--stone);max-width:520px;}
+.notif-pref-row-disabled { opacity: .6; }
 
 /* Tab empty */
 
@@ -1898,6 +1919,7 @@
 .ord-row-selected{background:var(--card);}
 .ord-id-link{cursor:pointer;color:var(--gold);text-decoration:underline;font-weight:600;}
 .ord-guest{color:var(--stone);}
+.db-guest{color:var(--stone);}
 .ord-channel{font-size:9px;text-transform:uppercase;color:var(--stone);}
 .ord-status-ml{margin-left:auto;}
 
@@ -1906,7 +1928,10 @@
 
 /* Item rows */
 .ord-item-row{display:flex;gap:10px;align-items:center;padding:9px;background:var(--card);border-radius:0;margin-bottom:6px;}
-.ord-item-img{width:36px;height:46px;border-radius:0;background-color:var(--mist);background-size:cover;background-position:center;flex-shrink:0;}
+/* `cover` in a narrow portrait box cropped square and landscape product photos
+   down to an unreadable strip. `contain` on the mist background shows the whole
+   garment whatever its aspect ratio. */
+.ord-item-img{width:48px;height:60px;border-radius:0;background-color:var(--mist);background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;}
 .ord-item-body{flex:1;}
 .ord-item-name{font-size:12px;font-weight:600;}
 .ord-item-variant{font-size:9px;color:var(--stone);}
@@ -2272,18 +2297,22 @@
 .pt-select-actions{margin-left:auto;display:flex;gap:8px;align-items:center;}
 .pt-select-count{font-size:10px;color:var(--stone);}
 .pt-product-table{padding:0;overflow:hidden;margin-bottom:14px;}
-.pt-table-hdr{padding:10px 14px;background:var(--card);border-bottom:1px solid var(--mist);display:grid;grid-template-columns:18px 24px 1fr 140px 80px 80px 60px;gap:12px;align-items:center;}
+.pt-table-hdr{padding:10px 14px;background:var(--card);border-bottom:1px solid var(--mist);display:grid;grid-template-columns:18px 24px 1fr 120px 76px 88px 64px 60px;gap:12px;align-items:center;}
 .pt-checkbox{accent-color:var(--gold);}
 .pt-th{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--stone);}
 .pt-th-right{text-align:right;}
 .pt-th-center{text-align:center;}
-.pt-product-row{display:grid;grid-template-columns:18px 24px 1fr 140px 80px 80px 60px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--mist);background:transparent;transition:background .1s;}
+.pt-product-row{display:grid;grid-template-columns:18px 24px 1fr 120px 76px 88px 64px 60px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--mist);background:transparent;transition:background .1s;}
 .pt-product-row.sel{background:rgba(184,149,90,.04);}
 .pt-product-emoji{font-size:18px;}
 .pt-product-name{font-size:11px;font-weight:600;}
 .pt-product-meta{font-size:9px;color:var(--stone);}
 .pt-product-cat{font-size:10px;color:var(--stone);}
 .pt-product-price{font-family:'Bodoni Moda',Georgia,serif;font-size:18px;font-weight:300;text-align:right;}
+.pt-product-size-wrap{text-align:center;}
+.pt-product-size-none{font-size:9px;color:var(--stone);}
+.pt-size-select{width:100%;padding:5px 4px;border:1.5px solid var(--mist);border-radius:0;font-size:10px;font-weight:600;outline:none;font-family:'Jost',system-ui,sans-serif;background:var(--white);}
+.pt-size-select:disabled{opacity:.3;}
 .pt-product-qty-wrap{text-align:center;}
 .pt-qty-input{width:52px;padding:6px 8px;border:1.5px solid var(--mist);border-radius:0;font-size:12px;font-weight:700;text-align:center;outline:none;font-family:'Jost',system-ui,sans-serif;}
 .pt-qty-input.disabled{opacity:.3;}
@@ -2488,6 +2517,7 @@
 
 /* ═══ SHOWROOM ═══ */
 .shw-toggle-row{margin-bottom:10px;}
+.shw-error{background:#fdf2f2;border:1px solid #e7c3c3;color:#8c2f2f;font-size:12px;padding:9px 12px;margin-bottom:14px;}
 .shw-toggle-title{font-size:12px;font-weight:600;}
 .shw-toggle-sub{font-size:9px;color:var(--stone);}
 .shw-filter-label{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--stone);cursor:pointer;}
@@ -2706,6 +2736,7 @@
 
 /* ═══ SUBSCRIPTION PAGE ═══ */
 .sub-wrap{ width: 100%; min-width: 0; box-sizing: border-box; }
+.sub-load-error{ background:#fdf2f2; border:1px solid #e7c3c3; color:#8c2f2f; font-size:12px; padding:9px 12px; margin-bottom:14px; }
 .sub-mod-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;}
 .sub-mod-title{font-family:'Bodoni Moda',Georgia,serif;font-size:30px;font-weight:500;line-height:1.1;}
 .sub-mod-title em{color:var(--gold);font-style:italic;}
@@ -6537,6 +6568,14 @@
 .sp-page-loading-text {
   margin-top: 8px;
 }
+.sp-load-error {
+  background: #fdf2f2;
+  border: 1px solid #e7c3c3;
+  color: #8c2f2f;
+  font-size: 12px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+}
 
 /* ── Store Details ─────────────────────────────────────────────── */
 
@@ -6561,6 +6600,40 @@
 }
 .sp-hours-input {
   flex: 1;
+}
+/* Slots of the same day sit together, with a little air before the next day. */
+.sp-hours-day-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sp-hours-day-block + .sp-hours-day-block {
+  margin-top: 4px;
+}
+.sp-hours-slot-btn {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mist);
+  background: var(--white);
+  color: var(--stone);
+  cursor: pointer;
+  padding: 0;
+}
+.sp-hours-slot-btn:hover {
+  border-color: var(--gold);
+  color: var(--deep);
+}
+.sp-hours-slot-btn .material-symbols-outlined {
+  font-size: 15px;
+}
+/* Keeps the inputs aligned on rows with no button. */
+.sp-hours-slot-spacer {
+  width: 24px;
+  flex-shrink: 0;
 }
 .sp-card-footer-actions {
   display: flex;
@@ -7248,6 +7321,7 @@
 .chk.on::after{content:'✓';color:var(--white);font-size:10px;}
 
 .prm-region-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.prm-load-error{background:#fdf2f2;border:1px solid #e7c3c3;color:#8c2f2f;font-size:12px;padding:9px 12px;margin-bottom:14px;}
 .prm-region-lbl{font-size:10px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:var(--stone);}
 .prm-region-select-wrap{flex:0 0 200px;}
 .prm-region-note{font-size:10.5px;color:var(--stone);}
@@ -7259,6 +7333,7 @@
 .prm-sitem{border-bottom:1px solid var(--mist);padding:12px 0;}
 .prm-sitem:last-child{border-bottom:none;}
 .prm-sitem-top{display:flex;align-items:flex-start;gap:10px;}
+.prm-empty-hint{margin-top:6px;font-size:11px;line-height:1.5;color:var(--stone);max-width:460px;}
 .prm-seasonal-tag{margin-left:auto;display:flex;align-items:center;gap:3px;font-size:9px;letter-spacing:0.5px;text-transform:uppercase;color:var(--stone);cursor:pointer;}
 .prm-seasonal-tag.on{color:var(--gold-dk);}
 .prm-seasonal-tag .material-symbols-outlined{font-size:16px;}
@@ -7612,3 +7687,6 @@
 .locwiz-success h2{font-family:'Bodoni Moda',Georgia,serif;font-weight:500;font-size:30px;color:var(--deep);margin-bottom:8px;}
 .locwiz-success p{font-size:13px;color:var(--stone);max-width:52ch;margin:0 auto 20px;line-height:1.6;}
 .alert.rp-callout .material-symbols-outlined{color:var(--gold-dk);}
+/* Own Label is a real answer, not missing data — shown muted and italic
+   so it reads differently from an actual designer brand name. */
+.prod-brand-own { color:var(--stone); font-style:italic; }

@@ -2176,8 +2176,18 @@
   flex-shrink: 0;
 }
 .pos-cust-result-info { flex: 1; min-width: 0; }
-.pos-cust-result-name { font-size: 12px; font-weight: 600; color: var(--deep); }
+.pos-cust-result-name { font-size: 12px; font-weight: 600; color: var(--deep); display: flex; align-items: center; gap: 6px; }
 .pos-cust-result-meta { font-size: 10px; color: var(--stone); margin-top: 2px; }
+/* A Mi Italia account with no CRM record can't be attached to the order, so the
+   row is dimmed and labelled rather than looking identical to a CRM contact. */
+.pos-cust-result-unlinked { opacity: 0.72; }
+.pos-cust-badge {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  padding: 2px 5px; border: 1px solid var(--mist); color: var(--stone); white-space: nowrap;
+}
+.pos-cust-badge.crm {
+  border-color: var(--green); color: var(--green); background: rgba(0,108,53,0.06);
+}
 .pos-cust-result-tier { color: var(--gold-dk); font-weight: 600; }
 .pos-cust-result-chev { color: var(--stone); font-size: 18px; }
 

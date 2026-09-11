@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import { isWhatsappEnabled } from './lib/auth'
 import Dashboard from './views/Dashboard'
 import Products from './views/Products'
 import AddProduct from './views/AddProduct'
@@ -14,6 +15,7 @@ import Discounts from './views/Discounts'
 import Promotions from './views/Promotions'
 import Analytics from './views/Analytics'
 import Financials from './views/Financials'
+import Markdowns from './views/Markdowns'
 import Reports from './views/Reports'
 import Subscription from './views/Subscription'
 import SubscriptionSetup from './views/SubscriptionSetup'
@@ -62,14 +64,22 @@ function App() {
           <Route path="/products/edit/:id"   element={<AddProduct />} />
           <Route path="/inventory"           element={<Inventory />} />
           <Route path="/reservations"        element={<Reservations />} />
+          {/* Deep link target for reservation notifications */}
+          <Route path="/reservations/:id"    element={<Reservations />} />
           <Route path="/orders"              element={<Orders />} />
-          <Route path="/messages"            element={<Messages />} />
+          {/* Deep link target for order notifications */}
+          <Route path="/orders/:id"          element={<Orders />} />
+          {/* WhatsApp-only inbox. Guarded here as well as in the sidebar
+              so typing the URL cannot reach a screen the boutique has no
+              entitlement for. */}
+          <Route path="/messages"            element={isWhatsappEnabled() ? <Messages /> : <Navigate to="/dashboard" replace />} />
           <Route path="/customers"           element={<Customers />} />
           <Route path="/engagement"          element={<Engagement />} />
           <Route path="/discounts"           element={<Discounts />} />
           <Route path="/promotions"          element={<Promotions />} />
           <Route path="/analytics"           element={<Analytics />} />
           <Route path="/financials"          element={<Financials />} />
+          <Route path="/markdowns"           element={<Markdowns />} />
           <Route path="/reports"             element={<Reports />} />
           <Route path="/subscription"        element={<Subscription />} />
           <Route path="/store"               element={<StoreProfile />} />

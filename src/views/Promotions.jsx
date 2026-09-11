@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import useLangStore from '../store/langStore'
@@ -10,8 +10,20 @@ function fmtEUR(n) { return '€' + Number(n || 0).toFixed(2) }
 
 /* Thin JSON wrapper around apiFetch, plus the app's known bodyless-POST
    gotcha: the backend rejects a POST that carries Content-Type:json with an
-   empty body, so every no-payload POST below passes body:'{}' explicitly. */
-function api(url, opts) { return apiFetch(url, opts).then(r => r.json()) }
+   empty body, so every no-payload POST below passes body:'{}' explicitly.
+
+   A dropped connection (or a non-JSON error page) used to reject here. Nothing
+   in this file catches, so the rest of the handler never ran: Start Sale, Stop,
+   Discard and Opt in all did precisely nothing, with no toast and no clue. Every
+   call site already branches on `success`, so failing as a value rather than an
+   exception routes network errors straight into the error handling that is
+   already written. `message: null` lets each site keep its own wording via
+   `res.message ?? t(...)`. */
+function api(url, opts) {
+  return apiFetch(url, opts)
+    .then(r => r.json())
+    .catch(() => ({ success: false, message: null, networkError: true }))
+}
 
 /* ── ISO-date helpers, local to this view (each view in this app keeps its own — see POS.jsx, Discounts.jsx) ── */
 function toDate(iso)      { return new Date(iso + 'T00:00:00') }
@@ -62,13 +74,28 @@ function normalizeSuggestion(s) {
 }
 
 /* Hydrates the shared per-tab state (selected/overrides) from a fetched
-   campaign's items[] — the reverse of buildItemsPayload. */
-function hydrateSelection(items) {
+   campaign's items[] — the reverse of buildItemsPayload.
+
+   `saleDisc` is the campaign's own discountValue, and lines matching it are
+   deliberately NOT treated as overrides.
+
+   buildItemsPayload sends `discountPct: saleDisc` for every untouched line, and
+   the backend stores that as overrideDiscountPct — so on reload every product
+   came back flagged `overridden: true` even though the merchant had only set a
+   sale-wide percentage. That was not just cosmetic: lineSalePrice prefers an
+   override over the sale discount, so after a reload, changing the sale-wide
+   figure from 30% to 40% left every line sitting at 30%.
+
+   A line the merchant really did pin to the same number as the sale discount
+   is indistinguishable here, and harmless — the price works out identical. */
+function hydrateSelection(items, saleDisc) {
   const selected = {}, overrides = {}
   ;(items ?? []).forEach(it => {
     selected[it.productId] = true
     if (it.overridePrice != null) overrides[it.productId] = { price: it.overridePrice }
-    else if (it.overrideDiscountPct != null) overrides[it.productId] = { disc: it.overrideDiscountPct }
+    else if (it.overrideDiscountPct != null && Number(it.overrideDiscountPct) !== Number(saleDisc)) {
+      overrides[it.productId] = { disc: it.overrideDiscountPct }
+    }
   })
   return { selected, overrides }
 }
@@ -99,8 +126,17 @@ function CompliancePanel({ t, result, checking }) {
 /* ── Shared item picker + line editor, used by Your Sale and Seasonal Saldi.
    Fields come from GET /promotions/items (productId/currentPrice/refPrice30d/
    agingDays/qtyOnHand/cost/grossMarginPct) — no product photo in this feed. ── */
-function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisible, aiNotes, onToggle, onEdit, onReset, onHistory, onToggleSeasonal }) {
-  if (products.length === 0) return <div className="empty">{t('promotions.items.empty')}</div>
+function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisible, aiNotes, onToggle, onEdit, onReset, onHistory, onToggleSeasonal, emptyHint }) {
+  // The Saldi tab requests seasonalOnly=true, so it reads as broken when nothing
+  // has been flagged yet. `emptyHint` says where to go and flag it.
+  if (products.length === 0) {
+    return (
+      <div className="empty">
+        {t('promotions.items.empty', 'No products to show.')}
+        {emptyHint && <div className="prm-empty-hint">{emptyHint}</div>}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -229,12 +265,27 @@ export default function Promotions() {
   const [profile, setProfile]     = useState(null)
   const [saldiRules, setSaldiRules] = useState(null)
 
+  // A load that fails leaves its section empty, which is indistinguishable from
+  // a boutique that simply has nothing set up. Names are recorded raw and
+  // turned into a sentence at render, so `t` never becomes a dependency of the
+  // effects below.
+  // useCallback with no deps keeps this identity stable: it is called from
+  // loaders that effects invoke, and an unstable one would pull every loader
+  // into those effects' dependency lists.
+  const [failedLoads, setFailedLoads] = useState([])
+  const markLoad = useCallback((name, ok) =>
+    setFailedLoads(prev => (ok ? prev.filter(n => n !== name) : prev.includes(name) ? prev : [...prev, name])), [])
+
   useEffect(() => {
-    api(`${API}/boutique/promotions/profile`).then(res => { if (res.success) setProfile(res.data) })
-  }, [])
+    api(`${API}/boutique/promotions/profile`).then(res => {
+      if (res.success) { setProfile(res.data); markLoad('profile', true) } else markLoad('profile', false)
+    })
+  }, [markLoad])
   useEffect(() => {
-    api(`${API}/boutique/saldi-rules?year=${new Date().getFullYear()}`).then(res => { if (res.success) setSaldiRules(res.data) })
-  }, [])
+    api(`${API}/boutique/saldi-rules?year=${new Date().getFullYear()}`).then(res => {
+      if (res.success) { setSaldiRules(res.data); markLoad('rules', true) } else markLoad('rules', false)
+    })
+  }, [markLoad])
 
   function changeRegion(newRegion) {
     if (!profile) return
@@ -280,12 +331,13 @@ export default function Promotions() {
     setSelfLoading(true)
     api(`${API}/boutique/promotions/items?startsAt=${selfStart}&seasonalOnly=false&page=1&limit=100`)
       .then(res => {
-        if (!res.success) return
+        if (!res.success) { markLoad('products', false); return }
         setSelfProducts(res.data.items ?? [])
         setSelfCostVisible(!!res.data.context?.costVisible)
+        markLoad('products', true)
       })
       .finally(() => setSelfLoading(false))
-  }, [selfStart, lang])
+  }, [selfStart, lang, markLoad])
 
   function hydrateSelfCampaign(id) {
     api(`${API}/boutique/promotions/sales/${id}`).then(res => {
@@ -297,7 +349,7 @@ export default function Promotions() {
       setSelfDisc(c.discountValue)
       setSelfStart(isoToDateOnly(c.startsAt))
       setSelfEnd(isoToDateOnly(c.endsAt))
-      const { selected, overrides } = hydrateSelection(c.items)
+      const { selected, overrides } = hydrateSelection(c.items, c.discountValue)
       setSelfSelected(selected); setSelfOverride(overrides)
     })
   }
@@ -387,6 +439,13 @@ export default function Promotions() {
     if (res.success) { setSelfStatus('paused'); show(t('promotions.self.toast_stopped', 'Sale stopped'), 'success') }
     else show(res.message ?? t('promotions.self.stop_failed', 'Could not stop'), 'error')
   }
+  // Lets you add/remove products from an already-active sale — previously the
+  // only actions available once active were "Stop sale", so there was no way
+  // to apply the sale to a newly-selected product without stopping it first.
+  async function updateActiveSelfSale() {
+    const id = await saveSelfDraft()
+    if (id) show(t('promotions.self.toast_updated', 'Sale updated'), 'success')
+  }
   async function discardSelfDraft() {
     if (!selfCampaignId) return
     const res = await api(`${API}/boutique/promotions/sales/${selfCampaignId}`, { method: 'DELETE' })
@@ -417,16 +476,20 @@ export default function Promotions() {
   const [saldiLoading, setSaldiLoading]         = useState(true)
 
   useEffect(() => {
-    if (!saldiStart) return
+    // No region rules means no Saldi window to load items for. Clearing the flag
+    // matters: returning while it's still true left the tab on "Loading…"
+    // forever for any boutique whose region has no rules.
+    if (!saldiStart) { setSaldiLoading(false); return }
     setSaldiLoading(true)
     api(`${API}/boutique/promotions/items?startsAt=${saldiStart}&seasonalOnly=true&page=1&limit=100`)
       .then(res => {
-        if (!res.success) return
+        if (!res.success) { markLoad('saldi_products', false); return }
         setSaldiProducts(res.data.items ?? [])
         setSaldiCostVisible(!!res.data.context?.costVisible)
+        markLoad('saldi_products', true)
       })
       .finally(() => setSaldiLoading(false))
-  }, [saldiStart, lang])
+  }, [saldiStart, lang, markLoad])
 
   function hydrateSaldiCampaign(id) {
     api(`${API}/boutique/promotions/sales/${id}`).then(res => {
@@ -436,7 +499,7 @@ export default function Promotions() {
       setSaldiStatus(c.status)
       setSaldiDisc(c.discountValue)
       if (c.season) setSaldiSeason(c.season)
-      const { selected, overrides } = hydrateSelection(c.items)
+      const { selected, overrides } = hydrateSelection(c.items, c.discountValue)
       setSaldiSelected(selected); setSaldiOverride(overrides)
     })
   }
@@ -444,7 +507,10 @@ export default function Promotions() {
   /* ── Resume any in-progress campaign per kind, once, on mount ── */
   useEffect(() => {
     api(`${API}/boutique/promotions/sales?page=1&limit=50`).then(res => {
-      if (!res.success) return
+      // Without this the tab opens as a blank new draft and the merchant's
+      // saved work looks deleted — the worst possible silent failure here.
+      if (!res.success) { markLoad('campaigns', false); return }
+      markLoad('campaigns', true)
       const campaigns = res.data.campaigns ?? []
       const pick = kind => campaigns
         .filter(c => c.kind === kind && c.status !== 'ended')
@@ -454,7 +520,7 @@ export default function Promotions() {
       if (selfC)  hydrateSelfCampaign(selfC.id)
       if (saldiC) hydrateSaldiCampaign(saldiC.id)
     })
-  }, [])
+  }, [markLoad])
 
   function toggleSaldi(id) { setSaldiSelected(s => ({ ...s, [id]: !s[id] })) }
   function editSaldiLine(id, kind, val) {
@@ -552,10 +618,24 @@ export default function Promotions() {
   function refetchInvitations() {
     setInvLoading(true)
     api(`${API}/boutique/promotions/invitations`)
-      .then(res => { if (res.success) setInvitations(res.data.invitations ?? []) })
+      .then(res => {
+        if (res.success) { setInvitations(res.data.invitations ?? []); markLoad('invitations', true) }
+        else markLoad('invitations', false)
+      })
       .finally(() => setInvLoading(false))
   }
-  useEffect(() => { refetchInvitations() }, [])
+  // Inlined rather than calling refetchInvitations: as a component-body
+  // function it would be a reactive dependency of this effect and re-run it on
+  // every render. The helper stays for the opt-in/opt-out refresh path.
+  useEffect(() => {
+    setInvLoading(true)
+    api(`${API}/boutique/promotions/invitations`)
+      .then(res => {
+        if (res.success) { setInvitations(res.data.invitations ?? []); markLoad('invitations', true) }
+        else markLoad('invitations', false)
+      })
+      .finally(() => setInvLoading(false))
+  }, [markLoad])
 
   function toggleInvItem(invId, productId) {
     setInvSelected(s => ({ ...s, [invId]: { ...(s[invId] || {}), [productId]: !s[invId]?.[productId] } }))
@@ -576,6 +656,15 @@ export default function Promotions() {
 
   const TABS = [t('promotions.tabs.your_sale'), t('promotions.tabs.seasonal_saldi'), t('promotions.tabs.mi_italia_sale')]
 
+  const LOAD_NAMES = {
+    profile:        t('promotions.load.profile', 'your promotion profile'),
+    rules:          t('promotions.load.rules', 'the Saldi rules for your region'),
+    products:       t('promotions.load.products', 'products for your sale'),
+    saldi_products: t('promotions.load.saldi_products', 'products eligible for Saldi'),
+    campaigns:      t('promotions.load.campaigns', 'your saved campaigns'),
+    invitations:    t('promotions.load.invitations', 'Mi Italia invitations'),
+  }
+
   return (
     <>
       <div className="prm-region-row">
@@ -590,6 +679,15 @@ export default function Promotions() {
         {profile?.tier && <span className="prm-region-tier">{profile.tier}</span>}
         <span className="prm-region-note">{t('promotions.region.note')}</span>
       </div>
+
+      {failedLoads.length > 0 && (
+        <div className="prm-load-error">
+          {t('promotions.err_partial_load', {
+            parts: failedLoads.map(n => LOAD_NAMES[n] ?? n).join(', '),
+            defaultValue: 'Could not load: {{parts}}. Those sections may look empty — reload the page to try again.',
+          })}
+        </div>
+      )}
 
       <div className="tabs">
         {TABS.map((tab, i) => (
@@ -643,8 +741,17 @@ export default function Promotions() {
             {selfCampaignId && selfStatus !== 'active' && (
               <span className="prm-discard-link" onClick={discardSelfDraft}>{t('promotions.self.discard_btn', 'Discard draft')}</span>
             )}
+            {/* The success toast is wired at the button, not inside
+                saveSelfDraft: Start sale and Update sale call that too and
+                show their own message, so it would otherwise fire twice. */}
             {selfStatus !== 'active' && (
-              <button className="btn btn-outline" onClick={saveSelfDraft} disabled={selfSaving}>{t('promotions.self.save_btn', 'Save draft')}</button>
+              <button className="btn btn-outline" disabled={selfSaving}
+                onClick={async () => { if (await saveSelfDraft()) show(t('promotions.self.toast_saved', 'Draft saved'), 'success') }}>
+                {t('promotions.self.save_btn', 'Save draft')}
+              </button>
+            )}
+            {selfStatus === 'active' && (
+              <button className="btn btn-outline" onClick={updateActiveSelfSale} disabled={selfSaving}>{t('promotions.self.update_btn', 'Update sale')}</button>
             )}
             {selfStatus === 'active'
               ? <button className="btn btn-primary" onClick={stopSelfPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.self.stop_btn', 'Stop sale')}</button>
@@ -715,7 +822,10 @@ export default function Promotions() {
                 {saldiLoading
                   ? <div className="dc-loading">{t('promotions.items.loading')}</div>
                   : <SaleItemsTable t={t} products={saldiProducts} saleDisc={saldiDisc} selected={saldiSelected} overrides={saldiOverride} costVisible={saldiCostVisible} aiNotes={saldiAiNotes}
-                      onToggle={toggleSaldi} onEdit={editSaldiLine} onReset={resetSaldiLine} onHistory={openHistory} />}
+                      onToggle={toggleSaldi} onEdit={editSaldiLine} onReset={resetSaldiLine} onHistory={openHistory}
+                      emptyHint={saldiStart
+                        ? t('promotions.saldi.empty_hint', 'Saldi apply to end-of-season stock only. Mark products as "Seasonal" in the Your Sale tab and they will appear here.')
+                        : t('promotions.saldi.no_region_rules', 'Saldi dates are not available for your region yet, so no items can be loaded. Check the region selected at the top of this page.')} />}
               </div>
 
               <CompliancePanel t={t} result={saldiCompliance} checking={saldiChecking} />
@@ -724,7 +834,10 @@ export default function Promotions() {
                   <span className="prm-discard-link" onClick={discardSaldiDraft}>{t('promotions.saldi.discard_btn', 'Discard draft')}</span>
                 )}
                 {saldiStatus !== 'active' && (
-                  <button className="btn btn-outline" onClick={saveSaldiDraft} disabled={saldiSaving}>{t('promotions.saldi.save_btn', 'Save draft')}</button>
+                  <button className="btn btn-outline" disabled={saldiSaving}
+                    onClick={async () => { if (await saveSaldiDraft()) show(t('promotions.saldi.toast_saved', 'Draft saved'), 'success') }}>
+                    {t('promotions.saldi.save_btn', 'Save draft')}
+                  </button>
                 )}
                 {saldiStatus === 'active'
                   ? <button className="btn btn-primary" onClick={stopSaldiPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.saldi.stop_btn', 'Stop sale')}</button>

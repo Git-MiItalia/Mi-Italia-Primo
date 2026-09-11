@@ -1,48 +1,53 @@
 import { useState,useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useParams, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
+import { statusLabel } from '../lib/statusLabel'
+import { isWhatsappEnabled } from '../lib/auth'
 import Toast, { useToast } from '../components/ui/Toast'
 import useNotifStore from '../store/notifStore'
 import useLangStore from '../store/langStore'
 import { generatePackingSlip } from '../lib/packingSlip'
+import i18n from '../lib/i18n'
 
 const API = import.meta.env.VITE_API_URL
 const STATUS_TABS = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
 
 function fmtDate(iso) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function fmtDateTime(iso) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en', { month: 'short', day: 'numeric' }) +
-    ' · ' + new Date(iso).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' }) +
+    ' · ' + new Date(iso).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })
 }
 
 /* ── Status confirm modal ── */
 function StatusConfirmModal({ open, onClose, onConfirm, currentStatus, newStatus, submitting }) {
+  const { t } = useTranslation()
   if (!open) return null
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">Confirm status change</div>
+          <div className="modal-title">{t('orders.confirm_status.title')}</div>
           <button className="modal-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         <div className="modal-intro">
-          Change order status from{' '}
-          <span className={`status ${currentStatus}`}>{currentStatus}</span>
-          {' '}to{' '}
-          <span className={`status ${newStatus}`}>{newStatus}</span>?
+          {t('orders.confirm_status.from', 'Change order status from')}{' '}
+          <span className={`status ${currentStatus}`}>{statusLabel(t, currentStatus)}</span>
+          {' '}{t('orders.confirm_status.to', 'to')}{' '}
+          <span className={`status ${newStatus}`}>{statusLabel(t, newStatus)}</span>?
         </div>
         <div className="modal-footer">
-          <button className="btn btn-dark" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="btn btn-dark" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={onConfirm} disabled={submitting}>
             <span className="material-symbols-outlined">check_circle</span>
-            {submitting ? 'Updating…' : 'Confirm'}
+            {submitting ? t('orders.confirm_status.updating', 'Updating…') : t('common.confirm')}
           </button>
         </div>
       </div>
@@ -52,49 +57,63 @@ function StatusConfirmModal({ open, onClose, onConfirm, currentStatus, newStatus
 
 /* ── Order timeline ── */
 function OrderTimeline({ order }) {
+  const { t } = useTranslation()
   const status = order?.status ?? ''
+  const tracked = !!order?.dhl_tracking_number
+  const done = t('orders.timeline.done', 'Done')
 
   const STEPS = [
     {
       key:   'placed',
-      title: 'Order Placed',
-      sub:   order ? `${order.payment_method ?? 'Payment'} confirmed · €${order.gross_amount}` : '',
+      title: t('orders.timeline.placed', 'Order Placed'),
+      sub:   order
+        ? t('orders.timeline.placed_sub', '{{method}} confirmed · €{{amount}}', {
+            method: order.payment_method ?? t('orders.timeline.payment', 'Payment'),
+            amount: order.gross_amount,
+          })
+        : '',
       icon:  'check_circle',
       time:  fmtDateTime(order?.created_at),
       done:  true,
     },
     {
       key:   'processing',
-      title: 'Processing',
-      sub:   'Boutique notified · preparing your order',
+      title: t('orders.timeline.processing', 'Processing'),
+      sub:   t('orders.timeline.processing_sub', 'Boutique notified · preparing your order'),
       icon:  'inventory_2',
-      time:  ['processing','shipped','delivered'].includes(status) ? 'Done' : '—',
+      time:  ['processing','shipped','delivered'].includes(status) ? done : '—',
       done:  ['processing','shipped','delivered'].includes(status),
       pending: status === 'pending',
     },
     {
       key:   'dhl',
-      title: order?.dhl_tracking_number ? `DHL · ${order.dhl_tracking_number}` : 'DHL Label — Pending',
-      sub:   order?.dhl_tracking_number ? `Status: ${order.dhl_status ?? 'In transit'}` : 'Generate label to continue',
+      title: tracked
+        ? t('orders.timeline.dhl_tracked', 'DHL · {{tracking}}', { tracking: order.dhl_tracking_number })
+        : t('orders.timeline.dhl_pending', 'DHL Label — Pending'),
+      sub:   tracked
+        ? t('orders.timeline.dhl_status', 'Status: {{status}}', {
+            status: order.dhl_status ?? t('orders.timeline.in_transit', 'In transit'),
+          })
+        : t('orders.timeline.dhl_generate', 'Generate label to continue'),
       icon:  'local_shipping',
-      time:  order?.dhl_tracking_number ? 'Generated' : 'Now',
-      done:  !!order?.dhl_tracking_number,
-      pending: !order?.dhl_tracking_number && ['processing','shipped'].includes(status),
+      time:  tracked ? t('orders.timeline.generated', 'Generated') : t('orders.timeline.now', 'Now'),
+      done:  tracked,
+      pending: !tracked && ['processing','shipped'].includes(status),
     },
     {
       key:   'shipped',
-      title: 'Shipped',
-      sub:   'DHL pickup or drop-off',
+      title: t('orders.timeline.shipped', 'Shipped'),
+      sub:   t('orders.timeline.shipped_sub', 'DHL pickup or drop-off'),
       icon:  'local_shipping',
-      time:  ['shipped','delivered'].includes(status) ? 'Done' : '—',
+      time:  ['shipped','delivered'].includes(status) ? done : '—',
       done:  ['shipped','delivered'].includes(status),
     },
     {
       key:   'delivered',
-      title: 'Delivered',
-      sub:   'Order completed',
+      title: t('orders.timeline.delivered', 'Delivered'),
+      sub:   t('orders.timeline.delivered_sub', 'Order completed'),
       icon:  'inventory',
-      time:  status === 'delivered' ? 'Done' : '—',
+      time:  status === 'delivered' ? done : '—',
       done:  status === 'delivered',
     },
   ]
@@ -126,6 +145,11 @@ function OrderTimeline({ order }) {
 export default function Orders() {
   const { t } = useTranslation()
   const lang  = useLangStore(s => s.lang)
+  // Set when arriving from a notification link (/orders/:id) — that order is
+  // opened in the detail panel instead of the first row of the list.
+  const { id: routeOrderId } = useParams()
+  const navigate = useNavigate()
+  const handledRouteIdRef = useRef(null)
 
   const notifications = useNotifStore(s => s.notifications)
   const markRead      = useNotifStore(s => s.markRead)
@@ -140,8 +164,11 @@ export default function Orders() {
   const [activeTab,     setActiveTab]     = useState(0)
   const [summary,       setSummary]       = useState({})
   const [orders,        setOrders]        = useState([])
+  const [ordersPage,       setOrdersPage]       = useState(1)
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1)
   const [selected,      setSelected]      = useState(null)
   const [loading,       setLoading]       = useState(true)
+  const [loadFailed,    setLoadFailed]    = useState(false)
   const [trackingInput, setTrackingInput] = useState('')
   const { toasts, show: showToast }       = useToast()
 
@@ -168,6 +195,10 @@ export default function Orders() {
     apiFetch(`${API}/boutique/orders/stats`)
       .then(r => r.json())
       .then(res => {
+        // `res.data.summary` threw outright on an error payload, and nothing
+        // checked success — an unhandled rejection that left every tab count
+        // at zero with no sign anything had failed.
+        if (!res.success || !res.data) throw new Error(res.message || 'orders/stats failed')
         const s        = res.data.summary   ?? {}
         const byStatus = res.data.by_status ?? []
         const count    = st => parseInt(byStatus.find(b => b.status === st)?.count ?? 0)
@@ -180,19 +211,71 @@ export default function Orders() {
           cancelled:    count('cancelled'),
         })
       })
+      // Kept quiet on purpose: the order list below reports the real failure,
+      // and two banners for one dead backend is noise. This exists so the
+      // rejection is handled rather than escaping.
+      .catch(() => {})
 
-    setLoading(true)
-    apiFetch(`${API}/boutique/orders`)
-      .then(r => r.json())
-      .then(res => {
-        const list = res.data.orders ?? []
-        setOrders(list)
-        if (list.length > 0) fetchDetail(list[0].id)
-        setLoading(false)
-      })
   }, [lang])
 
+  function refetchOrders(tabIndex, targetPage) {
+    setLoading(true)
+    const params = new URLSearchParams({ page: String(targetPage), limit: '20' })
+    const status = STATUS_TABS[tabIndex]
+    if (status !== 'all') params.set('status', status)
+    setLoadFailed(false)
+    apiFetch(`${API}/boutique/orders?${params.toString()}`)
+      .then(r => r.json())
+      .then(res => {
+        // `res.data.orders` threw on an error payload, nothing checked
+        // success, and setLoading(false) lived inside this .then — so a failed
+        // request left the tab on "Loading…" permanently.
+        if (!res.success || !res.data) throw new Error(res.message || 'orders request failed')
+        const list = res.data.orders ?? []
+        setOrders(list)
+        setOrdersPage(targetPage)
+        setOrdersTotalPages(res.data.pagination?.total_pages ?? 1)
+        // With an order id in the URL the detail panel is driven by the route
+        // effect below, so don't override it with the first row.
+        if (routeOrderId) { /* handled by the route effect */ }
+        else if (list.length > 0) fetchDetail(list[0].id)
+        else setSelected(null)
+      })
+      .catch(() => {
+        setOrders([])
+        setSelected(null)
+        setOrdersTotalPages(1)
+        setLoadFailed(true)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    refetchOrders(activeTab, 1)
+  }, [lang, activeTab])
+
+  // Open the order named in the URL. Runs on arrival and again if a second
+  // notification is clicked while this page is already open.
+  useEffect(() => {
+    if (!routeOrderId || handledRouteIdRef.current === routeOrderId) return
+    handledRouteIdRef.current = routeOrderId
+    fetchDetail(routeOrderId)
+  }, [routeOrderId])
+
+  // Any list interaction drops back to /orders so the URL stops pinning one
+  // order and normal first-row selection resumes.
+  function clearRouteOrderId() {
+    if (routeOrderId) navigate('/orders', { replace: true })
+  }
+
+  function goToOrdersPage(p) {
+    if (p < 1 || p > ordersTotalPages) return
+    clearRouteOrderId()
+    refetchOrders(activeTab, p)
+  }
+
   function handleTabClick(i) {
+    clearRouteOrderId()
     setActiveTab(i)
     setVisitedTabs(prev => new Set([...prev, i]))
     // Mark all unread order notifications as read when All tab is opened
@@ -208,8 +291,30 @@ export default function Orders() {
     apiFetch(`${API}/boutique/orders/${id}`)
       .then(r => r.json())
       .then(res => {
-        setSelected(res.data)
-        setTrackingInput(res.data.dhl_tracking_number ?? '')
+        const order = res.data
+        setSelected(order)
+        setTrackingInput(order.dhl_tracking_number ?? '')
+
+        // POS sales link the shopper through `customer_id`, but the order
+        // endpoint fills name/email/phone from `user_id` only — so a walk-in
+        // with a customer attached still arrives nameless and reads "Guest".
+        // Look the customer up directly rather than lose the name. One extra
+        // request, and only when there is genuinely a customer to resolve.
+        // (The list keeps showing "Guest" until the join is fixed server-side;
+        //  resolving it per row would be one request per order.)
+        if (!order?.name && order?.customer_id) {
+          apiFetch(`${API}/boutique/customers/${order.customer_id}`)
+            .then(r => r.json())
+            .then(cres => {
+              if (!cres?.success) return
+              const c = cres.data?.customer ?? cres.data ?? {}
+              if (!c.name && !c.email && !c.phone) return
+              setSelected(prev => (prev?.id === order.id
+                ? { ...prev, name: c.name ?? prev.name, email: c.email ?? prev.email, phone: c.phone ?? prev.phone }
+                : prev))
+            })
+            .catch(() => { /* keep "Guest" — the order is still usable */ })
+        }
       })
   }
 
@@ -230,14 +335,14 @@ export default function Orders() {
       })
       const data = await res.json()
       if (!data.success) {
-        showToast(data.message || `Cannot transition from '${fromStatus}' to '${pendingStatus}'`, 'error')
+        showToast(data.message || t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
         setConfirmOpen(false); setSubmitting(false); return
       }
       setOrders(prev => prev.map(o => o.id === selected.id ? { ...o, status: pendingStatus } : o))
       setSelected(prev => prev ? { ...prev, status: pendingStatus } : prev)
-      showToast(`Status updated to ${pendingStatus}`, 'success')
+      showToast(t('orders.toast.status_updated', 'Status updated to {{status}}', { status: statusLabel(t, pendingStatus) }), 'success')
     } catch {
-      showToast(`Cannot transition from '${fromStatus}' to '${pendingStatus}'`, 'error')
+      showToast(t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
     } finally {
       setSubmitting(false); setConfirmOpen(false); setPendingStatus(null)
     }
@@ -253,9 +358,15 @@ export default function Orders() {
         if (res.success) {
           setOrders(prev => prev.map(o => o.id === id ? { ...o, dhl_tracking_number: trackingInput } : o))
           setSelected(prev => prev?.id === id ? { ...prev, dhl_tracking_number: trackingInput } : prev)
-          showToast('Tracking number saved', 'success')
+          showToast(t('orders.toast.tracking_saved', 'Tracking number saved'), 'success')
+          return
         }
+        // No else and no catch before this: a rejected save did nothing at
+        // all, so the number stayed in the box and looked saved until the
+        // next reload dropped it.
+        showToast(res.message || t('orders.toast.tracking_error', 'Could not save the tracking number. Please try again.'), 'error')
       })
+      .catch(() => showToast(t('common.error_network'), 'error'))
   }
 
   function dhlCell(o) {
@@ -263,13 +374,13 @@ export default function Orders() {
       const done = o.status === 'delivered'
       return <span style={{ fontSize: 9, color: done ? 'var(--green)' : 'var(--stripe)', fontWeight: 600 }}>{o.dhl_tracking_number}</span>
     }
-    if (o.channel === 'ship') return <span style={{ fontSize: 9, color: 'var(--stone)' }}>Awaiting label</span>
+    if (o.channel === 'ship') return <span style={{ fontSize: 9, color: 'var(--stone)' }}>{t('orders.awaiting_label')}</span>
     return <span style={{ fontSize: 9, color: 'var(--stone)' }}>—</span>
   }
 
-  const visibleOrders = orders.filter(o =>
-    activeTab === 0 ? true : o.status === STATUS_TABS[activeTab]
-  )
+  // Filtering by status now happens server-side (see refetchOrders) — orders
+  // already only contains the current tab's page.
+  const visibleOrders = orders
 
   // Use summary for tab counts (accurate full-dataset counts from API)
   const TABS = [
@@ -319,7 +430,7 @@ export default function Orders() {
                 {!loading && visibleOrders.map(o => (
                   <tr key={o.id} className={selected?.id === o.id ? 'ord-row-selected' : ''}>
                     <td>
-                      <span className="ord-id-link" onClick={() => fetchDetail(o.id)}>
+                      <span className="ord-id-link" onClick={() => { clearRouteOrderId(); fetchDetail(o.id) }}>
                         #{String(o.id).slice(0, 8)}
                       </span>
                     </td>
@@ -328,7 +439,7 @@ export default function Orders() {
                     <td>€{o.gross_amount}</td>
                     <td>{dhlCell(o)}</td>
                     <td>{fmtDate(o.created_at)}</td>
-                    <td><span className={`status ${o.status}`}>{o.status}</span></td>
+                    <td><span className={`status ${o.status}`}>{statusLabel(t, o.status)}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -340,10 +451,27 @@ export default function Orders() {
                 {t('orders.loading')}
               </div>
             )}
-            {!loading && visibleOrders.length === 0 && (
+            {/* A failed load used to render as an empty tab. */}
+            {!loading && loadFailed && (
+              <div className="empty">
+                <span className="material-symbols-outlined">cloud_off</span>
+                {t('orders.err_load', 'Could not load orders.')}{' '}
+                <span className="db-alert-link" onClick={() => refetchOrders(activeTab, 1)}>
+                  {t('common.retry', 'Retry')}
+                </span>
+              </div>
+            )}
+            {!loading && !loadFailed && visibleOrders.length === 0 && (
               <div className="empty">
                 <span className="material-symbols-outlined">local_shipping</span>
                 {t('orders.empty', { status: STATUS_TABS[activeTab] })}
+              </div>
+            )}
+            {!loading && ordersTotalPages > 1 && (
+              <div className="ord-table-footer" style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:12, padding:'10px 0' }}>
+                <button className="btn btn-outline btn-xs" disabled={ordersPage <= 1} onClick={() => goToOrdersPage(ordersPage - 1)}>{t('orders.prev', '← Prev')}</button>
+                <span>{t('orders.page_n', { page: ordersPage, total: ordersTotalPages, defaultValue: 'Page {{page}} of {{total}}' })}</span>
+                <button className="btn btn-outline btn-xs" disabled={ordersPage >= ordersTotalPages} onClick={() => goToOrdersPage(ordersPage + 1)}>{t('orders.next', 'Next →')}</button>
               </div>
             )}
           </div>
@@ -360,10 +488,12 @@ export default function Orders() {
                 <div className="detail-panel-title">{t('orders.order_id', { id: String(selected.id).slice(0, 8) })}</div>
                 <div className="detail-panel-sub">
                   {selected.name ?? t('orders.guest')} · {fmtDate(selected.created_at)}
-                  {selected.dhl_tracking_number ? ` · ${selected.dhl_tracking_number}` : selected.channel === 'ship' ? ' · Awaiting shipment' : ''}
+                  {selected.dhl_tracking_number
+                    ? ` · ${selected.dhl_tracking_number}`
+                    : selected.channel === 'ship' ? ` · ${t('orders.awaiting_shipment', 'Awaiting shipment')}` : ''}
                 </div>
               </div>
-              <span className={`status ${selected.status} ord-status-ml`}>{selected.status}</span>
+              <span className={`status ${selected.status} ord-status-ml`}>{statusLabel(t, selected.status)}</span>
             </div>
 
             <div className="detail-panel-body">
@@ -397,7 +527,7 @@ export default function Orders() {
               <div className="detail-divider" />
 
               {/* Ship To */}
-              <div className="ord-section-hdr">Ship To</div>
+              <div className="ord-section-hdr">{t('orders.detail.ship_to')}</div>
               <div className="ord-customer-block">
                 {snap.name ?? selected.name ?? t('orders.guest')}
                 {snap.address_line1 && <><br /><span className="ord-customer-sub">{snap.address_line1}</span></>}
@@ -417,7 +547,24 @@ export default function Orders() {
                 <div className="ord-fin-row"><span>{t('orders.detail.subtotal')}</span><span>€{selected.subtotal}</span></div>
                 <div className="ord-fin-row"><span>{t('orders.detail.shipping')}</span><span>€{selected.shipping_price}</span></div>
                 <div className="ord-fin-row"><span>{t('orders.detail.vat')}</span><span>€{selected.vat_amount}</span></div>
+                {/* Without this row a discounted order doesn't add up on screen —
+                    subtotal + shipping + VAT wouldn't match the total. */}
+                {parseFloat(selected.promo_discount) > 0 && (
+                  <div className="ord-fin-row">
+                    <span>
+                      {t('orders.detail.discount', 'Discount')}
+                      {selected.promo_code ? ` (${selected.promo_code})` : ''}
+                    </span>
+                    <span>−€{parseFloat(selected.promo_discount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="ord-fin-row ord-fin-total"><span>{t('orders.detail.total')}</span><span>€{selected.gross_amount}</span></div>
+                {selected.commission_amount != null && (
+                  <div className="ord-fin-row">
+                    <span>{t('orders.detail.commission', { pct: (parseFloat(selected.commission_rate || 0) * 100).toFixed(0), defaultValue: 'Commission ({{pct}}%)' })}</span>
+                    <span>−€{selected.commission_amount}</span>
+                  </div>
+                )}
                 <div className="ord-fin-row ord-fin-net"><span>{t('orders.detail.net')}</span><span>€{selected.net_to_boutique}</span></div>
               </div>
 
@@ -426,16 +573,16 @@ export default function Orders() {
               {/* Shipping / DHL */}
               {selected.channel === 'ship' && (
                 <>
-                  <div className="ord-section-hdr">Shipping</div>
+                  <div className="ord-section-hdr">{t('orders.detail.shipping_section')}</div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <button className="btn btn-dhl" style={{ flex: 1, justifyContent: 'center' }}>
                       <span className="material-symbols-outlined">local_shipping</span>
-                      Generate DHL Label
+                      {t('orders.detail.generate_dhl')}
                     </button>
                     <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}
                       onClick={() => generatePackingSlip(selected.id)}>
                       <span className="material-symbols-outlined">print</span>
-                      Packing Slip
+                      {t('orders.detail.packing_slip')}
                     </button>
                   </div>
                   <div className="ord-tracking-row" style={{ marginBottom: 8 }}>
@@ -461,14 +608,21 @@ export default function Orders() {
                 </>
               )}
 
-              {/* Message Customer */}
-              <button
+              {/* Message Customer — WhatsApp, and its no-phone fallback sends
+                  the user to /messages, which does not exist for a boutique
+                  without the entitlement. Hidden entirely in that case. */}
+              {isWhatsappEnabled() && <button
                 className="btn btn-outline"
                 style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }}
                 onClick={() => {
                   const phone = snap.phone?.replace(/\D/g, '') ?? ''
                   const name  = snap.name?.split(' ')[0] ?? selected.name?.split(' ')[0] ?? ''
-                  const msg   = encodeURIComponent(`Ciao ${name}, regarding your order #${String(selected.id).slice(0, 8)} — `)
+                  // Goes to the customer, so it follows the boutique's language.
+                  const msg   = encodeURIComponent(t(
+                    'orders.whatsapp_msg',
+                    'Ciao {{name}}, regarding your order #{{order}} — ',
+                    { name, order: String(selected.id).slice(0, 8) },
+                  ))
                   if (phone) {
                     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
                   } else {
@@ -477,8 +631,8 @@ export default function Orders() {
                 }}
               >
                 <span className="material-symbols-outlined">chat_bubble</span>
-                Message Customer
-              </button>
+                {t('orders.detail.message_customer', 'Message Customer')}
+              </button>}
 
               {/* Update Status */}
               <div className="ord-section-hdr">{t('orders.detail.update_status')}</div>
@@ -495,11 +649,11 @@ export default function Orders() {
                     disabled = true
                   } else if (isFinal) {
                     disabled = true
-                    tooltip  = `This order is already ${current} — no further changes allowed`
+                    tooltip  = t('orders.tooltip.final', 'This order is already {{status}} — no further changes allowed', { status: statusLabel(t, current) })
                   } else if (s === 'cancelled') {
                     if (current !== 'pending') {
                       disabled = true
-                      tooltip  = 'Orders can only be cancelled before processing begins'
+                      tooltip  = t('orders.tooltip.cancel_window', 'Orders can only be cancelled before processing begins')
                     }
                   } else {
                     const currentIdx = ORDER.indexOf(current)
@@ -531,7 +685,7 @@ export default function Orders() {
               <div className="detail-divider" />
 
               {/* Order Timeline */}
-              <div className="ord-section-hdr">Order Timeline</div>
+              <div className="ord-section-hdr">{t('orders.detail.timeline')}</div>
               <OrderTimeline order={selected} />
 
             </div>

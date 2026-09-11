@@ -191,9 +191,9 @@ export default function VariantTable({ category, initialSizes, onRowsChange, onS
     return (
       <>
         <div className="vt-hdr">
-          <div className="card-title">Sizes</div>
+          <div className="card-title">{t('pos.sizes', 'Sizes')}</div>
         </div>
-        <div className="vt-empty">Select a category above to load the size chart.</div>
+        <div className="vt-empty">{t('variants.pick_category_first', 'Select a category above to load the size chart.')}</div>
       </>
     )
   }
@@ -201,24 +201,24 @@ export default function VariantTable({ category, initialSizes, onRowsChange, onS
   return (
     <>
       <div className="vt-hdr">
-        <div className="card-title">Sizes</div>
+        <div className="card-title">{t('pos.sizes', 'Sizes')}</div>
         {!editing ? (
           <div className="vt-hdr-actions">
             <button className="btn btn-sm btn-primary" onClick={() => {
               if (onRowsChange) onRowsChange(rows.map(row => withSize(activeCols, row)))
               notifySizeChart(activeCols, rows)
             }}>
-              <span className="material-symbols-outlined">check</span>Save Sizes
+              <span className="material-symbols-outlined">check</span>{t('variants.save_sizes', 'Save Sizes')}
             </button>
             <button className="btn btn-sm btn-outline" onClick={startEditing}>
-              <span className="material-symbols-outlined">edit</span>Edit Sizes
+              <span className="material-symbols-outlined">edit</span>{t('variants.edit_sizes', 'Edit Sizes')}
             </button>
           </div>
         ) : (
           <div className="vt-hdr-actions">
             <button className="btn btn-sm btn-outline" onClick={cancelEditing}>{t('common.cancel')}</button>
             <button className="btn btn-sm btn-primary" onClick={saveEditing}>
-              <span className="material-symbols-outlined">check</span>Save Sizes
+              <span className="material-symbols-outlined">check</span>{t('variants.save_sizes', 'Save Sizes')}
             </button>
           </div>
         )}
@@ -234,7 +234,7 @@ export default function VariantTable({ category, initialSizes, onRowsChange, onS
             <tr>
               {activeCols.length > 0
                 ? activeCols.map(c => <th key={c.key}>{c.label}</th>)
-                : <th>Size</th>
+                : <th>{t('reservations.table.size', 'Size')}</th>
               }
               {editing && <th></th>}
             </tr>
@@ -255,7 +255,7 @@ export default function VariantTable({ category, initialSizes, onRowsChange, onS
                 }
                 {editing && (
                   <td>
-                    <button className="btn btn-xs btn-red" onClick={() => removeRow(ri)} title="Remove row">
+                    <button className="btn btn-xs btn-red" onClick={() => removeRow(ri)} title={t('variants.remove_row', 'Remove row')}>
                       <span className="material-symbols-outlined" style={{ fontSize:14 }}>close</span>
                     </button>
                   </td>

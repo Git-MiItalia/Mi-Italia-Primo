@@ -12,6 +12,23 @@ dist
 dist-ssr
 *.local
 
+# Local environment config — API and image base URLs differ per machine and
+# per environment, so this is not committed. Copy .env.example and fill it in.
+.env
+.env.local
+.env.*.local
+
+# Translation bundle scaffolding.
+#
+# primo5.json IS committed — it is the bundle handed to the backend. These are
+# the inputs a local script merges to produce it, plus a generated report. They
+# are only meaningful alongside that script, which is not in this repo, so
+# committing them would add clutter nobody else can use.
+primo5-additions*.json
+translations-to-add.json
+primo-next-batch.json
+UNTRANSLATED.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

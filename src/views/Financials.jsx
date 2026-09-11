@@ -2,12 +2,29 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { activeLocale } from '../lib/dateHelpers'
+import { statusLabel } from '../lib/statusLabel'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
+// Every figure on this page ran through here with the locale pinned to en-GB,
+// so an Italian boutique read its own takings as "€1,234.56" instead of
+// "€1.234,56" — the separators swap meaning between the two languages, which
+// is the last thing you want on the money screen.
+//
+// useGrouping is forced on: Italian's default rule for plain decimals leaves
+// four-digit numbers ungrouped, so a column read "€5311,15" on one line and
+// "€11.087,20" on the next. Currency is always grouped in Italian, and the
+// mismatch looked like a formatting fault.
 function fmt(v) {
   if (v == null) return '—'
-  return `€${Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `€${Number(v).toLocaleString(activeLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })}`
+}
+
+// Plain number, no symbol or grouping — for the CSV export, where a grouped
+// "1,234.56" would split across columns.
+function fmtPlain(v) {
+  return v == null ? '' : Number(v).toFixed(2)
 }
 
 function fmtPct(v) {
@@ -17,7 +34,13 @@ function fmtPct(v) {
 
 function fmtDate(iso) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en', { day:'numeric', month:'short', year:'numeric' })
+  return new Date(iso).toLocaleDateString(activeLocale(), { day:'numeric', month:'short', year:'numeric' })
+}
+
+// Day + month only, used for the two "next payment" hints.
+function fmtDayMonth(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString(activeLocale(), { month: 'short', day: 'numeric' })
 }
 
 export default function Financials() {
@@ -38,12 +61,22 @@ export default function Financials() {
   const [payoutSummary,setPayoutSummary]= useState({})
   const [payoutsLoading, setPayoutsLoading] = useState(true)
 
+  // A swallowed failure here is worse than on any other screen: every figure
+  // falls back to "—" or €0, which reads as "you earned nothing this month"
+  // rather than "we could not reach the server". Flags are stored raw and
+  // worded at render so `t` stays out of these effects.
+  const [overviewFailed, setOverviewFailed] = useState(false)
+  const [payoutsFailed,  setPayoutsFailed]  = useState(false)
+
   useEffect(() => {
     setLoading(true)
     apiFetch(`${BASE_URL}/boutique/financials/overview?period=${period}`)
       .then(r => r.json())
-      .then(res => { if (res.success) setData(res.data) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setData(res.data); setOverviewFailed(false) }
+        else setOverviewFailed(true)
+      })
+      .catch(() => setOverviewFailed(true))
       .finally(() => setLoading(false))
   }, [period])
 
@@ -55,9 +88,10 @@ export default function Financials() {
         if (res.success) {
           setPayouts(res.data.payouts ?? [])
           setPayoutSummary(res.data.summary ?? {})
-        }
+          setPayoutsFailed(false)
+        } else setPayoutsFailed(true)
       })
-      .catch(() => {})
+      .catch(() => setPayoutsFailed(true))
       .finally(() => setPayoutsLoading(false))
   }, [])
 
@@ -69,24 +103,54 @@ export default function Financials() {
 
   const stripeConnected = stripe.charges_enabled && stripe.payouts_enabled
 
-  const planLabel = kpis.monthly_platform_fee?.plan
-    ? kpis.monthly_platform_fee.plan.charAt(0).toUpperCase() + kpis.monthly_platform_fee.plan.slice(1)
-    : 'Connect'
+  // Plan names ("connect", "grow") are Mi Italia's own product tiers, so they
+  // stay as written rather than being translated — only the casing is fixed.
+  // The fallback was a bare 'Connect' literal in two places; it is one name
+  // here so they cannot drift apart.
+  const DEFAULT_PLAN = 'Connect'
+  const rawPlan   = kpis.monthly_platform_fee?.plan
+  const planLabel = rawPlan
+    ? rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1)
+    : DEFAULT_PLAN
+
+  /* The ecommerce commission is charged on reserve-pickup revenue as well as
+     ecommerce: the API's ecommerce_commission.applied_on comes back as the two
+     added together, and there is no separate pickup commission field.
+
+     The whole charge used to be attributed to the Ecommerce row, with pickup
+     shown as rate "—" and commission "—". That made the Ecommerce row
+     contradict itself — labelled 8% while showing €761,04 against €5.311,15,
+     which is 14.3% — and overstated the pickup row's net by its share.
+
+     The condition is checked rather than assumed, so if the rule ever changes
+     to ecommerce-only the old attribution comes back automatically. Pickup
+     takes the remainder rather than its own rounded product, so the two halves
+     always add up to exactly the amount the API charged. */
+  const round2      = (n) => Math.round(n * 100) / 100
+  const ecomFee     = fees.ecommerce_commission ?? {}
+  const ecomRate    = ecomFee.rate ?? 0
+  const ecomTotal   = ecomFee.amount ?? 0
+  const ecomGross   = revenue.ecommerce?.amount      ?? 0
+  const pickupGross = revenue.reserve_pickup?.amount ?? 0
+  const pickupCharged = ecomFee.applied_on != null
+    && Math.abs(ecomFee.applied_on - (ecomGross + pickupGross)) < 0.01
+  const ecomComm   = pickupCharged ? round2(ecomRate * ecomGross) : ecomTotal
+  const pickupComm = pickupCharged ? round2(ecomTotal - ecomComm) : 0
 
   const channels = [
     {
       label:  t('financials.by_channel.ship'),
       orders: revenue.ecommerce?.orders      ?? 0,
-      gross:  revenue.ecommerce?.amount      ?? 0,
-      rate:   fees.ecommerce_commission?.rate ?? 0,
-      comm:   fees.ecommerce_commission?.amount ?? 0,
+      gross:  ecomGross,
+      rate:   ecomRate,
+      comm:   ecomComm,
     },
     {
       label:  t('financials.by_channel.pickup'),
       orders: revenue.reserve_pickup?.orders ?? 0,
-      gross:  revenue.reserve_pickup?.amount ?? 0,
-      rate:   0,
-      comm:   0,
+      gross:  pickupGross,
+      rate:   pickupCharged ? ecomRate : 0,
+      comm:   pickupComm,
     },
     {
       label:  t('financials.by_channel.pos'),
@@ -102,6 +166,12 @@ export default function Financials() {
 
   return (
     <div>
+
+      {overviewFailed && (
+        <div className="fin-load-error">
+          {t('financials.err_overview', 'Could not load your figures — the amounts below are not your real totals. Reload the page to try again.')}
+        </div>
+      )}
 
       {/* Period selector */}
       <div className="fin-period-row">
@@ -171,7 +241,7 @@ export default function Financials() {
         <div className="stat-card">
           <div className="stat-lbl">{t('financials.stats.platform_fee')}</div>
           <div className="stat-val" style={{ color: 'var(--red)' }}>
-            {loading ? '—' : kpis.monthly_platform_fee?.amount > 0 ? `−${fmt(kpis.monthly_platform_fee.amount)}` : '€0'}
+            {loading ? '—' : kpis.monthly_platform_fee?.amount > 0 ? `−${fmt(kpis.monthly_platform_fee.amount)}` : fmt(0)}
           </div>
           <div className="stat-change nu">
             {t('financials.plan_label', { plan: planLabel })}
@@ -207,9 +277,7 @@ export default function Financials() {
           </div>
           <div className="stat-change nu">
             {kpis.pending_payout?.next_payout_date
-              ? t('financials.stats.next_payout', {
-                  date: new Date(kpis.pending_payout.next_payout_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })
-                })
+              ? t('financials.stats.next_payout', { date: fmtDayMonth(kpis.pending_payout.next_payout_date) })
               : t('financials.no_payout_scheduled')}
           </div>
         </div>
@@ -249,14 +317,14 @@ export default function Financials() {
               <div className="fee-label">
                 <strong>{t('financials.fee_breakdown.platform_fee')}</strong><br />
                 <span className="fin-fee-detail">
-                  {t('financials.plan_label', { plan: kpis.monthly_platform_fee?.plan ?? 'Connect' })}
+                  {t('financials.plan_label', { plan: planLabel })}
                   {fees.monthly_platform_fee?.due_date
-                    ? ` · ${t('financials.due_date', { date: new Date(fees.monthly_platform_fee.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' }) })}`
+                    ? ` · ${t('financials.due_date', { date: fmtDayMonth(fees.monthly_platform_fee.due_date) })}`
                     : ''}
                 </span>
               </div>
               <div className="fee-val debit">
-                {fees.monthly_platform_fee?.amount > 0 ? `−${fmt(fees.monthly_platform_fee.amount)}` : '€0'}
+                {fees.monthly_platform_fee?.amount > 0 ? `−${fmt(fees.monthly_platform_fee.amount)}` : fmt(0)}
               </div>
             </div>
             <div className="fee-row">
@@ -341,17 +409,32 @@ export default function Financials() {
               <div className="card-title">{t('financials.payout.title')} <em>{t('financials.payout.title_em')}</em></div>
               {payouts.length > 0 && (
                 <div className="card-action" onClick={() => {
-                  const rows = [['Date','Amount','Status']]
+                  // The amount used to go through fmt(), which produces
+                  // "€1,234.56" — an unquoted comma, so every payout over a
+                  // thousand euro split into two columns and shifted the status
+                  // out of line. Amounts are written plain and every field is
+                  // quoted; headers follow the interface language.
+                  const rows = [[
+                    t('financials.payout.date'),
+                    t('financials.payout.amount'),
+                    t('financials.payout.status'),
+                  ]]
                   payouts.forEach(p => rows.push([
                     fmtDate(p.arrival_date ?? p.created_at),
-                    fmt(p.amount),
-                    p.status ?? '—'
+                    fmtPlain(p.amount),
+                    statusLabel(t, p.status),
                   ]))
-                  const csv = rows.map(r => r.join(',')).join('\n')
+                  const csv = rows
+                    .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
+                    .join('\n')
                   const a = document.createElement('a')
-                  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' }))
+                  const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8;' }))
+                  a.href = url
                   a.download = 'payout-history.csv'
+                  document.body.appendChild(a)
                   a.click()
+                  a.remove()
+                  URL.revokeObjectURL(url)
                 }}>
                   <span className="material-symbols-outlined">download</span>{t('financials.payout.export')}
                 </div>
@@ -374,6 +457,8 @@ export default function Financials() {
 
             {payoutsLoading ? (
               <div className="empty"><span className="material-symbols-outlined">hourglass_empty</span>{t('common.loading')}</div>
+            ) : payoutsFailed ? (
+              <div className="fin-load-error">{t('financials.err_payouts', 'Could not load your payout history.')}</div>
             ) : payouts.length === 0 ? (
               <div className="empty">
                 <span className="material-symbols-outlined">account_balance</span>
@@ -393,7 +478,7 @@ export default function Financials() {
                     <tr key={i}>
                       <td style={{ fontWeight: 600 }}>{fmtDate(p.arrival_date ?? p.created_at)}</td>
                       <td style={{ color: 'var(--green)', fontWeight: 600 }}>{fmt(p.amount)}</td>
-                      <td><span className={`status ${p.status === 'paid' ? 'active' : 'pending'}`}>{p.status ?? '—'}</span></td>
+                      <td><span className={`status ${p.status === 'paid' ? 'active' : 'pending'}`}>{statusLabel(t, p.status)}</span></td>
                     </tr>
                   ))}
                 </tbody>

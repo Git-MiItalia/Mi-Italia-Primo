@@ -1,12 +1,19 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+
+// Italian standard VAT. Used only for the live cart total, which has to be
+// shown before an order exists. Once the order is created the API returns its
+// own vat_rate and the receipt uses that.
+const VAT_RATE = 0.22
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { statusLabel } from '../lib/statusLabel'
 import { clearToken } from '../lib/auth'
 import useLangStore from '../store/langStore'
 import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, DEFAULT_CLASS_ID, findById } from '../lib/returnsPolicy/model'
 import { resolvePolicy, buildClassMap } from '../lib/returnsPolicy/engine'
 import { receiptPolicyLine, guaranteeLine } from '../lib/returnsPolicy/copy'
+import { fetchPolicies, fetchClasses } from '../lib/returnsPolicy/api'
 
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
@@ -69,7 +76,7 @@ function loadHeldCarts() {
   catch { return [] }
 }
 function persistHeldCarts(carts) {
-  try { localStorage.setItem(HELD_CARTS_KEY, JSON.stringify(carts)) } catch {}
+  try { localStorage.setItem(HELD_CARTS_KEY, JSON.stringify(carts)) } catch { /* private browsing or a full quota — held carts stay in memory for this session */ }
 }
 
 // ══ Variant Picker Modal ══════════════════════════════════════════════
@@ -86,9 +93,13 @@ function VariantPickerModal({ t, product, onClose, onPick }) {
         if (res?.success) {
           const vs = res.data?.variants ?? []
           setVariants(vs)
-          const firstInStock = vs.find(v => Number(v.stock_qty ?? 0) > 0)
-          if (firstInStock) setSelectedId(firstInStock.id)
-          else if (vs.length > 0) setSelectedId(vs[0].id)
+          // Never preselect a size that's switched off — it can't be sold.
+          const firstSellable = vs.find(v => v.is_active !== false && Number(v.stock_qty ?? 0) > 0)
+          if (firstSellable) setSelectedId(firstSellable.id)
+          else {
+            const firstActive = vs.find(v => v.is_active !== false)
+            if (firstActive) setSelectedId(firstActive.id)
+          }
         } else {
           setError(res?.message ?? 'Failed to load variants')
           setVariants([])
@@ -137,17 +148,25 @@ function VariantPickerModal({ t, product, onClose, onPick }) {
         {!loading && variants && variants.length > 0 && (
           <div className="pos-vpick-grid">
             {variants.map(v => {
-              const stock = Number(v.stock_qty ?? 0)
-              const oos = stock <= 0
+              const stock    = Number(v.stock_qty ?? 0)
+              const inactive = v.is_active === false
+              const oos      = stock <= 0
+              // A size switched off in the portal isn't on sale, so it can't be
+              // rung up here either — otherwise the toggle only holds online.
+              const blocked  = inactive || oos
               return (
                 <button
                   key={v.id}
-                  className={`pos-vpick-cell${selectedId === v.id ? ' on' : ''}${oos ? ' oos' : ''}`}
-                  disabled={oos}
-                  onClick={() => !oos && setSelectedId(v.id)}>
+                  className={`pos-vpick-cell${selectedId === v.id ? ' on' : ''}${blocked ? ' oos' : ''}`}
+                  disabled={blocked}
+                  onClick={() => !blocked && setSelectedId(v.id)}>
                   <div className="pos-vpick-cell-size">{v.size_label ?? v.size_it ?? '—'}</div>
                   {v.colour && <div className="pos-vpick-cell-col">{v.colour}</div>}
-                  <div className="pos-vpick-cell-stock">{oos ? t('pos.variant.out') : `${stock} ${t('pos.variant.in_stock')}`}</div>
+                  <div className="pos-vpick-cell-stock">
+                    {inactive
+                      ? t('pos.variant.inactive', 'Not for sale')
+                      : oos ? t('pos.variant.out') : `${stock} ${t('pos.variant.in_stock')}`}
+                  </div>
                 </button>
               )
             })}
@@ -163,6 +182,34 @@ function VariantPickerModal({ t, product, onClose, onPick }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// The lookup returns one row per source, so the same person can appear several
+// times — once as a CRM contact (`walkin`, carrying boutique_customer_id) and
+// again as a Mi Italia account (`new_mi_italia`, carrying only
+// mi_italia_user_id). Only the CRM row can be attached to an order, so picking
+// the wrong twin silently recorded the sale as Guest.
+//
+// Merge by email (falling back to phone), keeping both ids, and put rows that
+// can actually be linked first.
+function mergeLookupResults(results) {
+  const byKey = new Map()
+  for (const r of results) {
+    const key = (r.email || r.phone || r.boutique_customer_id || r.mi_italia_user_id || '')
+      .toString().trim().toLowerCase()
+    const existing = byKey.get(key)
+    if (!existing) { byKey.set(key, { ...r }); continue }
+    // Keep whichever id each row happens to carry, plus the richer profile.
+    existing.boutique_customer_id = existing.boutique_customer_id ?? r.boutique_customer_id
+    existing.mi_italia_user_id    = existing.mi_italia_user_id    ?? r.mi_italia_user_id
+    existing.platform_profile     = existing.platform_profile     ?? r.platform_profile
+    existing.profile_photo_url    = existing.profile_photo_url    ?? r.profile_photo_url
+    existing.boutique_history     = existing.boutique_history     ?? r.boutique_history
+    if (r.boutique_customer_id) existing.source = r.source
+  }
+  return [...byKey.values()].sort(
+    (a, b) => (b.boutique_customer_id ? 1 : 0) - (a.boutique_customer_id ? 1 : 0)
   )
 }
 
@@ -222,7 +269,7 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
       setSearching(true)
       apiFetch(`${API}/boutique/pos/customers/lookup?q=${encodeURIComponent(search.trim())}`)
         .then(r => r.json())
-        .then(res => { if (res?.success) setResults(res.data?.results ?? []) })
+        .then(res => { if (res?.success) setResults(mergeLookupResults(res.data?.results ?? [])) })
         .catch(err => console.error('[CustomerModal] lookup failed', err))
         .finally(() => setSearching(false))
     }, 300)
@@ -313,8 +360,8 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
 
             {detail && (
               <div className="pos-cust-attached-meta">
-                {detail.segment && <span>{detail.segment}</span>}
-                {detail.tier && <span>{detail.tier}</span>}
+                {detail.segment && <span>{statusLabel(t, detail.segment)}</span>}
+                {detail.tier && <span>{statusLabel(t, detail.tier)}</span>}
                 <span>{t('pos.receipt.order') /* reuse "Order" label context */}: {detail.purchase_count ?? 0}</span>
                 <span>€{Number(detail.boutique_total_spend ?? 0).toFixed(2)}</span>
               </div>
@@ -379,24 +426,38 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
 
             {results.length > 0 && (
               <div className="pos-cust-results">
-                {results.map(r => (
-                  <button
-                    key={r.boutique_customer_id || r.mi_italia_user_id}
-                    className="pos-cust-result"
-                    onClick={() => { onAttach(r); onClose() }}>
-                    <div className="pos-cust-result-av">
-                      {(r.name || '?').split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}
-                    </div>
-                    <div className="pos-cust-result-info">
-                      <div className="pos-cust-result-name">{r.name}</div>
-                      <div className="pos-cust-result-meta">
-                        {r.email || r.phone || '—'}
-                        {r.platform_profile?.tier && <span className="pos-cust-result-tier"> · {r.platform_profile.tier}</span>}
+                {results.map(r => {
+                  // Only a CRM contact can be attached to the order. Say so on
+                  // the row rather than letting the cashier find out afterwards
+                  // when the receipt says Guest.
+                  const linkable = !!r.boutique_customer_id
+                  return (
+                    <button
+                      key={r.boutique_customer_id || r.mi_italia_user_id}
+                      className={`pos-cust-result${linkable ? '' : ' pos-cust-result-unlinked'}`}
+                      onClick={() => { onAttach(r); onClose() }}>
+                      <div className="pos-cust-result-av">
+                        {(r.name || '?').split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase()}
                       </div>
-                    </div>
-                    <span className="material-symbols-outlined pos-cust-result-chev">chevron_right</span>
-                  </button>
-                ))}
+                      <div className="pos-cust-result-info">
+                        <div className="pos-cust-result-name">
+                          {r.name}
+                          <span className={`pos-cust-badge${linkable ? ' crm' : ''}`}>
+                            {linkable
+                              ? t('pos.cust.in_crm', 'In your CRM')
+                              : t('pos.cust.mi_only', 'Mi Italia only')}
+                          </span>
+                        </div>
+                        <div className="pos-cust-result-meta">
+                          {r.email || r.phone || '—'}
+                          {r.platform_profile?.tier && <span className="pos-cust-result-tier"> · {r.platform_profile.tier}</span>}
+                          {!linkable && ` · ${t('pos.cust.not_linked_hint', 'sale records as Guest')}`}
+                        </div>
+                      </div>
+                      <span className="material-symbols-outlined pos-cust-result-chev">chevron_right</span>
+                    </button>
+                  )
+                })}
               </div>
             )}
 
@@ -429,13 +490,13 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
               </div>
               <input
                 className="pos-pay-input"
-                placeholder="Email"
+                placeholder={t('staff.table.email', 'Email')}
                 value={walkin.email}
                 onChange={e => { setWalkin(w => ({ ...w, email: e.target.value })); setDupMatch(null) }}
               />
               <input
                 className="pos-pay-input"
-                placeholder="Phone"
+                placeholder={t('staff.invite_modal.phone_label', 'Phone')}
                 value={walkin.phone}
                 onChange={e => { setWalkin(w => ({ ...w, phone: e.target.value })); setDupMatch(null) }}
               />
@@ -615,6 +676,7 @@ function DiscountModal({ t, current, subtotal, cart, onClose, onApply, onRemove 
 
 // ══ HoldModal (localStorage) ═══════════════════════════════════════════
 function HoldModal({ t, cart, customer, discount, heldCarts, onClose, onSaveNew, onRetrieve, onDelete }) {
+  const lang = useLangStore(s => s.lang)
   const [note, setNote] = useState('')
   const canSave = cart.length > 0
 
@@ -678,7 +740,7 @@ function HoldModal({ t, cart, customer, discount, heldCarts, onClose, onSaveNew,
                     <div className="pos-hold-row-time">
                       {ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       &nbsp;·&nbsp;
-                      {ts.toLocaleDateString()}
+                      {ts.toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB')}
                     </div>
                   </div>
                   <div className="pos-hold-row-actions">
@@ -713,6 +775,7 @@ const RETURN_REASON_TEXT = {
 }
 
 function ReturnModal({ t, onClose }) {
+  const lang = useLangStore(s => s.lang)
   const [search, setSearch]       = useState('')
   const [searching, setSearching] = useState(false)
   const [searched, setSearched]   = useState(false)
@@ -821,7 +884,7 @@ function ReturnModal({ t, onClose }) {
                     <button key={oid} className="pos-ret-order" onClick={() => pickOrder(oid)}>
                       <div>
                         <div className="pos-ret-order-cust">{label}</div>
-                        <div className="pos-ret-order-meta">#{String(oid).slice(0,8)}{when ? ` · ${new Date(when).toLocaleDateString()}` : ''}</div>
+                        <div className="pos-ret-order-meta">#{String(oid).slice(0,8)}{when ? ` · ${new Date(when).toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB')}` : ''}</div>
                       </div>
                       {amt != null && <div className="pos-ret-order-total">{fmt(amt)}</div>}
                     </button>
@@ -837,7 +900,7 @@ function ReturnModal({ t, onClose }) {
             <div className="pos-ret-sel-hdr">
               <div>
                 <div className="pos-ret-sel-cust">{selected.name || selected.email || selected.phone || t('pos.cust.walkin')}</div>
-                <div className="pos-ret-sel-meta">#{String(selected.id).slice(0,8)} · {new Date(selected.created_at).toLocaleDateString()} · {fmt(selected.gross_amount)}</div>
+                <div className="pos-ret-sel-meta">#{String(selected.id).slice(0,8)} · {new Date(selected.created_at).toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB')} · {fmt(selected.gross_amount)}</div>
               </div>
               <button className="btn btn-outline btn-sm" onClick={reset}>
                 {t('pos.ret.change_order')}
@@ -895,6 +958,7 @@ function ReturnModal({ t, onClose }) {
 // GET /boutique/fatture?status=&page=&limit= — confirmed status values so
 // far: 'issued', 'failed'. No 'pending' observed, so that tab was dropped.
 function FattureModal({ t, onClose }) {
+  const lang = useLangStore(s => s.lang)
   const [filter, setFilter]         = useState('all')   // 'all' | 'issued' | 'failed'
   const [fatture, setFatture]       = useState([])
   const [pagination, setPagination] = useState(null)
@@ -963,9 +1027,9 @@ function FattureModal({ t, onClose }) {
                 </span>
                 <span className="pos-fatt-num">{fmt(f.amount)}</span>
                 <span>
-                  <span className={`pos-fatt-badge pos-fatt-badge-${f.status === 'issued' ? 'delivered' : 'error'}`}>{f.status}</span>
+                  <span className={`pos-fatt-badge pos-fatt-badge-${f.status === 'issued' ? 'delivered' : 'error'}`}>{statusLabel(t, f.status)}</span>
                 </span>
-                <span className="pos-fatt-date">{new Date(f.issued_at ?? f.created_at).toLocaleDateString()}</span>
+                <span className="pos-fatt-date">{new Date(f.issued_at ?? f.created_at).toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB')}</span>
               </div>
             ))}
             {fatture.length === 0 && <div className="pos-fatt-empty">{t('pos.fatt.empty')}</div>}
@@ -1166,19 +1230,19 @@ function FixResendModal({ t, onClose }) {
 }
 
 // ══ ReceiptModal (print + email stub) ══════════════════════════════════
-function ReceiptModal({ t, order, cart, customer, rpPolicies, onClose }) {
+function ReceiptModal({ t, order, cart, customer, rpPolicies, boutique, onClose }) {
   const lang = useLangStore(s => s.lang)
   const [email, setEmail] = useState(customer?.email || '')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
 
   function handlePrint() {
-    const html = buildReceiptHtml(order, cart, customer, rpPolicies, lang)
+    const html = buildReceiptHtml(order, cart, customer, rpPolicies, lang, boutique, t)
     const w = window.open('', '', 'width=380,height=800')
     if (!w) { alert('Popup blocked. Please allow popups for this site.'); return }
     w.document.write(html)
     w.document.close()
-    setTimeout(() => { try { w.print() } catch {} }, 300)
+    setTimeout(() => { try { w.print() } catch { /* popup closed before the dialog opened */ } }, 300)
   }
 
   const [emailError, setEmailError] = useState(null)
@@ -1250,7 +1314,14 @@ function ReceiptModal({ t, order, cart, customer, rpPolicies, onClose }) {
 }
 
 // Build a receipt HTML string for the print window
-function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en') {
+// `boutique` is {name, address, city} from GET /boutique/profile, and `t` is
+// passed in so the printed receipt follows the boutique's language.
+//
+// The header used to be hardcoded to "Neglia" / "Corso Venezia, Milano" — the
+// demo boutique from the design source. Every other boutique printed receipts
+// carrying someone else's trading name and address, which for an Italian
+// receipt is a fiscal document problem, not a cosmetic one.
+function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en', boutique = null, t = (k, d) => d) {
   const now = new Date().toLocaleString()
   const getPolicy = (pid) => findById(rpPolicies ?? SEED_POLICIES, pid) ?? findById(SEED_POLICIES, BASELINE_POLICY_ID)
   const rows = (cart ?? []).map(i => {
@@ -1263,7 +1334,7 @@ function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en') {
     </tr>
   `
   }).join('')
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(t('pos.receipt.doc_title', 'Receipt'))}</title>
     <style>
       body{font-family:'Jost',system-ui,sans-serif;padding:16px;color:#0A0A0A;font-size:12px;margin:0;}
       h1{font-family:'Bodoni Moda',Georgia,serif;font-size:22px;font-weight:500;text-align:center;margin:0 0 4px;}
@@ -1282,15 +1353,17 @@ function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en') {
       .ret-note{font-size:9.5px;color:#6E6E6E;margin-top:4px;line-height:1.5;}
       .foot{text-align:center;color:#6E6E6E;font-size:10px;margin-top:16px;}
     </style></head><body>
-    <h1>Neglia</h1>
-    <div class="sub">Corso Venezia, Milano<br>${now}</div>
+    <h1>${escapeHtml(boutique?.name ?? '')}</h1>
+    <div class="sub">${escapeHtml([boutique?.address, boutique?.city].filter(Boolean).join(', '))}${boutique?.address || boutique?.city ? '<br>' : ''}${now}</div>
     ${customer ? '<div class="sub">' + escapeHtml(customer.name) + '</div>' : ''}
     <table>${rows}</table>
     <div class="tot">
-      <div class="tot-row"><span>Subtotal</span><span>€${Number(order?.subtotal ?? 0).toFixed(2)}</span></div>
-      ${Number(order?.promo_discount ?? 0) > 0 ? '<div class="tot-row"><span>Discount</span><span>−€' + Number(order.promo_discount).toFixed(2) + '</span></div>' : ''}
-      <div class="tot-row"><span>VAT (22%)</span><span>€${Number(order?.vat_amount ?? 0).toFixed(2)}</span></div>
-      <div class="tot-row grand"><span>Total</span><span>€${Number(order?.gross_amount ?? 0).toFixed(2)}</span></div>
+      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.subtotal', 'Subtotal'))}</span><span>€${Number(order?.subtotal ?? 0).toFixed(2)}</span></div>
+      ${Number(order?.promo_discount ?? 0) > 0 ? '<div class="tot-row"><span>' + escapeHtml(t('pos.receipt.discount', 'Discount')) + '</span><span>−€' + Number(order.promo_discount).toFixed(2) + '</span></div>' : ''}
+      <!-- VAT rate read from the order, not fixed at 22%: order.vat_rate comes
+           back as a decimal string ("0.2200"). -->
+      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.vat', 'VAT ({{rate}}%)', { rate: (Number(order?.vat_rate ?? 0.22) * 100).toFixed(0) }))}</span><span>€${Number(order?.vat_amount ?? 0).toFixed(2)}</span></div>
+      <div class="tot-row grand"><span>${escapeHtml(t('pos.receipt.total', 'Total'))}</span><span>€${Number(order?.gross_amount ?? 0).toFixed(2)}</span></div>
     </div>
     <div class="ret">
       <div class="ret-lbl">${lang === 'it' ? 'Resi' : 'Returns'}</div>
@@ -1432,7 +1505,7 @@ function ZReportModal({ t, onClose }) {
 // ══ Payment Modal ═════════════════════════════════════════════════════
 // Handles method selection (Cash / Card / Split), doc type (DC / Fattura),
 // simulated card flow (P10=D), and POST /boutique/orders/pos.
-function PaymentModal({ t, cart, customer, discount, subtotal, discountAmount, vat, total, onClose, onSuccess, onNewSale, onReceipt }) {
+function PaymentModal({ t, cart, customer, discount, discountAmount, total, onClose, onSuccess, onNewSale, onReceipt }) {
   const [phase, setPhase] = useState('form')   // 'form' | 'processing' | 'success' | 'error'
   const [payMethod, setPayMethod] = useState('cash')   // 'cash' | 'card' | 'split'
   const [cashTendered, setCashTendered] = useState('')
@@ -1516,6 +1589,10 @@ function PaymentModal({ t, cart, customer, discount, subtotal, discountAmount, v
         body.card_portion = Math.round(cardPortion * 100) / 100
       }
       if (customer?.boutique_customer_id) body.customer_id = customer.boutique_customer_id
+      // `mi_italia_user_id` was sent here as a fallback so an attached account holder
+      // wouldn't record as Guest, but the endpoint 500s on it. Removed until the
+      // backend either accepts that field or returns boutique_customer_id from the
+      // POS customer lookup (which it currently omits, even for existing contacts).
       if (docType === 'fattura') {
         body.fattura_kind = fatturaKind
         body.buyer_name = buyerName.trim()
@@ -1940,20 +2017,32 @@ export default function POS() {
   const [rpPolicies, setRpPolicies]   = useState(SEED_POLICIES)
   const [rpClasses, setRpClasses]     = useState(RETURNS_CLASSES)
   const [rpDefaultId, setRpDefaultId] = useState(BASELINE_POLICY_ID)
+  const [boutique, setBoutique]       = useState(null)
 
+  // Drives the returns line printed on the receipt. Read from the dedicated
+  // returns endpoints — /boutique/profile does not carry this config, so the
+  // receipt was always quoting the built-in defaults rather than the
+  // boutique's own policies.
   useEffect(() => {
-    apiFetch(`${API}/boutique/profile`).then(r => r.json()).then(res => {
-      if (!res.success) return
-      const d = res.data
-      if (Array.isArray(d.returns_policies_json) && d.returns_policies_json.length) setRpPolicies(d.returns_policies_json)
-      if (d.returns_classes_json) {
-        setRpClasses(RETURNS_CLASSES.map(c => ({
-          ...c,
-          map: Object.prototype.hasOwnProperty.call(d.returns_classes_json, c.id) ? d.returns_classes_json[c.id] : c.map,
-        })))
-      }
-      if (d.returns_default_policy_id) setRpDefaultId(d.returns_default_policy_id)
-    }).catch(() => {})
+    let cancelled = false
+    fetchPolicies()
+      .then(({ policies, defaultPolicyId }) => {
+        if (cancelled) return
+        if (policies.length) setRpPolicies(policies)
+        if (defaultPolicyId) setRpDefaultId(defaultPolicyId)
+      })
+      .catch(() => {})
+    fetchClasses()
+      .then(list => { if (!cancelled) setRpClasses(list) })
+      .catch(() => {})
+
+    // Trading name and address for the printed receipt and the topbar — both
+    // were hardcoded to the design source's demo boutique.
+    apiFetch(`${API}/boutique/profile`)
+      .then(r => r.json())
+      .then(res => { if (!cancelled && res.success) setBoutique(res.data ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   // Load products (debounced when searching)
@@ -2032,18 +2121,19 @@ export default function POS() {
       img:             imgSrc(product.main_photo),
       sku:             product.sku,
       qty:             1,
+      stock:           Number(variant.stock_qty ?? 0),
       returnsPolicyId: rpResolved.policyId,
     }
     setCart(prev => {
       const ex = prev.find(i => i.id === cartItem.id)
-      if (ex) return prev.map(i => i.id === cartItem.id ? { ...i, qty: i.qty + 1 } : i)
+      if (ex) return prev.map(i => i.id === cartItem.id ? { ...i, qty: Math.min(ex.stock, i.qty + 1) } : i)
       return [...prev, cartItem]
     })
     setSelectedProduct(null)
   }
 
   function changeQty(id, delta) {
-    setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i))
+    setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, Math.min(i.stock ?? i.qty, i.qty + delta)) } : i))
   }
   function removeItem(id) { setCart(prev => prev.filter(i => i.id !== id)) }
   function clearCart()    { setCart([]) }
@@ -2064,10 +2154,18 @@ export default function POS() {
   // rejecting a split payment whose cash+card portions summed to the
   // discounted-subtotal-then-VAT total instead of this one: VAT is always
   // computed on the full subtotal, and the discount is subtracted after.
-  const vat   = subtotal * 0.22
+  // Italian standard rate. The cart has to show a total before the order
+  // exists, and /boutique/profile carries no vat_rate, so this is fixed here
+  // — see docs/backend-gaps-open.md. The RECEIPT uses order.vat_rate, which
+  // the API does return, so the printed document is always correct.
+  const vat   = subtotal * VAT_RATE
   const total = Math.max(0, subtotal + vat - discountAmount)
 
-  function stub(_name) {}
+  // A barcode scanner is a keyboard device: it types into whatever field has
+  // focus. The search box already posts to ?search=, so the only thing the
+  // camera button needs to do is put the cursor there. It previously called a
+  // no-op stub and did nothing at all.
+  const scanInputRef = useRef(null)
 
   function handleCheckout() {
     if (cart.length === 0) return
@@ -2134,7 +2232,7 @@ export default function POS() {
           </div>
           <div className="pos-tb-store">
             <span className="material-symbols-outlined">store</span>
-            <span>Neglia · Corso Venezia, Milano</span>
+            <span>{[boutique?.name, [boutique?.address, boutique?.city].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}</span>
           </div>
           <div className={`pos-tb-terminal pos-tb-terminal-${terminalStatus}`}>
             <span className={`pos-ts-dot pos-ts-dot-${terminalStatus}`} />
@@ -2180,7 +2278,7 @@ export default function POS() {
                 <div className="pos-tb-staff-menu">
                   <div className="pos-tb-staff-menu-hd">
                     <div className="pos-tb-staff-menu-name">{staff.name}</div>
-                    {staff.role && <div className="pos-tb-staff-menu-role">{staff.role}</div>}
+                    {staff.role && <div className="pos-tb-staff-menu-role">{statusLabel(t, staff.role)}</div>}
                   </div>
                   <button
                     className="pos-tb-staff-menu-item"
@@ -2213,11 +2311,13 @@ export default function POS() {
               <span className="material-symbols-outlined pos-search-ic">search</span>
               <input
                 className="pos-search-input"
+                ref={scanInputRef}
                 placeholder={t('pos.scan_or_search')}
                 value={prodSearch}
                 onChange={e => setProdSearch(e.target.value)}
               />
-              <button className="pos-scan-btn" onClick={() => stub('Barcode scanner')}>
+              <button className="pos-scan-btn" title={t('pos.scan_focus', 'Click, then scan a barcode')}
+                onClick={() => scanInputRef.current?.focus()}>
                 <span className="material-symbols-outlined">photo_camera</span>
               </button>
             </div>
@@ -2337,7 +2437,7 @@ export default function POS() {
                         <span className="material-symbols-outlined">remove</span>
                       </button>
                       <span className="pos-qty-val">{item.qty}</span>
-                      <button className="pos-qty-btn" onClick={() => changeQty(item.id, 1)}>
+                      <button className="pos-qty-btn" onClick={() => changeQty(item.id, 1)} disabled={item.qty >= (item.stock ?? item.qty)}>
                         <span className="material-symbols-outlined">add</span>
                       </button>
                     </div>
@@ -2416,9 +2516,7 @@ export default function POS() {
           cart={cart}
           customer={customer}
           discount={discount}
-          subtotal={subtotal}
           discountAmount={discountAmount}
-          vat={vat}
           total={total}
           onClose={() => setShowPayment(false)}
           onSuccess={handlePaymentSuccess}
@@ -2475,6 +2573,7 @@ export default function POS() {
           cart={cart}
           customer={customer}
           rpPolicies={rpPolicies}
+          boutique={boutique}
           onClose={() => { setActiveModal(null); handleNewSale() }}
         />
       )}

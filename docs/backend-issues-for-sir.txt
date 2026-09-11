@@ -1,0 +1,426 @@
+PRIMO — BACKEND ISSUES, BY TAB
+Date: 10 September 2026
+Boutique used for testing: 77f822c1-1507-4174-ad83-7d087b17a51c
+
+Everything below needs a backend change. Anything fixable in the portal has
+already been fixed and is not listed.
+
+
+################################################################################
+DASHBOARD
+################################################################################
+
+--- GET /boutique/dashboard/stats -------------------------------------------
+
+  pickupRateChangePts is always null
+    The pickup-rate tile has no up/down trend arrow because there is no
+    previous-period value to compare against.
+    NEEDED: populate it, or tell us it is not coming and we will drop the arrow.
+
+  No expiringSoon field
+    We calculate "reservations expiring soon" ourselves from the first 100
+    reservations. A boutique with more than 100 active reservations will
+    under-count.
+    NEEDED: an expiringSoon count in the stats response.
+
+
+--- GET /boutique/reservations ------------------------------------------------
+
+  No status field on the list rows
+    The Dashboard needs both pending and confirmed reservations, and cannot
+    tell them apart from a single response — so it makes two separate calls
+    (three requests in total where one would do).
+    NEEDED: include status on each row.
+
+
+--- Opening a reservation from the Dashboard ---------------------------------
+
+  See RESERVATIONS below — there is no GET /boutique/reservations/:id, so the
+  "View" button has to search all five status lists to find one record.
+
+
+################################################################################
+PRODUCTS
+################################################################################
+
+--- GET /boutique/products ----------------------------------------------------
+
+  days_in_stock is counted from created_at, not from when stock arrived
+
+    WHAT WE SEE
+      "days_in_stock":     3
+      "first_received_at": null      <-- null on every product
+
+    first_received_at is never populated, so days_in_stock appears to count
+    from created_at — the day the product was typed into Primo.
+
+    A boutique that enters stock it has already owned for months sees every
+    item as "Fresh - 3d". It never ages, never enters a markdown bracket, and
+    the Aging & Markdowns tab stays permanently empty. Nothing looks broken,
+    which is why this has not been noticed.
+
+    NEEDED: make first_received_at settable when a product is created, or
+    default it to the first stock movement. Base days_in_stock on it, falling
+    back to created_at only when genuinely unknown.
+
+    (This same field drives Inventory's stock-age badges and the entire
+    Aging & Markdowns feature.)
+
+
+  No product_limit / max_products
+    The "3 / 10" product counter falls back to a build-time constant, so it may
+    show the wrong cap for the boutique's plan.
+    NEEDED: the plan's product cap on the products response (null = unlimited).
+
+  No category_path on the list rows
+    The Print Tag feature cannot show a product's category.
+    NEEDED: category_path in the same "Men's / Jackets & Outerwear / Coats"
+    format the product detail endpoint already uses.
+
+  variant_count is returned as the string "3", not the number 3
+    Cosmetic; we coerce it. Flagging for consistency.
+
+
+--- GET /boutique/brands ------------------------------------------------------
+
+  Is the global brand catalogue meant to be seeded?
+
+    WHAT WE SEE
+      { "success": true, "data": { "own": [], "global": [] } }
+
+    The add-brand flow works end to end — POST /boutique/brands creates a brand,
+    it appears under "own", is selectable, and saves onto the product. So
+    nothing is blocked.
+
+    NEEDED: just confirmation — is "global" meant to hold a Mi Italia-curated
+    catalogue of known designers, or do all brands come from the boutiques
+    themselves? If the former, it is empty on dev.
+
+
+################################################################################
+INVENTORY
+################################################################################
+
+--- GET /boutique/inventory ---------------------------------------------------
+
+  Is this endpoint paginated?
+    GET /boutique/products caps at 20 per page, so the portal loads every page
+    explicitly. The Inventory page assumes /boutique/inventory returns
+    everything in one response.
+
+    If it also pages, a boutique with more products than the page size is
+    seeing partial stock — and every total on that page is wrong.
+
+    NEEDED: confirmation of whether it pages, and the page size if so.
+
+  Is category_path included?
+    The Inventory category filter only renders when at least one row carries
+    category_path. If the field is absent the filter silently hides itself,
+    which looks like a missing feature rather than missing data.
+
+    NEEDED: category_path on each product, same format as above.
+
+
+--- Stock age badges ----------------------------------------------------------
+
+  See PRODUCTS — days_in_stock / first_received_at. The Low Stock and age
+  badges on this page use the same field.
+
+
+################################################################################
+RESERVATIONS
+################################################################################
+
+--- GET /boutique/reservations?status=<status>&limit=100 ----------------------
+
+  The list is capped at 100 with no pagination
+    There are no page/limit parameters, so the portal asks for 100 and shows
+    whatever comes back. A boutique with more than 100 reservations in one
+    status silently sees only the first 100.
+
+    This is worse here than elsewhere: the tab counts come from
+    GET /boutique/reservations/stats, which returns the true totals. So a tab
+    could read "Confirmed (137)" above a list of 100 rows, with nothing
+    explaining the difference.
+
+    NEEDED: page / limit parameters and a pagination block, same shape as
+    /boutique/orders:
+      "pagination": { "page": 1, "limit": 20, "total": 137, "total_pages": 7 }
+
+
+--- GET /boutique/reservations/stats ------------------------------------------
+
+  Field names are inverted relative to the statuses
+
+      stats.pending   ->  the "Active" tab      (status = pending)
+      stats.active    ->  the "Confirmed" tab   (status = confirmed)
+
+    So "active" in the stats response does NOT mean status:active. The portal
+    handles it, but it is a trap for whoever touches this next.
+
+    NEEDED: nothing urgent. If the names can be aligned with the status values
+    (pending / confirmed / collected / expired / cancelled), please tell us
+    before changing them so both sides ship together.
+
+
+--- No endpoint to fetch one reservation by id --------------------------------
+
+  Opening a reservation from a notification, or from the Dashboard's View
+  button, gives us only the id. With no by-id endpoint the portal asks all five
+  status lists at once and uses whichever contains it — five requests to open
+  one record.
+
+  NEEDED: GET /boutique/reservations/:id returning the same object shape as a
+  list row.
+
+
+################################################################################
+ORDERS
+################################################################################
+
+--- GET /boutique/orders  AND  GET /boutique/orders/:id -----------------------
+
+  POS orders show as "Guest" — the customer name is not resolved
+
+    WHAT WE SEE
+      Order ed322bcf-392c-4c93-acb8-449bf95e8a5d
+
+        "user_id":     null
+        "customer_id": "d79f1c0b-28bb-42cf-8de9-5fe8315b904c"   <-- correct
+        "name":        null
+        "email":       null
+        "phone":       null
+
+    Attaching a customer at POS works — customer_id is saved correctly. But
+    name / email / phone come back null, so the Orders tab shows "Guest".
+
+    It looks like those three are joined from user_id only. A POS sale has no
+    user_id (the shopper is not a Mi Italia app user) — it links through
+    customer_id to the boutique's own customer record.
+
+    NEEDED: fall back to customer_id when user_id is null, so name/email/phone
+    populate either way. Required on BOTH endpoints — the Orders table reads
+    name from the list, not the detail.
+
+    NOTE: we have a temporary workaround in the portal — the order detail panel
+    calls GET /boutique/customers/:id when name is null. The LIST still shows
+    "Guest". We will remove the workaround once this is fixed.
+
+
+--- No DHL label endpoint -----------------------------------------------------
+
+  The Orders detail panel has a "Generate DHL Label" button, and the timeline
+  shows "DHL Label - Pending / Generate label to continue". There is no
+  endpoint behind it, so the button does nothing.
+
+  NEEDED: either an endpoint that creates a DHL shipment and returns
+  dhl_tracking_number and dhl_label_url, or confirmation that it is out of
+  scope — in which case we will disable the button so it does not look broken.
+
+
+################################################################################
+POS
+################################################################################
+
+--- GET /boutique/profile -----------------------------------------------------
+
+  No vat_rate field
+    The POS cart has to show a total before the order exists, so it currently
+    calculates VAT at a hardcoded 22%.
+
+    The printed receipt is correct — it uses order.vat_rate, which you do
+    return ("0.2200"). Only the live cart preview is hardcoded.
+
+    NEEDED: a vat_rate on the boutique profile, so the cart uses the boutique's
+    actual rate. Matters for reduced-rate goods and any future rate change.
+
+
+--- GET /boutique/products?search=... -----------------------------------------
+
+  Does the search match barcodes?
+    A barcode scanner is a keyboard device — it types the barcode into the POS
+    search box, which posts straight to ?search=.
+
+    If the search only covers name and SKU, scanning a product finds nothing
+    and the cashier sees an empty result with no explanation.
+
+    NEEDED: confirmation that ?search= also matches the barcode column, and if
+    not, please add it.
+
+
+--- POS orders and the customer name ------------------------------------------
+
+  See ORDERS above — POS is where those "Guest" orders originate.
+
+
+################################################################################
+ENGAGEMENT
+################################################################################
+
+--- The saver count has two different names ------------------------------------
+
+  GET /boutique/marketing/favorites/products  returns  saver_count
+  GET /boutique/markdowns/preview             returns  savers_count
+
+    Same number, two spellings. We handle both, but one of them is probably
+    a typo and will bite whoever touches it next.
+
+    NEEDED: one name on both endpoints.
+
+
+--- GET /boutique/marketing/dashboard -----------------------------------------
+
+  No range parameter
+    The Overview tab shows a "Channel Performance" panel: open rate and click
+    rate per channel. That data only comes from this endpoint, and this
+    endpoint always returns one fixed window.
+
+    There was a "Last 30 days / Last 90 days" picker sitting on that panel. It
+    did nothing at all — it could not, because there is no parameter to send.
+    We have removed it rather than leave a control that lies.
+
+    NEEDED: ?range=30d|90d on this endpoint, same values the analytics
+    endpoint already accepts. Then we put the picker back.
+
+
+--- GET /boutique/marketing/analytics -----------------------------------------
+
+  No per-channel open/click rates
+    This endpoint returns kpis, id_rate, revenue_by_channel, engagement_funnel
+    and campaign_roi — but not the per-channel open/read and click/reply rates
+    the Overview panel needs.
+
+    That is why the panel is stuck on the dashboard endpoint above. If these
+    rates were added here instead, both problems close at once.
+
+    NEEDED: either the range parameter above, or channel_performance added to
+    this response.
+
+
+--- Campaign status values ----------------------------------------------------
+
+  Please confirm the full list
+    We map: sent, draft, scheduled, in_review, recurring. Anything outside
+    that list is shown as-is, tidied up, which will look wrong in Italian.
+
+    NEEDED: the complete set of values status can take.
+
+
+--- Template change requests --------------------------------------------------
+
+  GET /boutique/email-templates/:id/change-requests
+    Same question — we only know 'open'. What else can status be?
+
+
+################################################################################
+AGING & MARKDOWNS
+################################################################################
+
+--- The whole feature depends on days_in_stock --------------------------------
+
+  See PRODUCTS. If first_received_at stays null, a boutique's existing stock
+  never ages out of "Fresh" and no markdown ever triggers.
+
+
+--- GET /boutique/markdowns/approvals -----------------------------------------
+
+  Decimals are returned as strings
+    "current_price": "88.00", "discount_pct": "35.00", "margin_pct": "-602.99"
+
+    while GET /boutique/markdowns/preview returns real numbers for the same
+    data. We handle both; flagging for consistency.
+
+
+--- PATCH /boutique/markdowns/rules -------------------------------------------
+
+  Is this a merge or a replace?
+    We send only the field that changed, e.g. { "rules": [{ "bracket": "aging",
+    "apply_mode": "approval" }] }.
+
+    If the handler replaces the whole rule rather than merging, changing the
+    apply-mode dropdown would silently wipe that bracket's discount_pct.
+
+    NEEDED: confirmation that it merges.
+
+
+--- GET /boutique/markdowns/preview -------------------------------------------
+
+  No reason given when a product has no cost price
+    A product with cost_price: null gets margin_pct: null and is forced to
+    approval. The portal can only show a blank margin, with no way to explain
+    why.
+
+    NEEDED: a reason on the row, e.g. reason: "no_cost", so we can tell the
+    merchant to add a cost price.
+
+
+################################################################################
+FINANCIALS
+################################################################################
+
+--- GET /boutique/financials/overview -----------------------------------------
+
+  Please confirm: does the ecommerce commission cover pickup orders?
+
+    ecommerce_commission.applied_on comes back as 9513.05, which is exactly
+    revenue.ecommerce (5311.15) + revenue.reserve_pickup (4201.90). There is
+    no separate commission entry for reserve_pickup.
+
+    So we have read it as: 8% applies to everything ordered through the
+    platform (ship + reserve), and 3% applies to walk-in POS.
+
+    Our "Sales by channel" table used to put the whole 761.04 on the Ecommerce
+    row, which made that row read "8%" next to a charge that was really 14.3%
+    of its own revenue, and showed pickup as commission-free. We now split it
+    8% / 8% across the two rows — the totals are unchanged either way.
+
+    NEEDED: just a yes/no. If pickup is NOT meant to be charged, then
+    applied_on is wrong and we will change it back.
+
+
+--- Italian bundle: "on" is translated as "il" ---------------------------------
+
+  The fee breakdown reads:  "8% il €9513,05"
+  It should read:           "8% su €9513,05"
+
+    "il" means "the". The key is financials.on.
+
+
+################################################################################
+ALL TABS — TRANSLATIONS
+################################################################################
+
+  Please load the new primo5.json (4,796 keys) and BUMP translationsVersion.
+  The portal caches the bundle keyed on that version string, so browsers keep
+  serving the old bundle until it changes.
+
+  Changes since the last file: 125 keys added, 17 removed, 0 existing values
+  modified — nothing already translated is affected.
+
+  Also: around 760 keys in the bundle are no longer used by the portal,
+  including the entire "marketing.*" section (44 keys) — that screen was
+  replaced by Engagement. Not worth translating. We will send an exact removal
+  list once every tab has been reviewed.
+
+
+################################################################################
+ALREADY FIXED — THANK YOU
+################################################################################
+
+  POST /boutique/markdowns/approvals/:id/approve
+    Postgres "FOR UPDATE cannot be applied to the nullable side of an outer
+    join" — now working.
+
+  POST /boutique/markdowns/apply-auto
+    product_price_history_source_check constraint violation — now working.
+
+  returns_policy_override_id
+    Now accepts the policy id and resolves correctly; returns_resolved confirms
+    source: "product".
+
+  size_chart
+    Now round-trips on PUT/GET /boutique/products/:id.
+
+  Variant reconciliation
+    Removing a colour and updating an existing variant's stock now persist
+    correctly on PUT /boutique/products/:id.

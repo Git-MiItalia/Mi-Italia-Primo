@@ -366,7 +366,7 @@ export default function Support() {
                   <span className="material-symbols-outlined sup-upload-selected-icon">description</span>
                   <span className="sup-upload-selected-name">{attachFile.name}</span>
                   <span className="material-symbols-outlined sup-upload-selected-remove"
-                    title={t('sup.form.remove_title')} onClick={() => setAttachFile(null)}>close</span>
+                    title={t('sup.form.remove_title', 'Remove attachment')} onClick={() => setAttachFile(null)}>close</span>
                 </div>
               )}
             </div>
@@ -529,12 +529,12 @@ export default function Support() {
                                     <span className="material-symbols-outlined">description</span>
                                     {followUpFile.name}
                                     <span className="material-symbols-outlined sup-attach-chip-remove"
-                                      title={t('sup.form.remove_title')} onClick={() => setFollowUpFile(null)}>close</span>
+                                      title={t('sup.form.remove_title', 'Remove attachment')} onClick={() => setFollowUpFile(null)}>close</span>
                                   </div>
                                 )}
                               </div>
                               <button className="btn btn-outline btn-sm sup-attach-btn"
-                                title={t('sup.form.attach_title')}
+                                title={t('sup.form.attach_title', 'Attach a file')}
                                 onClick={() => followUpFileInputRef.current?.click()}
                                 disabled={sendingFollowUp}>
                                 <span className="material-symbols-outlined">attach_file</span>
@@ -563,7 +563,7 @@ export default function Support() {
                             <button className="btn btn-outline btn-xs sup-reopen-btn"
                               onClick={() => setTicketStatus(tk.id, 'open')}
                               disabled={resolving}>
-                              {resolving ? t('sup.tickets.reopening_btn') : t('sup.tickets.reopen_btn')}
+                              {resolving ? t('sup.tickets.reopening_btn', 'Reopening') + '…' : t('sup.tickets.reopen_btn', 'Reopen ticket')}
                             </button>
                           </div>
                         )}

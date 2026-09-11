@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isWhatsappEnabled } from '../lib/auth'
 
 // ─── Pipeline template ───────────────────────────────────
 // Moved inside component for t() access
@@ -438,12 +439,12 @@ export default function Returns() {
                     </div>
                   )}
 
-                  <button className="btn btn-whatsapp"
+                  {isWhatsappEnabled() && <button className="btn btn-whatsapp"
                     style={{ width:'100%', justifyContent:'center' }}
                     onClick={() => whatsapp(selected)}>
                     <span className="material-symbols-outlined">chat_bubble</span>
                     {t('ret.actions.whatsapp', { name: selected.customer })}
-                  </button>
+                  </button>}
                 </div>
               </div>
             </>

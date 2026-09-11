@@ -145,7 +145,7 @@ export default function ColourVariants({ initialColours, onColourChange, onColou
     <>
       <div className="card">
         <div className="cv-hdr">
-          <div className="card-title">Colour <em>Variants</em></div>
+          <div className="card-title">{t('inventory.table.colour', 'Colour')} <em>{t('colour_variants.title_em', 'Variants')}</em></div>
           {!adding ? (
             <button className="btn btn-sm btn-outline" onClick={openAdding}>
               <span className="material-symbols-outlined">add</span>{t('colour_variants.add_btn')}

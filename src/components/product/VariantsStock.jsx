@@ -55,7 +55,7 @@ export default function VariantsStock({ sizes, colours, onStockChange, initialSt
           next[si][c.id] = existing
             ? { qty: existing.qty, active: existing.active ?? true }
             : fromVariant
-            ? { qty: fromVariant.stock_qty ?? 0, active: true }
+            ? { qty: fromVariant.stock_qty ?? 0, active: fromVariant.is_active ?? fromVariant.active ?? true }
             : { qty: 0, active: true }
         })
       })
@@ -104,7 +104,7 @@ export default function VariantsStock({ sizes, colours, onStockChange, initialSt
   return (
     <div className="card">
       <div className="card-hdr">
-        <div className="card-title">Variants &amp; <em>Stock</em></div>
+        <div className="card-title">{t('variants_stock.title', 'Variants &')} <em>{t('variants_stock.title_em', 'Stock')}</em></div>
         {hasData && (
           <button className="btn btn-sm btn-primary vs-save-btn" onClick={saveStock}>
             {saved

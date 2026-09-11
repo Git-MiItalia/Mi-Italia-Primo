@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { statusLabel } from '../lib/statusLabel'
 
 const returns = [
   { id:'RET-084', customer:'Sarah Mitchell', item:'Nylon Vest · M',   reason:'Wrong size',         value:'€598.00', opened:'Mar 20', status:'Open',        statusCls:'pending', order:'MI-4821', rowBg:'rgba(184,149,90,0.02)' },
@@ -75,7 +76,7 @@ export default function Returns() {
                     <td>{r.reason}</td>
                     <td>{r.value}</td>
                     <td>{r.opened}</td>
-                    <td><span className={`status ${r.statusCls}`}>{r.status}</span></td>
+                    <td><span className={`status ${r.statusCls}`}>{statusLabel(t, r.status)}</span></td>
                   </tr>
                 ))}
               </tbody>

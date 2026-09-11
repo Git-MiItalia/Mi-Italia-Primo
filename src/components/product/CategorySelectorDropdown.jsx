@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCategoryTree, findDivision, findType, getAttrNames } from '../../lib/categoryTree'
 
 function initState() { return { l1:null, l2:null, l3:null, l4:[] } }
@@ -19,6 +20,7 @@ function SelectWrap({ label, value, onChange, options, placeholder, disabled }) 
 }
 
 export default function CategorySelectorDropdown({ onChange }) {
+  const { t } = useTranslation()
   const { tree, loading } = useCategoryTree()
   const [state, setState] = useState(initState())
 
@@ -61,7 +63,7 @@ export default function CategorySelectorDropdown({ onChange }) {
 
       {/* L1 */}
       <SelectWrap
-        label="Division"
+        label={t('catsel.division', 'Division')}
         value={state.l1}
         onChange={selectL1}
         options={l1Options}
@@ -72,22 +74,22 @@ export default function CategorySelectorDropdown({ onChange }) {
       {/* L2 */}
       {state.l1 && (
         <SelectWrap
-          label="Category"
+          label={t('catsel.category', 'Category')}
           value={state.l2}
           onChange={selectL2}
           options={l2Options}
-          placeholder="Select category…"
+          placeholder={t('catsel.category_placeholder', 'Select category…')}
         />
       )}
 
       {/* L3 */}
       {state.l2 && (
         <SelectWrap
-          label="Style"
+          label={t('catsel.style', 'Style')}
           value={state.l3}
           onChange={selectL3}
           options={l3Options}
-          placeholder="Select style…"
+          placeholder={t('catsel.style_placeholder', 'Select style…')}
         />
       )}
 
@@ -111,7 +113,7 @@ export default function CategorySelectorDropdown({ onChange }) {
       {/* L4 chips — second line, right of result */}
       {state.l3 && l4Options.length > 0 && (
         <div className="catsel-row">
-          <label className="catsel-lbl">Occasion <span className="catsel-optional">(optional)</span></label>
+          <label className="catsel-lbl">{t('catsel.occasion', 'Occasion')} <span className="catsel-optional">{t('catsel.optional', '(optional)')}</span></label>
           <div className="catsel-chips">
             {l4Options.map(a => (
               <div key={a} className={`catsel-chip${state.l4.includes(a) ? ' sel' : ''}`} onClick={() => toggleAttr(a)}>

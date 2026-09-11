@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input'
+import 'react-phone-number-input/style.css'
 import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
@@ -104,6 +106,10 @@ export default function AddLocation() {
     if (step === 1) {
       if (!form.name.trim() || !form.city.trim()) {
         setBasicError(t('locations.wizard.basic_required', 'Add at least a location name and city to continue.'))
+        return
+      }
+      if (form.phone && !isValidPhoneNumber(form.phone)) {
+        setBasicError(t('locations.wizard.invalid_phone', 'Not a valid phone number'))
         return
       }
     }
@@ -249,7 +255,7 @@ export default function AddLocation() {
         {activateError && <div className="alert locwiz-error">{activateError}</div>}
 
         <div className="locwiz-nav-row">
-          {step > 1 ? <button className="btn btn-outline" onClick={prev}>{t('locations.wizard.back', 'Back')}</button> : <span />}
+          {step > 1 ? <button className="btn btn-outline" onClick={prev}>{t('common.back', 'Back')}</button> : <span />}
           {step < MAX_STEP ? (
             <button className="btn btn-primary" onClick={next}>
               {t('locations.wizard.continue', 'Continue')}<span className="material-symbols-outlined">arrow_forward</span>
@@ -257,7 +263,7 @@ export default function AddLocation() {
           ) : (
             <button className="btn btn-primary" onClick={activate} disabled={activating}>
               <span className="material-symbols-outlined">add_business</span>
-              {activating ? t('locations.wizard.activating', 'Activating…') : t('locations.wizard.activate', 'Activate location')}
+              {activating ? t('locations.wizard.activating', 'Activating') + '…' : t('locations.wizard.activate', 'Activate location')}
             </button>
           )}
         </div>
@@ -307,7 +313,19 @@ function StepBasic({ form, setField, t, error }) {
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
           </select></div>
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.phone', 'Phone')}</label>
-          <input className="form-input" value={form.phone} onChange={e => setField('phone', e.target.value)} placeholder="+39 055 000000" /></div>
+          <PhoneInput
+            international
+            defaultCountry={form.country || 'IT'}
+            value={form.phone}
+            onChange={v => setField('phone', v || '')}
+            className="sp-phone-input"
+          />
+          {form.phone && !isValidPhoneNumber(form.phone) && (
+            <div className="form-hint sp-phone-hint-invalid">
+              {t('locations.wizard.invalid_phone', 'Not a valid phone number')}
+            </div>
+          )}
+        </div>
       </div>
       <div className="form-group"><label className="form-lbl">{t('locations.wizard.email', 'Email')}</label>
         <input className="form-input" type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="firenze@sartoriabelloni.it" /></div>
@@ -339,7 +357,7 @@ function StepCatalogue({ form, pick, existingLocations, t }) {
         {form.catalogue === 'copy' && (
           <div className="locwiz-sub-field">
             <select className="form-select" value={form.copySource} onChange={e => { e.stopPropagation(); pick('copySource', e.target.value) }} onClick={e => e.stopPropagation()}>
-              <option value="">{t('locations.wizard.pick_location', 'Select a location…')}</option>
+              <option value="">{t('locations.wizard.pick_location', 'Select a location') + '…'}</option>
               {existingLocations.map(l => <option key={l.id} value={l.id}>{shortName(l.name)}</option>)}
             </select>
           </div>
@@ -436,7 +454,7 @@ function StepTeam({ t, staffList, assigned, toggleAssign, manager, setManager, i
           {inviteError && <div className="alert locwiz-error">{inviteError}</div>}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={inviting}>
-              <span className="material-symbols-outlined">send</span>{inviting ? t('locations.wizard.sending', 'Sending…') : t('locations.wizard.send_invite', 'Send invite')}
+              <span className="material-symbols-outlined">send</span>{inviting ? t('locations.wizard.sending', 'Sending') + '…' : t('locations.wizard.send_invite', 'Send invite')}
             </button>
             <button className="btn btn-outline btn-sm" onClick={cancelInvite}>{t('common.cancel', 'Cancel')}</button>
           </div>
@@ -520,7 +538,7 @@ function StepReview({ t, form, staffList, assigned, manager, goStep, existingLoc
           <div key={k} className="locwiz-rev-row">
             <div className="k">{k}</div>
             <div className="v">{v}</div>
-            <div className="ed" onClick={() => goStep(n)}>{t('locations.wizard.edit', 'Edit')}</div>
+            <div className="ed" onClick={() => goStep(n)}>{t('common.edit', 'Edit')}</div>
           </div>
         ))}
       </div>

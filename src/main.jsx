@@ -1,6 +1,6 @@
 
 import 'material-symbols/outlined.css'
-import './i18n/index.js'
+//import './lib/i18n.js'
 import './app-additions.css'
 import './App.css'
 import './styles/fonts.css'

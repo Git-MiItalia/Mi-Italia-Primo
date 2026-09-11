@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import i18n from '../i18n'
+import i18n from '../lib/i18n'
+import { readCache, writeCache } from '../lib/i18nCache'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -19,8 +20,16 @@ const useLangStore = create((set) => ({
       })
       const data = await res.json()
       if (data.success) {
-        const bundle = data.data.translatedData.bundle  // ← note .bundle here
-        i18n.addResourceBundle(lang, 'translation', bundle, true, true)
+        // This endpoint returns the bundle as `translatedData` directly, with no
+        // `.bundle` wrapper — reading `.bundle` gave undefined, so switching
+        // language loaded no words and fell back to English until a refresh
+        // pulled them from the other endpoint. Accept either shape.
+        const payload = data.data.translatedData
+        const bundle  = payload?.bundle ?? payload
+        if (bundle && typeof bundle === 'object') {
+          i18n.addResourceBundle(lang, 'translation', bundle, true, true)
+          writeCache(lang, data.data.translationsVersion ?? null, bundle)
+        }
       }
     } catch {}
 
@@ -37,11 +46,29 @@ const useLangStore = create((set) => ({
       })
       const data = await res.json()
       if (data.success) {
-        const bundle = data.data.translatedData  // ← no .bundle here (GET response)
-        const locale = data.data.preferred_locale || 'en'
+        const bundle  = data.data.translatedData  // ← no .bundle here (GET response)
+        const locale  = data.data.preferred_locale || 'en'
+        const version = data.data.translationsVersion ?? null
+
+        const cached = readCache()
+        // Same locale and same version hash means i18n already has this exact
+        // bundle, applied from cache before the first render. Calling
+        // changeLanguage anyway would emit languageChanged, re-render every
+        // view and re-run its language-dependent effect — refetching all page
+        // data for no reason. So on an unchanged visit, do nothing.
+        const alreadyApplied =
+          !!cached && cached.locale === locale && !!version && cached.version === version && i18n.language === locale
+
+        writeCache(locale, version, bundle)
+        localStorage.setItem('primo_lang', locale)
+
+        if (alreadyApplied) {
+          set({ lang: locale })
+          return
+        }
+
         i18n.addResourceBundle(locale, 'translation', bundle, true, true)
         i18n.changeLanguage(locale)
-        localStorage.setItem('primo_lang', locale)
         set({ lang: locale })
       }
     } catch (err) {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { timeAgo } from '../lib/timeAgo'
 import useLangStore from '../store/langStore'
 import Toast, { useToast } from '../components/ui/Toast'
 
@@ -97,16 +98,9 @@ function resetLabel(iso) {
   return `resets ${d.getDate()} ${d.toLocaleString('en', { month:'short' })}`
 }
 
-function timeAgo(iso) {
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return ''
-  const mins = Math.round((Date.now() - t) / 60000)
-  if (mins < 1)  return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.round(mins / 60)
-  if (hrs < 24)  return `${hrs}h ago`
-  return `${Math.round(hrs / 24)}d ago`
-}
+// Was a local copy returning English literals, so generation history read
+// "3m ago" in English on an Italian page — and worded it differently from the
+// Notifications copy ("3 min ago"). Both now use lib/timeAgo.js.
 
 // Batch sheets carry display labels ('3:4 STORE', '4 at a time'); the API wants
 // the bare value.
@@ -1273,7 +1267,7 @@ function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenera
                   <div className="gen-card-name">{product?.name || t('ais.hub.untitled_product', 'Untitled product')}</div>
                   <div className="gen-card-meta">
                     <span className="material-symbols-outlined">auto_awesome</span>
-                    {failure || generationBriefLine(g) || timeAgo(g.created_at)}
+                    {failure || generationBriefLine(g) || timeAgo(t, g.created_at)}
                   </div>
                 </div>
               </div>
@@ -1921,7 +1915,7 @@ function GenerateScreen({
                       <span style={{fontSize:7.5,fontWeight:700,letterSpacing:'0.6px',color:g.status==='completed'?'var(--green)':g.status==='failed'?'var(--red)':'var(--gold)'}}>{genStatusLabel(g.status, t).toUpperCase()}</span>
                     </div>
                     <div style={{fontSize:9.5,color:'var(--stone)',lineHeight:1.45}}>
-                      {failure || t('ais.history.variants_line', '{{n}} variants · {{aspect}} · {{ago}}', { n: g.image_count || generationOutputs(g).length || 0, aspect: g.aspect || '', ago: timeAgo(g.created_at) })}
+                      {failure || t('ais.history.variants_line', '{{n}} variants · {{aspect}} · {{ago}}', { n: g.image_count || generationOutputs(g).length || 0, aspect: g.aspect || '', ago: timeAgo(t, g.created_at) })}
                     </div>
                   </div>
                   <button className="preset-action" title={t('ais.history.reload_title', 'Reload this brief')} onClick={() => reopenShoot(g)}>
@@ -2803,7 +2797,7 @@ function BatchScreen({
                       {t('ais.batch.session_row_head', '{{name}} · {{n}} product(s)', { name: s.look_snapshot?.name || t('ais.history.custom_look', 'Custom look'), n: p.total || 0 })}
                     </div>
                     <div style={{fontSize:9.5,color:'var(--stone)'}}>
-                      {t('ais.batch.session_row_sub', '{{aspect}} · {{n}} poses · {{ago}}', { aspect: s.aspect, n: (s.poses || []).length, ago: timeAgo(s.created_at) })}
+                      {t('ais.batch.session_row_sub', '{{aspect}} · {{n}} poses · {{ago}}', { aspect: s.aspect, n: (s.poses || []).length, ago: timeAgo(t, s.created_at) })}
                     </div>
                   </div>
                   <div style={{fontSize:8,fontWeight:700,letterSpacing:'0.6px',padding:'3px 6px',

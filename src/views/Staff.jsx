@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
@@ -11,6 +12,9 @@ const AVATAR_COLORS = [
   { bg:'rgba(0,108,53,.12)',  fg:'#006C35' },
 ]
 
+// TODO(i18n): the bundle has no keys for these row labels — they still need
+// translating. Same for "Total Staff", "Pending Invite", "Assign to Store",
+// "Resend", "Invite Pending" and the two role descriptions below.
 const PERMISSIONS = [
   ['View Dashboard',        true,  true,  true  ],
   ['Add / Edit Products',   true,  true,  false ],
@@ -48,6 +52,8 @@ function PermIcon({ val }) {
 }
 
 export default function Staff() {
+  const { t } = useTranslation()
+
   const [staff,   setStaff]   = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -93,8 +99,16 @@ export default function Staff() {
       .catch(() => {})
   }, [])
 
+  // Role label for a value coming back from the API, so the pill and the
+  // matrix headers read in the viewer's language rather than raw 'manager'.
+  function roleLabel(role) {
+    if (role === 'owner')   return t('staff.roles.owner')
+    if (role === 'manager') return t('staff.roles.manager')
+    return t('staff.roles.staff')
+  }
+
   function inviteStaff() {
-    if (!invName || !invEmail) { setInvError('Name and email are required.'); return }
+    if (!invName || !invEmail) { setInvError(t('staff.invite_modal.error_required')); return }
     setInviting(true); setInvError('')
     apiFetch(`${API}/boutique/staff/invite`, {
       method: 'POST',
@@ -156,7 +170,7 @@ export default function Staff() {
         <div>
           {/* Header */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-            <h3 style={{ fontSize:17 }}>Staff <em style={{ color:'var(--gold)', fontStyle:'italic' }}>Accounts</em></h3>
+            <h3 style={{ fontSize:17 }}>{t('staff.title')} <em style={{ color:'var(--gold)', fontStyle:'italic' }}>Accounts</em></h3>
             <button className="btn btn-primary" onClick={() => setShowInvite(true)}>
               <span className="material-symbols-outlined">person_add</span>Invite Staff
             </button>
@@ -169,7 +183,7 @@ export default function Staff() {
               <div className="stat-val">{totalStaff}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-lbl">Active</div>
+              <div className="stat-lbl">{t('common.active')}</div>
               <div className="stat-val">{activeNow}</div>
             </div>
             <div className="stat-card">
@@ -184,13 +198,13 @@ export default function Staff() {
               <div className="card-title">
                 {boutiqueName
                   ? <>{boutiqueName.split(' ').slice(0, -1).join(' ')} <em>{boutiqueName.split(' ').slice(-1)}</em></>
-                  : 'Your <em>Team</em>'}
+                  : t('staff.team_overview')}
               </div>
             </div>
-            
+
             {loading && (
               <div style={{ padding:'30px', textAlign:'center', color:'var(--stone)', fontSize:12 }}>
-                Loading staff…
+                {t('staff.loading')}
               </div>
             )}
 
@@ -218,7 +232,7 @@ export default function Staff() {
                         {member.role === 'owner' && (
                           <span className="material-symbols-outlined" style={{ fontSize: 11 }}>workspace_premium</span>
                         )}
-                        {member.role}
+                        {roleLabel(member.role)}
                       </span>
                     </div>
                     <div className="staff-email">{member.email}</div>
@@ -228,14 +242,14 @@ export default function Staff() {
                     {member.pending ? (
                       <>
                         <button className="btn btn-sm btn-outline">Resend</button>
-                        <button className="btn btn-sm btn-red" onClick={() => setDeleteConfirm(member.id)}>Cancel</button>
+                        <button className="btn btn-sm btn-red" onClick={() => setDeleteConfirm(member.id)}>{t('common.cancel')}</button>
                       </>
                     ) : member.role === 'owner' ? (
-                      <button className="btn btn-sm btn-outline" onClick={() => openEdit(member)}>Edit</button>
+                      <button className="btn btn-sm btn-outline" onClick={() => openEdit(member)}>{t('common.edit')}</button>
                     ) : (
                       <>
-                        <button className="btn btn-sm btn-outline" onClick={() => openEdit(member)}>Edit</button>
-                        <button className="btn btn-sm btn-red" onClick={() => setDeleteConfirm(member.id)}>Remove</button>
+                        <button className="btn btn-sm btn-outline" onClick={() => openEdit(member)}>{t('common.edit')}</button>
+                        <button className="btn btn-sm btn-red" onClick={() => setDeleteConfirm(member.id)}>{t('common.remove')}</button>
                       </>
                     )}
                   </div>
@@ -248,15 +262,15 @@ export default function Staff() {
         {/* ── Right column — Permissions matrix ── */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">Role <em>Permissions</em></div>
+            <div className="card-title">Role <em>{t('staff.perms.title')}</em></div>
           </div>
           <table className="perm-matrix">
             <thead>
               <tr>
                 <th>Permission</th>
-                <th>Owner</th>
-                <th>Manager</th>
-                <th>Staff</th>
+                <th>{t('staff.roles.owner')}</th>
+                <th>{t('staff.roles.manager')}</th>
+                <th>{t('staff.roles.staff')}</th>
               </tr>
             </thead>
             <tbody>
@@ -300,7 +314,7 @@ export default function Staff() {
               <input className="form-input" value={invName} onChange={e => setInvName(e.target.value)} placeholder="First and last name" />
             </div>
             <div className="form-group">
-              <label className="form-lbl">Role</label>
+              <label className="form-lbl">{t('staff.invite_modal.role_label')}</label>
               <select className="form-select" value={invRole} onChange={e => setInvRole(e.target.value)}>
                 <option value="staff">Staff — POS, reservations, view orders</option>
                 <option value="manager">Manager — + products, discounts, DHL labels</option>
@@ -311,10 +325,10 @@ export default function Staff() {
               <input className="form-input" value={boutiqueName} readOnly style={{ color:'var(--stone)' }} />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowInvite(false)}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => setShowInvite(false)}>{t('common.cancel')}</button>
               <button className="btn btn-primary" onClick={inviteStaff} disabled={inviting}>
                 <span className="material-symbols-outlined">send</span>
-                {inviting ? 'Sending…' : 'Send Invitation'}
+                {inviting ? t('staff.invite_modal.sending') : 'Send Invitation'}
               </button>
             </div>
           </div>
@@ -326,49 +340,49 @@ export default function Staff() {
         <div className="modal-backdrop" onClick={() => setEditMember(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <span className="modal-title">{editMember.name} — <em>Profile</em></span>
+              <span className="modal-title">{editMember.name} — <em>{t('staff.edit_modal.title_em')}</em></span>
               <span className="modal-close" onClick={() => setEditMember(null)}>
                 <span className="material-symbols-outlined">close</span>
               </span>
             </div>
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">Full Name</label>
+                <label className="form-lbl">{t('staff.edit_modal.name_label')}</label>
                 <input className="form-input" value={editName} onChange={e => setEditName(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">Email</label>
+                <label className="form-lbl">{t('staff.edit_modal.email_label')}</label>
                 <input className="form-input" value={editMember.email} readOnly style={{ color:'var(--stone)' }} />
               </div>
             </div>
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">Role</label>
+                <label className="form-lbl">{t('staff.edit_modal.role_label')}</label>
                 <select className="form-select" value={editRole} onChange={e => setEditRole(e.target.value)}>
-                  <option value="staff">Staff</option>
-                  <option value="manager">Manager</option>
-                  <option value="owner">Owner</option>
+                  <option value="staff">{t('staff.roles.staff')}</option>
+                  <option value="manager">{t('staff.roles.manager')}</option>
+                  <option value="owner">{t('staff.roles.owner')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-lbl">Status</label>
+                <label className="form-lbl">{t('staff.edit_modal.status_label')}</label>
                 <select className="form-select" value={editActive ? 'active' : 'inactive'} onChange={e => setEditActive(e.target.value === 'active')}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">{t('staff.status.active')}</option>
+                  <option value="inactive">{t('staff.status.inactive')}</option>
                 </select>
               </div>
             </div>
             <div style={{ fontSize:10, color:'var(--stone)', marginBottom:16 }}>
-              Joined: {fmtDate(editMember.created_at)} · Last login: {fmtDate(editMember.last_login_at)}
+              {t('staff.table.joined')}: {fmtDate(editMember.created_at)} · {t('staff.table.last_login')}: {fmtDate(editMember.last_login_at)}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setEditMember(null)}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => setEditMember(null)}>{t('common.cancel')}</button>
               <button className="btn btn-red btn-sm" onClick={() => setDeleteConfirm(editMember.id)}>
-                <span className="material-symbols-outlined">person_off</span>Remove
+                <span className="material-symbols-outlined">person_off</span>{t('common.remove')}
               </button>
               <button className="btn btn-primary" onClick={saveEdit} disabled={editSaving}>
                 <span className="material-symbols-outlined">save</span>
-                {editSaving ? 'Saving…' : 'Save Changes'}
+                {editSaving ? t('staff.edit_modal.saving') : t('staff.edit_modal.save_btn')}
               </button>
             </div>
           </div>
@@ -384,10 +398,10 @@ export default function Staff() {
               Staff <em style={{ color:'var(--gold)' }}>Invited</em>
             </div>
             <div style={{ fontSize:11, color:'var(--stone)', lineHeight:1.7, marginBottom:20 }}>
-              <strong>{inviteSuccess.name}</strong> has been added as <strong>{inviteSuccess.role}</strong>.<br />
+              {t('staff.invite_success.msg1', { name: inviteSuccess.name, role: roleLabel(inviteSuccess.role) })}<br />
               An invitation email has been sent to <strong>{inviteSuccess.email}</strong>.
             </div>
-            <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }} onClick={() => setInviteSuccess(null)}>Done</button>
+            <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }} onClick={() => setInviteSuccess(null)}>{t('common.done')}</button>
           </div>
         </div>
       )}
@@ -397,18 +411,18 @@ export default function Staff() {
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">Remove <em>Staff Member</em></div>
+              <div className="modal-title">{t('staff.delete_modal.title')} <em>{t('staff.delete_modal.title_em')}</em></div>
               <button className="modal-close" onClick={() => setDeleteConfirm(null)}>
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="modal-intro">
-              Are you sure you want to remove <strong>{staff.find(s => s.id === deleteConfirm)?.name}</strong>? They will lose access to Primo immediately.
+              {t('staff.delete_modal.msg', { name: staff.find(s => s.id === deleteConfirm)?.name })}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</button>
               <button className="btn btn-red" onClick={() => removeStaff(deleteConfirm)}>
-                <span className="material-symbols-outlined">person_off</span>Remove
+                <span className="material-symbols-outlined">person_off</span>{t('staff.delete_modal.remove_btn')}
               </button>
             </div>
           </div>

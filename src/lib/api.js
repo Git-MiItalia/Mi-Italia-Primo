@@ -21,6 +21,8 @@ export async function apiFetch(input, init = {}) {
   } catch {
     // Server is down / unreachable — clear token and redirect to login
     localStorage.removeItem('primo_token')
+    localStorage.removeItem('primo_staff')
+    localStorage.removeItem('primo_whatsapp_enabled')
     window.location.href = '/login'
     return new Promise(() => {})
   }
@@ -28,6 +30,8 @@ export async function apiFetch(input, init = {}) {
   // Token invalid or expired — redirect to login
   if (response.status === 401) {
     localStorage.removeItem('primo_token')
+    localStorage.removeItem('primo_staff')
+    localStorage.removeItem('primo_whatsapp_enabled')
     window.location.href = '/login'
     return new Promise(() => {})
   }

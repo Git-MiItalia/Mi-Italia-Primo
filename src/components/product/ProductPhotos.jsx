@@ -132,7 +132,7 @@ export default function ProductPhotos({ productId, initialPhotos = [], onNeedPub
     <>
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">Product <em>Photos</em></div>
+          <div className="card-title">{t('add_product.details.title', 'Product')} <em>{t('photos.title_em', 'Photos')}</em></div>
           <div className="pp-hdr-actions">
             {uploading && <span className="pp-uploading">{t('photos.uploading')}</span>}
             <button className="btn btn-sm btn-outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>

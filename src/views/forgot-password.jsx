@@ -70,7 +70,7 @@ export default function ForgotPassword() {
                   />
                 </div>
                 <button className="btn btn-primary auth-submit-btn" type="submit" disabled={loading}>
-                  {loading ? t('forgot_password.sending', 'Sending…') : t('forgot_password.send_btn', 'Send Reset Link')}
+                  {loading ? t('forgot_password.sending', 'Sending') + '…' : t('forgot_password.send_btn', 'Send Reset Link')}
                 </button>
               </form>
             </>

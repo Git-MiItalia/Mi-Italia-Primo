@@ -1,10 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
+import { statusLabel as statusLabelShared } from '../lib/statusLabel'
+import { dayAgo } from '../lib/timeAgo'
 import RangeBar from '../components/ui/RangeBar'
-import { PR_TODAY } from '../lib/dateHelpers'
+import { PR_TODAY, fmtDateLocalized, activeLocale } from '../lib/dateHelpers'
 
 const API = import.meta.env.VITE_API_URL
+
+// Consent values that actually mean the boutique can reach this contact.
+// WhatsApp is excluded when the boutique has no entitlement — otherwise a
+// contact who opted into WhatsApp ONLY counts as reachable and never shows
+// the 'Opt-in request pending' state, when in practice nothing can be sent.
+function reachableConsents(c) {
+  return isWhatsappEnabled() ? [c.email, c.wa, c.print] : [c.email, c.print]
+}
 const LANG_MAP = {
   it: { flag:'🇮🇹', name:'Italian' },
   fr: { flag:'🇫🇷', name:'French' },
@@ -35,16 +46,12 @@ function langDisplayName(code, t) {
   return names[code] || code
 }
 
-function timeAgo(iso, t) {
-  if (!iso) return '—'
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (days <= 0)    return t('eng.time.today', 'Today')
-  if (days === 1)   return t('eng.time.yesterday', 'Yesterday')
-  if (days < 7)     return t('eng.time.days_ago', { count: days, defaultValue: '{{count}} days ago' })
-  if (days < 30)    return t('eng.time.weeks_ago', { count: Math.floor(days/7), defaultValue: '{{count}} week(s) ago' })
-  if (days < 365)   return t('eng.time.months_ago', { count: Math.floor(days/30), defaultValue: '{{count}} month(s) ago' })
-  return t('eng.time.years_ago', { count: Math.floor(days/365), defaultValue: '{{count}} year(s) ago' })
-}
+// The day-level relative date now lives in lib/timeAgo.js, shared with
+// Notifications and AI Model Studio, which each had their own English-only
+// copy. `dayAgo` is this function's exact previous behaviour, down to the same
+// bundle keys; the argument order is flipped there, so this keeps the five
+// existing call sites as they are.
+const timeAgo = (iso, t) => dayAgo(t, iso)
 
 function activityStatusColor(status) {
   const s = (status || '').toLowerCase()
@@ -104,7 +111,7 @@ function mapCustomer(c, t) {
     purchases:    c.purchase_count || 0,
     favorites:    c.favorite_count || 0,
     interactions: t('eng.ct.interactions', { purchases: c.purchase_count || 0, favorites: c.favorite_count || 0, defaultValue: '{{purchases}} purchases · {{favorites}} favorites' }),
-    ltv:          spend > 0 ? `€${spend.toLocaleString()}` : '—',
+    ltv:          spend > 0 ? `€${spend.toLocaleString(activeLocale())}` : '—',
     email:        yn(cn.email),
     wa:           yn(cn.whatsapp),
     print:        yn(cn.print),
@@ -274,12 +281,9 @@ const channelKey = (ch) =>
                                      'email'
 
 
-const formatDate = (iso) => {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
-}
+// Was a hardcoded English month table, so every date here stayed English while
+// the rest of the page was Italian.
+const formatDate = (iso) => (iso ? fmtDateLocalized(iso) : '')
 
 // Converts a "wall clock" datetime-local value (e.g. "2026-09-01T09:00"), interpreted as local
 // time IN `timeZone`, into the equivalent UTC ISO instant — needed because a merchant may pick a
@@ -316,7 +320,7 @@ const TIMEZONE_OPTIONS = [
 ]
 const realCampaignStats = (c, t) => {
   const fmtPct = (v) => v == null ? '—' : `${Math.round(Number(v))}%`
-  const fmtNum = (v) => v == null ? '—' : Number(v).toLocaleString()
+  const fmtNum = (v) => v == null ? '—' : Number(v).toLocaleString(activeLocale())
   const channel = channelKey(c.channel)
 
   if (channel === 'wa') return [
@@ -332,15 +336,22 @@ const realCampaignStats = (c, t) => {
 }
 
 
+// One mapper for campaign status so the Overview card and the Campaigns list
+// can't disagree — Overview used to print the raw enum ("scheduled") next to a
+// Campaigns tab showing "Scheduled" for the very same campaign.
+function campaignStatusLabel(status, t) {
+  return status === 'sent'      ? t('eng.camp.status_sent', 'Sent')
+       : status === 'draft'     ? t('eng.camp.status_draft', 'Draft')
+       : status === 'scheduled' ? t('eng.camp.status_scheduled', 'Scheduled')
+       : status === 'in_review' ? t('eng.camp.status_in_review', 'In Review')
+       : status === 'recurring' ? t('eng.camp.status_recurring', 'Recurring')
+       : statusLabelShared(t, status)
+}
+
 function mapApiCampaignCard(c, t) {
   const ch     = channelKey(c.channel)
   const status = c.status
-  const statusLabel = c.status === 'sent'      ? t('eng.camp.status_sent', 'Sent')
-           : c.status === 'draft'     ? t('eng.camp.status_draft', 'Draft')
-           : c.status === 'scheduled' ? t('eng.camp.status_scheduled', 'Scheduled')
-           : c.status === 'in_review' ? t('eng.camp.status_in_review', 'In Review')
-           : c.status === 'recurring' ? t('eng.camp.status_recurring', 'Recurring')
-           : c.status
+  const statusLabel = campaignStatusLabel(c.status, t)
 
   const date = c.sent_at      ? formatDate(c.sent_at)
              : c.scheduled_at ? t('eng.camp.date_scheduled', { date: formatDate(c.scheduled_at), defaultValue: 'Scheduled {{date}}' })
@@ -474,16 +485,21 @@ function ChBar({ icon, iconColor, label, val, pct, barColor, soon }) {
 // ── OVERVIEW ─────────────────────────────────────────────
 function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageContacts, onManageAutomations, onViewAllCampaigns}) {
   const { t } = useTranslation()
+  const waOn = isWhatsappEnabled()
   const [automations, setAutomations] = useState([])
   useEffect(() => {
     automationApi.list().then(res => { if (res?.success) setAutomations(res.data?.automations ?? []) }).catch(() => {})
   }, [])
   const [ovKpis, setOvKpis] = useState([])
+  const [ovFailed, setOvFailed] = useState(false)
   useEffect(() => {
     apiFetch(`${API}/boutique/marketing/analytics?range=30d&compare=previous_period`)
       .then(r => r.json())
-      .then(res => { if (res?.success) setOvKpis(res.data?.kpis ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res?.success) setOvKpis(res.data?.kpis ?? [])
+        else setOvFailed(true)
+      })
+      .catch(() => setOvFailed(true))
   }, [])
   const ovDelta = (key) => ovKpis.find(k => k.key === key)?.delta_pct
   const segsArr = Array.isArray(segments) ? segments : []
@@ -517,6 +533,7 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
     campaign_name: c.campaign_name,
     channel:       channelKey(c.channel),
     status:        c.status,
+    statusText:    campaignStatusLabel(c.status, t),
     date:          c.sent_at ? formatDate(c.sent_at) : c.scheduled_at ? t('eng.camp.date_scheduled', { date: formatDate(c.scheduled_at), defaultValue: 'Scheduled {{date}}' }) : c.created_at ? t('eng.camp.date_created', { date: formatDate(c.created_at), defaultValue: 'Created {{date}}' }) : null,
     seg:           c.target_segment ? (segLabels[c.target_segment] || c.target_segment) : null,
     sent:          0,
@@ -531,7 +548,11 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
       </div>
 
       {/* KPI Row */}
-      <div className="stat-row col5">
+      {ovFailed && <div className="eng-error eng-mb18">{t('eng.ov.err_trends', 'Could not load the trend comparison — the figures below are current but have no “vs prior period” change.')}</div>}
+
+      {/* Without the WhatsApp entitlement this row is one card shorter, so it
+          drops to the default 4-column grid instead of leaving a gap. */}
+      <div className={`stat-row${waOn ? ' col5' : ''}`}>
         <div className="stat-card">
           <div className="stat-lbl">{t('eng.ov.total_contacts', 'Total Contacts')}</div>
           <div className="stat-val">{total || '—'}</div>
@@ -548,13 +569,15 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
           <div className="stat-val">{emailR}</div>
           <div className="stat-sub">{t('eng.ov.email_sub_real', { rate: chVal('email', 'open_rate'), defaultValue: 'Avg open {{rate}}' })}</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-lbl stat-lbl-icon">
-            <span className="material-symbols-outlined stat-icon-wa">chat</span>{t('eng.ov.wa_reach', 'WhatsApp Reach')}
+        {waOn && (
+          <div className="stat-card">
+            <div className="stat-lbl stat-lbl-icon">
+              <span className="material-symbols-outlined stat-icon-wa">chat</span>{t('eng.ov.wa_reach', 'WhatsApp Reach')}
+            </div>
+            <div className="stat-val">{waR}</div>
+            <div className="stat-sub">{t('eng.ov.wa_sub_real', { rate: chVal('wa', 'open_rate'), defaultValue: 'Avg read {{rate}}' })}</div>
           </div>
-          <div className="stat-val">{waR}</div>
-          <div className="stat-sub">{t('eng.ov.wa_sub_real', { rate: chVal('wa', 'open_rate'), defaultValue: 'Avg read {{rate}}' })}</div>
-        </div>
+        )}
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-print">description</span>{t('eng.ov.print_insert', 'Printed insert')}
@@ -578,21 +601,22 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
         <div className="card card-flush">
           <div className="card-hdr">
             <div className="card-title">{t('eng.ov.ch_perf', 'Channel')} <em>{t('eng.ov.ch_perf_em', 'Performance')}</em></div>
-            <select className="mkt-period-select">
-              <option>{t('eng.ov.last_30d', 'Last 30 days')}</option><option>{t('eng.ov.last_90d', 'Last 90 days')}</option>
-            </select>
+            {/* A "Last 30 / 90 days" picker used to sit here but could never
+                work: these bars come from /boutique/marketing/dashboard, which
+                takes no range parameter. Restore it once the endpoint does. */}
+            <div className="chart-hd-sub">{t('eng.ov.last_30d', 'Last 30 days')}</div>
           </div>
           <div className="eng-section-lbl">{t('eng.ov.open_read', 'Open / Read Rate')}</div>
           <div className="eng-ch-row mkt-ch-block">
             <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email', 'Email')}          val={chVal('email', 'open_rate')}   pct={chPct('email', 'open_rate') ?? 0}  barColor="var(--gold)"  />
-            <ChBar icon="chat"         iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp', 'WhatsApp')}       val={chVal('wa', 'open_rate')}      pct={chPct('wa', 'open_rate') ?? 0}     barColor="var(--wa)"    />
+            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp', 'WhatsApp')}       val={chVal('wa', 'open_rate')}      pct={chPct('wa', 'open_rate') ?? 0}     barColor="var(--wa)"    />}
             <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_dm', 'Instagram DM')}   val="—"        pct={0}  barColor="transparent"  soon />
             <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.print_insert', 'Printed insert')} val={chVal('print', 'open_rate')}   pct={chPct('print', 'open_rate') ?? 0}  barColor="var(--stone)" />
           </div>
           <div className="eng-section-lbl">{t('eng.ov.click_reply', 'Click-through / Reply Rate')}</div>
           <div className="eng-ch-row">
             <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email_click', 'Email click')}     val={chVal('email', 'click_rate')} pct={chPct('email', 'click_rate') ?? 0} barColor="var(--gold)"  />
-            <ChBar icon="chat"         iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp_reply', 'WhatsApp reply')}  val={chVal('wa', 'click_rate')}    pct={chPct('wa', 'click_rate') ?? 0}    barColor="var(--wa)"    />
+            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp_reply', 'WhatsApp reply')}  val={chVal('wa', 'click_rate')}    pct={chPct('wa', 'click_rate') ?? 0}    barColor="var(--wa)"    />}
             <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_reply', 'Instagram reply')} val="—"   pct={0}  barColor="transparent"  soon />
             <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.ch_print_qr', 'Print QR scan')}   val={chVal('print', 'click_rate')} pct={chPct('print', 'click_rate') ?? 0} barColor="var(--stone)" />
           </div>
@@ -655,7 +679,7 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
               <div className="rc-body">
                 <div className="rc-name">{c.campaign_name}</div>
                 <div className="rc-meta">
-                  <span className={`status ${c.status}`}>{c.status}</span>
+                  <span className={`status ${c.status}`}>{c.statusText}</span>
                   {c.date && <span className="rc-meta-txt">{c.date}</span>}
                   {c.seg  && <span className="rc-meta-txt rc-meta-seg">{c.seg}</span>}
                   {c.sent > 0 && <span className="rc-meta-txt">{t('eng.ov.sent_count', { count: c.sent, defaultValue: '{{count}} sent' })}</span>}
@@ -727,6 +751,7 @@ function ContactsView({ onContactsChanged, segments }) {
   const { t, i18n } = useTranslation()
   const [contacts,       setContacts]       = useState([])
   const [loadingList,    setLoadingList]    = useState(true)
+  const [listError,      setListError]      = useState('')
   const [showImport,     setShowImport]     = useState(false)
   const [importFile,     setImportFile]     = useState(null)
   const [importDragOver, setImportDragOver] = useState(false)
@@ -802,9 +827,14 @@ function ContactsView({ onContactsChanged, segments }) {
           const pg = res.data?.pagination
           setHasNextPage(pg ? !!pg.has_more : list.length === CONTACTS_PAGE_SIZE)
           setTotal(pg?.total ?? list.length)
+          setListError('')
+        } else {
+          // Without this the list silently stayed on the previous page's rows,
+          // so a failed search looked like "no results".
+          setListError(res?.message || t('eng.ct.err_load', 'Could not load contacts.'))
         }
       })
-      .catch(() => {})
+      .catch(() => setListError(t('eng.ct.err_network', 'Network error')))
       .finally(() => setLoadingList(false))
   }
   const goToPage = (targetPage) => {
@@ -1062,7 +1092,10 @@ function ContactsView({ onContactsChanged, segments }) {
             </tr>
           </thead>
           <tbody>
-            {filteredContacts.length === 0 && !loadingList && (
+            {listError && (
+              <tr><td colSpan={10} className="eng-error">{listError}</td></tr>
+            )}
+            {!listError && filteredContacts.length === 0 && !loadingList && (
               <tr><td colSpan={10} className="eng-loading">{t('eng.ct.no_match_filters', 'No contacts match your filters.')}</td></tr>
             )}
             {filteredContacts.map((c, i) => (
@@ -1074,7 +1107,7 @@ function ContactsView({ onContactsChanged, segments }) {
                     <div>
                       <div className="ct-name">{c.name}</div>
                       {(() => {
-                        const optedCount = [c.email, c.wa, c.print].filter(v => v === 'yes').length
+                        const optedCount = reachableConsents(c).filter(v => v === 'yes').length
                         return (
                           <div className={`ct-consent-sub ${optedCount === 0 ? 'pend' : 'ok'}`}>
                             {optedCount === 0
@@ -1103,14 +1136,16 @@ function ContactsView({ onContactsChanged, segments }) {
                 <td>
                   <div className="cd-row">
                     <ConsentDot channel="email" state={c.email} />
-                    <ConsentDot channel="wa"    state={c.wa} />
+                    {/* Consent for a channel the boutique cannot send on is
+                        noise — the record stays server-side either way. */}
+                    {isWhatsappEnabled() && <ConsentDot channel="wa"    state={c.wa} />}
                     <ConsentDot channel="print" state={c.print} />
                   </div>
                 </td>
                 <td className="tbl-meta">{c.src}</td>
                 <td className="tbl-meta">{c.last}</td>
                 <td>
-                  {[c.email, c.wa, c.print].filter(v => v === 'yes').length === 0
+                  {reachableConsents(c).filter(v => v === 'yes').length === 0
                     ? <button className="btn btn-outline btn-xs" disabled>{t('common.pending', 'Pending')}</button>
                     : c.seg === 'lapsed'
                     ? <button className="btn btn-primary btn-xs" onClick={() => {
@@ -1183,7 +1218,7 @@ function ContactsView({ onContactsChanged, segments }) {
                 <div className="modal-footer">
                   <button className="btn btn-outline" onClick={closeImportModal} disabled={importing}>{t('common.cancel', 'Cancel')}</button>
                   <button className="btn btn-primary" onClick={handleImportSubmit} disabled={!importFile || importing}>
-                    <span className="material-symbols-outlined">upload</span>{importing ? t('eng.ct.importing', 'Importing…') : t('eng.ct.import_send_btn', 'Import Contacts')}
+                    <span className="material-symbols-outlined">upload</span>{importing ? t('eng.ct.importing', 'Importing') + '…' : t('eng.ct.import_send_btn', 'Import Contacts')}
                   </button>
                 </div>
               </>
@@ -1218,7 +1253,7 @@ function ContactsView({ onContactsChanged, segments }) {
               <input className="form-input" placeholder="sofia@example.com" type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.ct.phone_label', 'Phone (for WhatsApp)')}</label>
+              <label className="form-lbl">{isWhatsappEnabled() ? t('eng.ct.phone_label', 'Phone (for WhatsApp)') : t('customers.detail.phone', 'Phone')}</label>
               <input className="form-input" placeholder="+39 333 000 0000" value={addPhone} onChange={e => setAddPhone(e.target.value)} />
             </div>
             <div className="form-group">
@@ -1322,14 +1357,18 @@ function ContactsView({ onContactsChanged, segments }) {
                 <SegBadge seg={panelContact.seg} />
               </div>
 
-              {/* Channel tabs */}
+              {/* Channel strip. These are labels, not tabs — there is no
+                  per-channel view to switch to, so they must not look clickable.
+                  WhatsApp is hidden without the entitlement. */}
               <div className="ct-panel-channels">
-                <div className="ct-panel-ch act">
+                <div className="ct-panel-ch ct-panel-ch-static act">
                   <span className="material-symbols-outlined">mail</span>{t('eng.channels.email', 'Email')}
                 </div>
-                <div className="ct-panel-ch">
-                  <span className="material-symbols-outlined">chat</span>{t('eng.channels.wa', 'WhatsApp')}
-                </div>
+                {isWhatsappEnabled() && (
+                  <div className="ct-panel-ch ct-panel-ch-static">
+                    <span className="material-symbols-outlined">chat</span>{t('eng.channels.wa', 'WhatsApp')}
+                  </div>
+                )}
                 <div className="ct-panel-ch ct-panel-ch-soon">
                   <span className="material-symbols-outlined">photo_camera</span>{t('eng.channels.insta_dm', 'Instagram DM')}
                   <span className="ct-soon-badge">{t('eng.camp.soon_tag', 'SOON')}</span>
@@ -1349,7 +1388,7 @@ function ContactsView({ onContactsChanged, segments }) {
               {/* Saved Items */}
               <div className="ct-panel-section-lbl">{t('eng.ct.saved_items_section', 'Saved Items')}</div>
               {panelFavoritesLoading ? (
-                <div className="eng-loading-sm">{t('eng.fav.loading', 'Loading favorites…')}</div>
+                <div className="eng-loading-sm">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
               ) : panelFavoritesError ? (
                 <div className="eng-error">{panelFavoritesError}</div>
               ) : panelFavorites.length === 0 ? (
@@ -1392,7 +1431,7 @@ function ContactsView({ onContactsChanged, segments }) {
                     </select>
                   </div>
                   <button className="btn btn-outline btn-xs" onClick={() => setLangEditing(false)} disabled={langSaving}>{t('common.cancel', 'Cancel')}</button>
-                  <button className="btn btn-primary btn-xs" onClick={saveLangChange} disabled={langSaving}>{langSaving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}</button>
+                  <button className="btn btn-primary btn-xs" onClick={saveLangChange} disabled={langSaving}>{langSaving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
                 </div>
               ) : (
                 <div className="ct-panel-lang-row">
@@ -1413,7 +1452,9 @@ function ContactsView({ onContactsChanged, segments }) {
               <div className="ct-panel-section-lbl">{t('eng.ct.consent_section', 'GDPR Consent — Per Channel')}</div>
               {[
                 { icon:'mail',         label:t('eng.channels.email', 'Email'),          state:panelContact.email },
-                { icon:'chat',         label:t('eng.channels.wa', 'WhatsApp'),        state:panelContact.wa    },
+                ...(isWhatsappEnabled()
+                  ? [{ icon:'chat',     label:t('eng.channels.wa', 'WhatsApp'),        state:panelContact.wa    }]
+                  : []),
                 { icon:'photo_camera', label:t('eng.channels.insta_dm', 'Instagram DM'),    soon:true                },
                 { icon:'description',  label:t('eng.ov.print_insert', 'Printed insert'),  state:panelContact.print },
               ].map(ch => {
@@ -1470,7 +1511,7 @@ function ContactsView({ onContactsChanged, segments }) {
                       {it.status && <span style={{ color: activityStatusColor(it.status), marginLeft:6 }}>· {it.status}</span>}
                     </span>
                     <span>
-                      {it.price != null ? `€${Number(it.price).toLocaleString()} · ` : ''}{it.date ? timeAgo(it.date, t) : '—'}
+                      {it.price != null ? `€${Number(it.price).toLocaleString(activeLocale())} · ` : ''}{it.date ? timeAgo(it.date, t) : '—'}
                     </span>
                   </div>
                 ))
@@ -1562,7 +1603,10 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
     { key:'wa',    icon:'chat',         color:'#1a9e4d',         label:t('eng.camp.ch_wa', 'WhatsApp'),  count:counts.wa,    ctBg:'var(--wa)' },
     { key:'print', icon:'description',  color:'var(--stone)',    label:t('eng.camp.ch_print', 'Print'),     count:counts.print, ctBg:'var(--stone)' },
     { key:'perf',  icon:'analytics',    color:'var(--gold)',     label:t('eng.camp.ch_performance', 'Performance'), comingSoon:true },
-  ]
+  // Filtered rather than removed, so the tab returns if the entitlement is
+  // switched on. Past WhatsApp campaigns still appear in the list — only the
+  // filter chip goes, not the history.
+  ].filter(c => c.key !== 'wa' || isWhatsappEnabled())
 
   const segStyleNeutral = { fontSize:8, padding:'1px 6px', background:'var(--mist)', color:'var(--stone)' }
 
@@ -1601,7 +1645,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
         </div>
         <div className="stat-card">
           <div className="stat-lbl">{t('eng.camp.kpi_revenue', 'Revenue Attributed')}</div>
-          <div className="stat-val">{dashboard?.revenue != null ? `€${Number(dashboard.revenue).toLocaleString()}` : '—'}</div>
+          <div className="stat-val">{dashboard?.revenue != null ? `€${Number(dashboard.revenue).toLocaleString(activeLocale())}` : '—'}</div>
           <div className="stat-sub">{t('eng.camp.kpi_revenue_sub', 'From attributed purchases')}</div>
         </div>
       </div>
@@ -1672,7 +1716,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
         <div className="modal-backdrop" onClick={() => !deleting && setDeleteTarget(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.camp.delete_title', 'Delete')} <em>{t('eng.camp.delete_title_em', 'Campaign')}</em></div>
+              <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.camp.delete_title_em', 'Campaign')}</em></div>
               <div className="modal-close" onClick={() => !deleting && setDeleteTarget(null)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1682,7 +1726,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
               <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting…') : t('common.delete', 'Delete')}
+                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
               </button>
             </div>
           </div>
@@ -1698,7 +1742,10 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
   const { t, i18n } = useTranslation()
   const [campaignId,      setCampaignId]      = useState(initialId || null)
   const [campaignName,    setCampaignName]    = useState(t('eng.camp.untitled', 'Untitled draft'))
-  const [channel,         setChannel]         = useState(initialChannel === 'whatsapp' ? 'wa' : 'email')
+  // Never open on WhatsApp when the boutique has no entitlement, or the
+  // composer would start on a channel that is not in the picker.
+  const [channel,         setChannel]         = useState(
+    initialChannel === 'whatsapp' && isWhatsappEnabled() ? 'wa' : 'email')
   const [template,        setTemplate]        = useState(initialTemplate || null)
   const [subject,         setSubject]         = useState('')
   const [previewText,     setPreviewText]     = useState('')
@@ -1715,6 +1762,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
   const [apiTemplates, setApiTemplates] = useState([])
   const [templatesLoading, setTemplatesLoading] = useState(true)
 
+  const [templatesFailed, setTemplatesFailed] = useState(false)
   useEffect(() => {
     setTemplatesLoading(true)
     templateApi.list()
@@ -1722,9 +1770,14 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         if (res?.success) {
           const list = (res.data?.templates ?? []).filter(t => !t.template_kind || t.template_kind === 'marketing')
           setApiTemplates(list)
+          setTemplatesFailed(false)
+        } else {
+          // An empty picker here reads as "this boutique has no templates",
+          // and the merchant builds a campaign without one for no reason.
+          setTemplatesFailed(true)
         }
       })
-      .catch(() => {})
+      .catch(() => setTemplatesFailed(true))
       .finally(() => setTemplatesLoading(false))
   }, [i18n.language])
 
@@ -1807,7 +1860,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
     { key:'wa',    icon:'chat',         color:'#1a9e4d',        label:t('eng.channels.wa', 'WhatsApp'),  priceLbl:'€0.10' },
     { key:'insta', icon:'photo_camera', color:'#DD2A7B',        label:t('eng.channels.insta', 'Instagram'), priceLbl:t('eng.camp.coming_soon', 'COMING SOON'), disabled:true },
     { key:'print', icon:'description',  color:'var(--stone)',   label:t('eng.channels.print', 'Print'),     priceLbl:'€0.18' },
-  ]
+  ].filter(c => c.key !== 'wa' || isWhatsappEnabled())
 
   // Real per-language share of the selected segment (or all segments combined), from the same
   // `languages` field LangBar already renders elsewhere — replaces the old hardcoded 87/8/5% guesses.
@@ -1940,6 +1993,8 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             <div className="tmpl-grid">
               {templatesLoading ? (
                 <div className="eng-loading-grid">{t('eng.camp.loading_tpl', 'Loading templates…')}</div>
+              ) : templatesFailed ? (
+                <div className="eng-error">{t('eng.camp.err_templates', 'Could not load your templates. You can still write the message below, or reload to try again.')}</div>
               ) : apiTemplates.length === 0 ? (
                 <div className="eng-loading-grid">
                   {t('eng.camp.no_templates', 'No templates yet — campaigns will use the message body below.')}
@@ -2293,7 +2348,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
       )}
 
       {loadingTpl ? (
-        <div className="eng-loading">{t('eng.rev.loading', 'Loading campaign…')}</div>
+        <div className="eng-loading">{t('eng.rev.loading', 'Loading campaign') + '…'}</div>
       ) : (
         <>
           {/* Source banner */}
@@ -2354,7 +2409,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
                       {confirmed
                         ? <span className="cr-card-foot-txt">{recipientCount != null ? t('eng.rev.recipients_confirmed', { count: recipientCount, defaultValue: '{{count}} recipients · Confirmed' }) : t('eng.rev.confirmed_label', 'Confirmed')}</span>
                         : <button className="btn btn-primary btn-xs" disabled={savingLang === lang} onClick={() => handleConfirmLang(lang)}>
-                            <span className="material-symbols-outlined">check</span>{savingLang === lang ? t('eng.rev.saving', 'Saving…') : t('eng.rev.confirm_changes', 'Confirm changes')}
+                            <span className="material-symbols-outlined">check</span>{savingLang === lang ? t('common.saving', 'Saving…') : t('eng.rev.confirm_changes', 'Confirm changes')}
                           </button>
                       }
                       <button className="btn btn-outline btn-xs" onClick={() => handleRetranslate(lang)} disabled={!!retranslating}>
@@ -2486,7 +2541,7 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
   const counts = data?.counts   || {}
   const rates  = data?.rates    || {}
 
-  const fmt    = (n) => (n == null ? '—' : Number(n).toLocaleString())
+  const fmt    = (n) => (n == null ? '—' : Number(n).toLocaleString(activeLocale()))
   const fmtPct = (r) => (r == null ? '—' : `${(+r).toFixed(1).replace(/\.0$/, '')}%`)
 
   const displayName = c.campaign_name || t('eng.an.campaign_fallback', 'Campaign')
@@ -2886,7 +2941,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
             <div className="cdpanel-title"><em>{camp.campaign_name}</em></div>
             <div className="cdpanel-sub">
               {camp.channel} · {camp.target_segment} · {camp.status}
-              {camp.sent_at ? ` · ${t('eng.an.sent_on', { date: new Date(camp.sent_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }), defaultValue: 'Sent {{date}}' })}` : ''}
+              {camp.sent_at ? ` · ${t('eng.an.sent_on', { date: fmtDateLocalized(camp.sent_at), defaultValue: 'Sent {{date}}' })}` : ''}
             </div>
           </div>
           <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); handleExportDetail() }}>
@@ -2901,7 +2956,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
           {/* Stats grid */}
           <div className="cdp-stats">
             <div className="cdp-stat">
-              <div className="cdp-stat-val">{counts.sent?.toLocaleString() ?? 0}</div>
+              <div className="cdp-stat-val">{counts.sent?.toLocaleString(activeLocale()) ?? 0}</div>
               <div className="cdp-stat-lbl">{t('eng.an.stat_sent', 'SENT')}</div>
             </div>
             <div className="cdp-stat">
@@ -2930,7 +2985,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
                       <div className={`cdp-fnl-bar ${s.cls}`} style={{ width:`${Math.max(pct, 6)}%` }}>{s.label}</div>
                     </div>
                     <div className="cdp-fnl-right">
-                      <div className="cdp-fnl-val">{s.val.toLocaleString()}</div>
+                      <div className="cdp-fnl-val">{s.val.toLocaleString(activeLocale())}</div>
                       <div className="cdp-fnl-pct">{pct}%</div>
                     </div>
                   </div>
@@ -3112,7 +3167,7 @@ function AnalyticsView() {
               return (
                 <div key={k.key} className="kpi-an">
                   <div className="kpi-an-lbl">{k.label}</div>
-                  <div className="kpi-an-val">{AN_KPI_UNIT[k.unit] ?? ''}<em>{(k.value ?? 0).toLocaleString()}</em>{AN_KPI_SUFFIX[k.unit] ?? ''}</div>
+                  <div className="kpi-an-val">{AN_KPI_UNIT[k.unit] ?? ''}<em>{(k.value ?? 0).toLocaleString(activeLocale())}</em>{AN_KPI_SUFFIX[k.unit] ?? ''}</div>
                   <div className={`kpi-an-delta ${isFlat ? 'flat' : isDown ? 'down' : 'up'}`}>
                     <span className="material-symbols-outlined">{isFlat ? 'remove' : isDown ? 'trending_down' : 'trending_up'}</span>
                     {isFlat ? '—' : `${k.delta_pct > 0 ? '+' : ''}${k.delta_pct}%`}
@@ -3182,7 +3237,7 @@ function AnalyticsView() {
                     <span>{t('eng.an.commission_contracted', 'Contracted:')} </span>
                     <strong className="eng-strong">{(idr.commission.commission_rate_pos * 100).toFixed(1)}% POS / {(idr.commission.commission_rate_ecom * 100).toFixed(1)}% online</strong>
                     <span> · {t('eng.an.commission_realized', 'Realized this period:')} </span>
-                    <strong className="eng-green">€{(idr.commission.realized_commission ?? 0).toLocaleString()} ({idr.commission.realized_effective_rate_pct}%)</strong>
+                    <strong className="eng-green">€{(idr.commission.realized_commission ?? 0).toLocaleString(activeLocale())} ({idr.commission.realized_effective_rate_pct}%)</strong>
                   </div>
                 )}
               </div>
@@ -3216,7 +3271,7 @@ function AnalyticsView() {
                           <span>{meta.label}</span>
                         </div>
                         <div className="rev-chan-bar"><div className="rev-chan-fill email" style={{ width:`${pct}%` }}>{r.pct_of_total}%</div></div>
-                        <div className="rev-chan-val">€{(r.revenue ?? 0).toLocaleString()}<span className="sub">{r.orders} {t('eng.an.orders', 'orders')}</span></div>
+                        <div className="rev-chan-val">€{(r.revenue ?? 0).toLocaleString(activeLocale())}<span className="sub">{r.orders} {t('eng.an.orders', 'orders')}</span></div>
                       </div>
                     )
                   })}
@@ -3260,7 +3315,7 @@ function AnalyticsView() {
                             <div className={`funnel-bar${s.success ? ' funnel-bar-success' : ''}`} style={{ width:`${pct}%` }}>{pct}%</div>
                           </div>
                           <div className="funnel-val" style={s.success ? { color:'var(--green)' } : undefined}>
-                            {(s.val ?? 0).toLocaleString()}
+                            {(s.val ?? 0).toLocaleString(activeLocale())}
                           </div>
                         </div>
                       </div>
@@ -3310,7 +3365,7 @@ function AnalyticsView() {
                         <td className="num">{c.open_rate != null ? `${c.open_rate}%` : '—'}</td>
                         <td className="num">{c.click_rate != null ? `${c.click_rate}%` : '—'}</td>
                         <td className="num">{c.orders ?? 0}</td>
-                        <td className="num"><strong>€{(c.revenue ?? 0).toLocaleString()}</strong></td>
+                        <td className="num"><strong>€{(c.revenue ?? 0).toLocaleString(activeLocale())}</strong></td>
                         <td className="num">€{(c.revenue_per_recipient ?? 0).toFixed(2)}</td>
                       </tr>
                     )
@@ -3342,7 +3397,7 @@ function AnalyticsView() {
                       <div className="an-seg-footer-lbl">{t(`eng.camp.seg_${s.segment}`, s.segment)}</div>
                       <div className="an-seg-footer-val">{s.customers}</div>
                       <div className="an-seg-delta" style={{ color: (s.delta_pct ?? 0) >= 0 ? 'var(--green)' : '#B45309' }}>
-                        {s.delta_pct != null ? `${s.delta_pct >= 0 ? '↑ +' : '↓ '}${s.delta_pct}%` : '—'} · €{(s.revenue ?? 0).toLocaleString()}
+                        {s.delta_pct != null ? `${s.delta_pct >= 0 ? '↑ +' : '↓ '}${s.delta_pct}%` : '—'} · €{(s.revenue ?? 0).toLocaleString(activeLocale())}
                       </div>
                     </div>
                   ))}
@@ -3433,11 +3488,19 @@ function AutomationsView() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting,     setDeleting]    = useState(false)
 
+  // A failed load used to leave an empty list, which reads as "you have no
+  // automations" rather than "we could not fetch them". The flag is stored raw
+  // and turned into a sentence at render, so `t` never becomes a dependency of
+  // the effect below.
+  const [loadFailed, setLoadFailed] = useState(false)
   const refetch = () => {
     setLoading(true)
     automationApi.list()
-      .then(res => { if (res?.success) setAutomations(res.data?.automations ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res?.success) { setAutomations(res.data?.automations ?? []); setLoadFailed(false) }
+        else setLoadFailed(true)
+      })
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false))
   }
   useEffect(() => { refetch() }, [])
@@ -3475,9 +3538,10 @@ function AutomationsView() {
       </div>
 
       {errorMsg && <div className="eng-error">{errorMsg}</div>}
+      {loadFailed && <div className="eng-error">{t('eng.auto.err_load', 'Could not load automations.')}</div>}
 
       {loading ? (
-        <div className="eng-loading">{t('eng.auto.loading', 'Loading automations…')}</div>
+        <div className="eng-loading">{t('eng.auto.loading', 'Loading automations') + '…'}</div>
       ) : automations.length === 0 ? (
         <div className="eng-loading">{t('eng.auto.empty', 'No automations yet — create one to get started.')}</div>
       ) : (
@@ -3529,14 +3593,14 @@ function AutomationsView() {
         <div className="modal-backdrop" onClick={() => !deleting && setDeleteTarget(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.auto.delete_title', 'Delete')} <em>{t('eng.auto.delete_title_em', 'Automation')}</em></div>
+              <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.auto.delete_title_em', 'Automation')}</em></div>
               <div className="modal-close" onClick={() => !deleting && setDeleteTarget(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             <div>{t('eng.auto.confirm_delete', { name: deleteTarget.name, defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
               <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting…') : t('common.delete', 'Delete')}
+                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
               </button>
             </div>
           </div>
@@ -3551,7 +3615,8 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
   const isEdit = !!automation
   const [name,        setName]        = useState(automation?.name ?? '')
   const [triggerType, setTriggerType] = useState(automation?.trigger_type ?? 'lapsed_customer')
-  const [channel,     setChannel]     = useState(channelKey(automation?.channel) === 'wa' ? 'wa' : 'email')
+  const [channel,     setChannel]     = useState(
+    channelKey(automation?.channel) === 'wa' && isWhatsappEnabled() ? 'wa' : 'email')
   const [subject,     setSubject]     = useState(automation?.subject ?? '')
   const [message,     setMessage]     = useState(automation?.message ?? '')
   const [segment,     setSegment]     = useState(automation?.target_segment ?? 'all')
@@ -3561,13 +3626,13 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
   const [error,       setError]       = useState('')
 
   const handleSave = async () => {
-    if (!name.trim() || !triggerType.trim() || !message.trim()) {
-      setError(t('eng.auto.err_required', 'Name, trigger type, and message are required.')); return
+    if (!name.trim() || !triggerType.trim() || !subject.trim() || !message.trim()) {
+      setError(t('eng.auto.err_required', 'Name, trigger type, subject, and message are required.')); return
     }
     setSaving(true); setError('')
     const payload = {
       name: name.trim(), trigger_type: triggerType.trim(), channel,
-      subject: subject.trim() || undefined, message: message.trim(),
+      subject: subject.trim(), message: message.trim(),
       target_segment: segment, delay_hours: Number(delayHours) || 0, enabled,
     }
     try {
@@ -3582,7 +3647,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
     <div className="modal-backdrop">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{isEdit ? t('eng.auto.edit_title', 'Edit') : t('eng.auto.create_title', 'Create')} <em>{t('eng.auto.form_title_em', 'Automation')}</em></div>
+          <div className="modal-title">{isEdit ? t('common.edit', 'Edit') : t('common.create', 'Create')} <em>{t('eng.auto.form_title_em', 'Automation')}</em></div>
           <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
         </div>
         {error && <div className="eng-error">{error}</div>}
@@ -3611,7 +3676,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
             <div className="select-wrap">
               <select className="form-select" value={channel} onChange={e => setChannel(e.target.value)}>
                 <option value="email">{t('eng.channels.email', 'Email')}</option>
-                <option value="wa">{t('eng.channels.wa', 'WhatsApp')}</option>
+                {isWhatsappEnabled() && <option value="wa">{t('eng.channels.wa', 'WhatsApp')}</option>}
               </select>
             </div>
           </div>
@@ -3625,7 +3690,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
           </div>
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('eng.camp.subject', 'Subject')} ({t('common.optional', 'optional')})</label>
+          <label className="form-lbl">{t('eng.camp.subject', 'Subject')}</label>
           <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
         </div>
         <div className="form-group">
@@ -3641,7 +3706,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}
+            {saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}
           </button>
         </div>
       </div>
@@ -3846,7 +3911,7 @@ function FavoritesView() {
       {errorMsg && <div className="eng-error">{errorMsg}</div>}
 
       {loading ? (
-        <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites…')}</div>
+        <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
       ) : products.length === 0 ? (
         <div className="eng-loading">{t('eng.fav.empty', 'No products have been saved yet.')}</div>
       ) : (
@@ -3898,7 +3963,7 @@ function FavoritesView() {
         <>
           <div className="ct-search eng-mb18">
             <span className="material-symbols-outlined">search</span>
-            <input placeholder={t('eng.fav.search_customers', 'Search customers…')} value={custQuery} onChange={e => setCustQuery(e.target.value)} />
+            <input placeholder={t('eng.fav.search_customers', 'Search customers') + '…'} value={custQuery} onChange={e => setCustQuery(e.target.value)} />
           </div>
           <div className="tpl-filter-row eng-mb18">
             {[
@@ -3923,7 +3988,7 @@ function FavoritesView() {
           {favCustomersError && <div className="eng-error">{favCustomersError}</div>}
 
           {favCustomersLoading ? (
-            <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites…')}</div>
+            <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
           ) : favCustomers.length === 0 ? (
             <div className="eng-loading">{t('eng.fav.no_customers', 'No customers have saved anything yet.')}</div>
           ) : (
@@ -3969,7 +4034,7 @@ function FavoritesView() {
               <div className="modal-close" onClick={() => setSaversFor(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             {saversLoading ? (
-              <div className="eng-loading">{t('eng.fav.loading_savers', 'Loading savers…')}</div>
+              <div className="eng-loading">{t('eng.fav.loading_savers', 'Loading savers') + '…'}</div>
             ) : saversError ? (
               <div className="eng-error">{saversError}</div>
             ) : savers.length === 0 ? (
@@ -4032,7 +4097,7 @@ function FavoritesView() {
                   <div className="select-wrap">
                     <select className="form-select" value={campaignChannel} onChange={e => setCampaignChannel(e.target.value)}>
                       <option value="email">{t('eng.channels.email', 'Email')}</option>
-                      <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>
+                      {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>}
                       <option value="push">{t('eng.tpl.push', 'Push')}</option>
                     </select>
                   </div>
@@ -4124,7 +4189,7 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
     <div className="modal-backdrop">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{isEdit ? t('eng.tpl.edit_real_title', 'Edit') : t('eng.tpl.create_real_title', 'Create')} <em>{t('eng.tpl.form_title_em', 'Template')}</em></div>
+          <div className="modal-title">{isEdit ? t('common.edit', 'Edit') : t('common.create', 'Create')} <em>{t('eng.tpl.form_title_em', 'Template')}</em></div>
           <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
         </div>
         {error && <div className="eng-error">{error}</div>}
@@ -4149,7 +4214,7 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
               <div className="select-wrap">
                 <select className="form-select" value={channel} onChange={e => setChannel(e.target.value)}>
                   <option value="email">{t('eng.channels.email', 'Email')}</option>
-                  <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>
+                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>}
                   <option value="push">{t('eng.tpl.push', 'Push')}</option>
                 </select>
               </div>
@@ -4188,7 +4253,7 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
         )}
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
         </div>
       </div>
     </div>
@@ -4215,19 +4280,19 @@ function TemplateRequestModal({ requestName, setRequestName, requestChannel, set
         ) : (
           <>
             {requestError && <div className="eng-error">{requestError}</div>}
-            <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name', 'Template Name')} *</label><input className="form-input" placeholder="e.g. Post-Purchase Thank You" value={requestName} onChange={e => setRequestName(e.target.value)} /></div>
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name', 'Template Name')} *</label><input className="form-input" placeholder={t('eng.tpl.request_name_placeholder', 'e.g. Post-Purchase Thank You')} value={requestName} onChange={e => setRequestName(e.target.value)} /></div>
             <div className="form-group">
               <label className="form-lbl">{t('eng.tpl.channels_needed', 'Channel Needed')}</label>
               <div className="select-wrap">
                 <select className="form-select" value={requestChannel} onChange={e => setRequestChannel(e.target.value)}>
                   <option value="email">{t('eng.tpl.email_only', 'Email')}</option>
-                  <option value="whatsapp">{t('eng.tpl.wa_only', 'WhatsApp')}</option>
+                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.tpl.wa_only', 'WhatsApp')}</option>}
                   <option value="push">{t('eng.tpl.push_only', 'Push')}</option>
                 </select>
                 <span className="material-symbols-outlined select-arrow">expand_more</span>
               </div>
             </div>
-            <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need', 'Describe what you need')} *</label><textarea className="form-textarea" rows={4} placeholder="Purpose, audience, sections, specific requirements…" value={requestDescribe} onChange={e => setRequestDescribe(e.target.value)} /></div>
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need', 'Describe what you need')} *</label><textarea className="form-textarea" rows={4} placeholder={t('eng.tpl.request_describe_placeholder', 'Purpose, audience, sections, specific requirements…')} value={requestDescribe} onChange={e => setRequestDescribe(e.target.value)} /></div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={onClose} disabled={requestSending}>{t('common.cancel', 'Cancel')}</button>
               <button className="btn btn-primary" onClick={onSubmit} disabled={requestSending}><span className="material-symbols-outlined">send</span>{requestSending ? t('eng.rev.sending', 'Sending…') : t('eng.tpl.submit_template_request', 'Submit Template Request')}</button>
@@ -4280,11 +4345,18 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
   const [requestSending,    setRequestSending]    = useState(false)
   const [requestSent,       setRequestSent]       = useState(false)
 
+  // Silently swallowing this showed an empty library, which looks the same as a
+  // boutique that simply has no templates yet. Stored as a flag, worded at
+  // render, so `t` stays out of the effect's dependencies.
+  const [listFailed, setListFailed] = useState(false)
   const refetchTemplates = () => {
     setLoadingList(true)
     templateApi.list()
-      .then(res => { if (res?.success) setTemplates(res.data?.templates ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res?.success) { setTemplates(res.data?.templates ?? []); setListFailed(false) }
+        else setListFailed(true)
+      })
+      .catch(() => setListFailed(true))
       .finally(() => setLoadingList(false))
   }
   useEffect(() => { refetchTemplates() }, [])
@@ -4438,7 +4510,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
           <div className="tpl-filter-row">
             <div className={`tpl-chip${channelFilter === 'all' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('all')}>{t('eng.camp.ch_all', 'All')}</div>
             <div className={`tpl-chip${channelFilter === 'email' ? ' email-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('email')}>📧 {t('eng.channels.email', 'Email')}</div>
-            <div className={`tpl-chip${channelFilter === 'whatsapp' ? ' wa-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('whatsapp')}>💬 {t('eng.channels.wa', 'WhatsApp')}</div>
+            {isWhatsappEnabled() && <div className={`tpl-chip${channelFilter === 'whatsapp' ? ' wa-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('whatsapp')}>💬 {t('eng.channels.wa', 'WhatsApp')}</div>}
             <div className={`tpl-chip${channelFilter === 'push' ? ' push-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('push')}>🔔 {t('eng.tpl.push', 'Push')}</div>
           </div>
         </div>
@@ -4448,7 +4520,9 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
             <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real', 'Create Template')}
           </button>
           {loadingList ? (
-            <div className="eng-loading">{t('eng.tpl.loading_real', 'Loading templates…')}</div>
+            <div className="eng-loading">{t('eng.tpl.loading_real', 'Loading templates') + '…'}</div>
+          ) : listFailed ? (
+            <div className="eng-error">{t('eng.tpl.err_load', 'Could not load templates.')}</div>
           ) : filteredTemplates.length === 0 ? (
             <div className="eng-loading">{t('eng.tpl.no_real_templates', 'No templates yet.')}</div>
           ) : (
@@ -4479,7 +4553,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       <div className="tpl-detail">
         <div className="tpl-detail-inner">
           {!tplDetail ? (
-            <div className="eng-loading">{detailLoading ? t('eng.tpl.loading_real', 'Loading…') : t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
+            <div className="eng-loading">{detailLoading ? t('eng.tpl.loading_real', 'Loading') + '…' : t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
           ) : (
             <>
               <div className="tpl-det-hdr">
@@ -4690,7 +4764,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                         {changeRequests.map(cr => (
                           <div key={cr.id} className="tpl-ver-row">
                             <div>
-                              <div className="tpl-ver-name">{cr.request_text} <span className={`tpl-ver-badge ${cr.status === 'open' ? 'archived' : 'current'}`}>{cr.status}</span></div>
+                              <div className="tpl-ver-name">{cr.request_text} <span className={`tpl-ver-badge ${cr.status === 'open' ? 'archived' : 'current'}`}>{statusLabelShared(t, cr.status)}</span></div>
                               <div className="tpl-ver-meta">{formatDate(cr.created_at)}</div>
                             </div>
                           </div>
@@ -4750,7 +4824,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       <div className="modal-backdrop" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}>
         <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
           <div className="modal-hdr">
-            <div className="modal-title">{t('eng.tpl.delete_title', 'Delete')} <em>{t('eng.tpl.delete_title_em', 'Template')}</em></div>
+            <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.tpl.delete_title_em', 'Template')}</em></div>
             <div className="modal-close" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}><span className="material-symbols-outlined">close</span></div>
           </div>
           {deleteError && <div className="eng-error">{deleteError}</div>}
@@ -4758,7 +4832,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
           <div className="modal-footer">
             <button className="btn btn-outline" onClick={() => { setDeleteTarget(null); setDeleteError('') }} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
             <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-              <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting…') : t('common.delete', 'Delete')}
+              <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
             </button>
           </div>
         </div>
@@ -4901,7 +4975,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
           </div>
           <div className="form-group">
             <label className="form-lbl">{t('eng.set.display_name', 'Sender display name')}</label>
-            <input className="form-input" placeholder="Your Boutique Name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+            <input className="form-input" placeholder={t('eng.set.display_name_placeholder', 'Your Boutique Name')} value={displayName} onChange={e => setDisplayName(e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-lbl">{t('eng.set.reply_to', 'Reply-to email')}</label>
@@ -4912,7 +4986,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
             <input className="form-input" placeholder={t('eng.set.address_placeholder', 'Required by anti-spam law for marketing email')} value={address} onChange={e => setAddress(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={saving} onClick={handleCreate}>
-            <span className="material-symbols-outlined">mail</span>{saving ? t('eng.set.saving', 'Saving…') : t('eng.set.create_btn', 'Create sender identity')}
+            <span className="material-symbols-outlined">mail</span>{saving ? t('common.saving', 'Saving…') : t('eng.set.create_btn', 'Create sender identity')}
           </button>
         </div>
       </div>
@@ -4925,7 +4999,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
         <div className="card-hdr">
           <div className="card-title">{t('eng.set.status_title', 'Sender')} <em>{t('eng.set.status_title_em', 'Status')}</em></div>
           <button className="card-action" disabled={refreshing} onClick={handleRefresh}>
-            {refreshing ? t('eng.set.refreshing', 'Checking…') : t('eng.set.refresh_btn', '→ Check verification status')}
+            {refreshing ? t('eng.set.refreshing', 'Checking') + '…' : t('eng.set.refresh_btn', '→ Check verification status')}
           </button>
         </div>
         {refreshMsg && <div className="eng-success" style={{ marginBottom:12 }}>{refreshMsg}</div>}
@@ -4947,7 +5021,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
 
       <div className="card eng-mt14">
         <div className="card-hdr">
-          <div className="card-title">{t('eng.set.edit_title', 'Edit')} <em>{t('eng.set.edit_title_em', 'Sender Details')}</em></div>
+          <div className="card-title">{t('common.edit', 'Edit')} <em>{t('eng.set.edit_title_em', 'Sender Details')}</em></div>
         </div>
         {saveError && <div className="eng-error">{saveError}</div>}
         {saveMsg && <div className="eng-success">{saveMsg}</div>}
@@ -4964,7 +5038,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
           <input className="form-input" value={address} onChange={e => setAddress(e.target.value)} />
         </div>
         <button className="btn btn-primary" disabled={saving} onClick={handleUpdate}>
-          {saving ? t('eng.set.saving', 'Saving…') : t('common.save', 'Save')}
+          {saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}
         </button>
       </div>
 
@@ -4978,7 +5052,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
           </div>
           {verifyError && <div className="eng-error">{verifyError}</div>}
           <button className="btn btn-outline" disabled={verifying} onClick={handleVerify}>
-            <span className="material-symbols-outlined">dns</span>{verifying ? t('eng.set.verifying', 'Requesting…') : t('eng.set.verify_btn', 'Get DNS records')}
+            <span className="material-symbols-outlined">dns</span>{verifying ? t('eng.set.verifying', 'Requesting') + '…' : t('eng.set.verify_btn', 'Get DNS records')}
           </button>
 
           {dnsRows.length > 0 && (
@@ -5029,49 +5103,84 @@ export default function Engagement() {
   const [campaignsPresetTemplate, setCampaignsPresetTemplate] = useState(null)
   const [campaignsPresetChannel, setCampaignsPresetChannel] = useState(null)
 
+  // Every one of these used to swallow its error, so a failed load looked
+  // exactly like an empty boutique: zeroes and blank lists, no warning. We now
+  // record which ones failed and say so.
+  const [failedLoads, setFailedLoads] = useState([])
+  const markLoad = (name, ok) =>
+    setFailedLoads(prev => (ok ? prev.filter(n => n !== name) : prev.includes(name) ? prev : [...prev, name]))
+
   const refetchCampaigns = () => {
     setCampaignsLoading(true)
     apiFetch(`${API}/boutique/marketing/campaigns`)
       .then(r => r.json())
-      .then(res => { if (res.success) setCampaigns(res.data?.campaigns ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setCampaigns(res.data?.campaigns ?? []); markLoad('campaigns', true) }
+        else markLoad('campaigns', false)
+      })
+      .catch(() => markLoad('campaigns', false))
       .finally(() => setCampaignsLoading(false))
   }
 
   const refetchEmailSettings = () =>
     apiFetch(`${API}/boutique/email-settings`)
       .then(r => r.json())
-      .then(res => { if (res.success) setEmailSettings(res.data?.settings ?? null) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setEmailSettings(res.data?.settings ?? null); markLoad('settings', true) }
+        else markLoad('settings', false)
+      })
+      .catch(() => markLoad('settings', false))
 
   const refetchSegments = () =>
     apiFetch(`${API}/boutique/marketing/segments`)
       .then(r => r.json())
-      .then(res => { if (res.success) setSegments(res.data?.segments ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setSegments(res.data?.segments ?? []); markLoad('segments', true) }
+        else markLoad('segments', false)
+      })
+      .catch(() => markLoad('segments', false))
 
   const refetchDashboard = () =>
     apiFetch(`${API}/boutique/marketing/dashboard`)
       .then(r => r.json())
-      .then(res => { if (res.success) setDashboard(res.data) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setDashboard(res.data); markLoad('dashboard', true) }
+        else markLoad('dashboard', false)
+      })
+      .catch(() => markLoad('dashboard', false))
 
   const onContactsChanged = () => { refetchSegments(); refetchDashboard() }
 
   useEffect(() => {
+    // Inlined rather than calling the refetch* helpers above: as component-body
+    // functions they would become reactive dependencies of this effect and
+    // re-run it on every render.
     apiFetch(`${API}/boutique/marketing/segments`)
       .then(r => r.json())
-      .then(res => { if (res.success) setSegments(res.data?.segments ?? []) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setSegments(res.data?.segments ?? []); markLoad('segments', true) }
+        else markLoad('segments', false)
+      })
+      .catch(() => markLoad('segments', false))
 
     apiFetch(`${API}/boutique/marketing/dashboard`)
       .then(r => r.json())
-      .then(res => { if (res.success) setDashboard(res.data) })
-      .catch(() => {})
+      .then(res => {
+        if (res.success) { setDashboard(res.data); markLoad('dashboard', true) }
+        else markLoad('dashboard', false)
+      })
+      .catch(() => markLoad('dashboard', false))
 
     refetchEmailSettings()
     refetchCampaigns()
   }, [i18n.language])
+
+  const LOAD_NAMES = {
+    segments:  t('eng.load.segments',  'segments'),
+    dashboard: t('eng.load.dashboard', 'overview figures'),
+    settings:  t('eng.load.settings',  'sender settings'),
+    campaigns: t('eng.load.campaigns', 'campaigns'),
+  }
 
   const VIEWS = [
     { key:'overview',    icon:'dashboard',  label:t('eng.nav.overview', 'Overview') },
@@ -5100,6 +5209,14 @@ export default function Engagement() {
       </div>
 
       <div className="content">
+        {failedLoads.length > 0 && (
+          <div className="eng-error eng-mb18">
+            {t('eng.err_partial_load', {
+              parts: failedLoads.map(n => LOAD_NAMES[n] ?? n).join(', '),
+              defaultValue: 'Could not load: {{parts}}. Those sections may look empty — reload the page to try again.',
+            })}
+          </div>
+        )}
         {activeView === 'overview' && (
           <OverviewView
             segments={segments}

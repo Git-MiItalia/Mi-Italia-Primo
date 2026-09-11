@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
 import Toast, { useToast } from '../components/ui/Toast'
 import CategorySelector from '../components/product/CategorySelector'
 import VariantTable from '../components/product/VariantTable'
@@ -12,12 +13,19 @@ import ProductAIModelStudio from '../components/product/ProductAIModelStudio'
 import PrintTagModal from '../components/product/PrintTagModal'
 import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, DEFAULT_CLASS_ID, findById } from '../lib/returnsPolicy/model'
 import { isLawfulOnline, suggestClass, resolvePolicy, buildClassMap } from '../lib/returnsPolicy/engine'
+import { fetchPolicies, fetchClasses } from '../lib/returnsPolicy/api'
 import { sortSizeLabels } from '../common/sizechart'
 
 const API = import.meta.env.VITE_API_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
 
 const BARCODE_TYPE_LABEL = { ean13: 'EAN-13', code128: 'Code 128' }
+
+// "Add a Brand" request form. These strings are the VALUES stored and sent to
+// the API, so they stay English; only their labels are translated at render.
+const BRAND_COUNTRIES  = ['Italy', 'France', 'United Kingdom', 'United States', 'Spain', 'Other']
+const BRAND_CATEGORIES = ['Womenswear', 'Menswear', 'Unisex', 'Accessories']
+const countryKey = c => c.toLowerCase().replace(/ /g, '_')
 
 function randomDigits(count) {
   let s = ''
@@ -82,10 +90,26 @@ export default function AddProduct() {
   const { id }     = useParams()
   const isEditMode = !!id
   const { toasts, show } = useToast()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+
+  // Returns policies and classes each carry an `en` and an `it` name. Store
+  // Profile picks the right one; this screen was reading `.en` everywhere, so
+  // the same policy showed a different name on each page in Italian.
+  const rpIsIt = () => !!i18n.language?.startsWith('it')
+  const rpName = (item) => (!item ? '' : (rpIsIt() ? item.it : item.en) ?? item.en)
+  // suggestClass returns both reasonEn and reasonIt; only the English half was
+  // ever read, so the hint stayed English even beside a translated class name.
+  const rpReason = (s) => (!s ? '' : (rpIsIt() ? s.reasonIt : s.reasonEn) ?? s.reasonEn)
+
+  // CategorySelector reports its resolved category once automatically when an
+  // existing product loads (not a real user change) — skip the auto-suggest
+  // override just for that one initial report.
+  const skipInitialSuggestRef = useRef(isEditMode)
 
   const [brandOpen, setBrandOpen]             = useState(false)
-  const [selectedBrand, setSelectedBrand]     = useState({ id:'own', name:'Own Label', isOwn:true })
+  // Placeholder shown until the boutique name loads and replaces it. Was a
+  // hardcoded English string, so it stayed "Own Label" in Italian.
+  const [selectedBrand, setSelectedBrand]     = useState({ id:'own', name:null, isOwn:true })
   const [madeIn, setMadeIn]                   = useState('Italy')
   const [designedInItaly, setDesignedInItaly] = useState(true)
   const [priceHidden, setPriceHidden]         = useState(false)
@@ -118,6 +142,10 @@ export default function AddProduct() {
   const [brandSuccess, setBrandSuccess]       = useState(false)
   const [brandCarry, setBrandCarry]           = useState([])
   const [brandAll, setBrandAll]               = useState([])
+  const [brandsLoading, setBrandsLoading]     = useState(true)
+  const [brandsError, setBrandsError]         = useState('')
+  const [brandError, setBrandError]           = useState('')   // create-brand modal
+  const [catRequestError, setCatRequestError] = useState('')
 
   // New state for previously uncontrolled fields
   const [primaryMaterial, setPrimaryMaterial]     = useState('')
@@ -156,19 +184,22 @@ export default function AddProduct() {
   const [rpClasses, setRpClasses]   = useState(RETURNS_CLASSES)
   const [rpDefaultId, setRpDefaultId] = useState(BASELINE_POLICY_ID)
 
+  // The returns library has its own endpoints. Reading it off /boutique/profile
+  // returned nothing usable, so this screen always resolved against the built-in
+  // seeds and could disagree with what Store Profile showed.
   useEffect(() => {
-    apiFetch(`${API}/boutique/profile`).then(r => r.json()).then(res => {
-      if (!res.success) return
-      const d = res.data
-      if (Array.isArray(d.returns_policies_json) && d.returns_policies_json.length) setRpPolicies(d.returns_policies_json)
-      if (d.returns_classes_json) {
-        setRpClasses(RETURNS_CLASSES.map(c => ({
-          ...c,
-          map: Object.prototype.hasOwnProperty.call(d.returns_classes_json, c.id) ? d.returns_classes_json[c.id] : c.map,
-        })))
-      }
-      if (d.returns_default_policy_id) setRpDefaultId(d.returns_default_policy_id)
-    }).catch(() => {})
+    let cancelled = false
+    fetchPolicies()
+      .then(({ policies, defaultPolicyId }) => {
+        if (cancelled) return
+        if (policies.length) setRpPolicies(policies)
+        if (defaultPolicyId) setRpDefaultId(defaultPolicyId)
+      })
+      .catch(() => {})
+    fetchClasses()
+      .then(list => { if (!cancelled) setRpClasses(list) })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   // ── Shared variant-payload builder ──────────────────────────────────────────
@@ -203,6 +234,7 @@ export default function AddProduct() {
               colour:     colourName,
               colour_hex: c.hex ?? null,
               stock_qty:  stockEntry?.qty ?? 0,
+              is_active:  stockEntry?.active ?? true,
             }
             if (includeIds) {
               const existing = variants.find(v =>
@@ -221,6 +253,7 @@ export default function AddProduct() {
             colour:     s.colour ?? null,
             colour_hex: colours.find(c => c.name === s.colour)?.hex ?? null,
             stock_qty:  s.qty,
+            is_active:  s.active ?? true,
           }
           if (includeIds) {
             const existing = variants.find(v =>
@@ -285,9 +318,14 @@ export default function AddProduct() {
           })
           setBrandCarry((res.data.own    ?? []).map(mapBrand))
           setBrandAll  ((res.data.global ?? []).map(mapBrand))
-        }
+          setBrandsError('')
+        } else setBrandsError(res.message || 'load-failed')
       })
-      .catch(() => {})
+      // Swallowing this left the brand picker showing only "Your Store", with
+      // nothing to say the list had failed to load — so every product saved as
+      // Own Label and looked like a deliberate choice.
+      .catch(() => setBrandsError('load-failed'))
+      .finally(() => setBrandsLoading(false))
 
     // Fetch the merchant's saved low-stock warning threshold (same setting Inventory.jsx uses),
     // so this page's stock-quantity cells flag "low" consistently with the Inventory table.
@@ -328,6 +366,8 @@ export default function AddProduct() {
         setProductStatus(p.status ?? 'active')
         setPriceHidden(p.price_hidden ?? false)
         setShowroomOn(p.showroom_enabled ?? false)
+        setReserveOn(p.reserve_enabled ?? true)
+        setShippingOn(p.shipping_enabled ?? true)
         setInitialPhotos(p.photos ?? [])
         setVariants(p.variants ?? [])
         setPublished(true)
@@ -371,11 +411,13 @@ export default function AddProduct() {
             .map(v => [v.colour, { id: v.colour, name: v.colour, hex: v.colour_hex ?? '#888888' }])
         ).values()]
 
+        // `active` must come from the variant — hardcoding true here reset every
+        // per-size toggle back to on whenever the edit page was reloaded.
         const existingStock = (p.variants ?? []).map(v => ({
           size:   v.size_label,
           colour: v.colour,
           qty:    v.stock_qty,
-          active: true,
+          active: v.is_active ?? v.active ?? true,
         }))
 
         setSizes(existingSizes)
@@ -385,17 +427,17 @@ export default function AddProduct() {
       .catch(() => {})
   }, [id])
 
-  async function publishProduct() {
+  async function publishProduct(status = productStatus) {
     const missing = []
-    if (!productName.trim()) missing.push(t('add_product.validation.name_required'))
-    if (!sku.trim())         missing.push(t('add_product.validation.sku_required'))
-    if (!retailPrice)        missing.push(t('add_product.validation.price_required'))
+    if (!productName.trim())            missing.push(t('add_product.validation.name_required'))
+    if (!sku.trim())                    missing.push(t('add_product.validation.sku_required'))
+    if (!priceHidden && !retailPrice)   missing.push(t('add_product.validation.price_required'))
     if (missing.length > 0) {
       show(t('add_product.validation.missing', { fields: missing.join(', ') }))
       return null
     }
 
-    if (productStatus !== 'draft') {
+    if (status !== 'draft') {
       const listRes = await apiFetch(`${API}/boutique/products`).then(r => r.json())
       const published = (listRes?.data?.products ?? []).filter(p => p.status === 'active' || p.status === 'hidden').length
       if (published >= MAX_PRODUCTS) {
@@ -404,8 +446,10 @@ export default function AddProduct() {
       }
     }
 
-    const res = await apiFetch(`${API}/boutique/products`, {
-      method: 'POST',
+    const res = await apiFetch(
+      productId ? `${API}/boutique/products/${productId}` : `${API}/boutique/products`,
+      {
+      method: productId ? 'PUT' : 'POST',
       body: JSON.stringify({
         name:                    productName,
         sku,
@@ -416,7 +460,7 @@ export default function AddProduct() {
         designed_in_italy:       designedInItaly,
         price_hidden:            priceHidden,
         showroom_enabled:        showroomOn,
-        status:                  productStatus,
+        status:                  status,
         reserve_enabled:         reserveOn,
         shipping_enabled:        shippingOn,
         primary_material:        primaryMaterial || null,
@@ -441,16 +485,16 @@ export default function AddProduct() {
         returns_class:              returnsClassId,
         returns_class_mode:         classMode,
         returns_policy_override_id: policyOverrideId,
-        variants:                buildVariantsPayload({ includeIds: false }),
+        variants:                buildVariantsPayload({ includeIds: !!productId }),
         size_chart:              sizeChart || null,
       })
     }).then(r => r.json())
 
     if (res.success) {
-      const newId = res.data?.product?.id ?? null
+      const newId = res.data?.product?.id ?? productId
       setProductId(newId)
       setVariants(res.data?.product?.variants ?? [])
-      setPublished(true)
+      if (status !== 'draft') setPublished(true)
       return newId
     }
     return null
@@ -458,9 +502,9 @@ export default function AddProduct() {
 
   function saveChanges() {
     const missing = []
-    if (!productName.trim()) missing.push(t('add_product.validation.name_required'))
-    if (!sku.trim())         missing.push(t('add_product.validation.sku_required'))
-    if (!retailPrice)        missing.push(t('add_product.validation.price_required'))
+    if (!productName.trim())          missing.push(t('add_product.validation.name_required'))
+    if (!sku.trim())                  missing.push(t('add_product.validation.sku_required'))
+    if (!priceHidden && !retailPrice) missing.push(t('add_product.validation.price_required'))
     if (missing.length > 0) {
       show(t('add_product.validation.missing', { fields: missing.join(', ') }))
       return
@@ -471,6 +515,11 @@ export default function AddProduct() {
         name:                    productName,
         sku,
         description,
+        // Was missing from THIS payload only — the create path and the
+        // status-change path both sent it, so a brand could be set on a new
+        // product but never changed on an existing one. Editing silently
+        // dropped the field and the server kept the previous value.
+        brand_id:                selectedBrand.isOwn ? null : selectedBrand.id,
         retail_price:            parseFloat(retailPrice),
         pickup_discount_pct:     parseFloat(pickupDiscount),
         made_in:                 madeIn,
@@ -508,7 +557,7 @@ export default function AddProduct() {
       })
 
     }).then(r => r.json()).then(res => {
-      if (!res.success) { show(res.message || 'Failed to save changes'); return }
+      if (!res.success) { show(res.message || t('add_product.error_save')); return }
 
       // Save stock changes via inventory API
       if (stockData.length > 0 && variants.length > 0) {
@@ -575,13 +624,8 @@ export default function AddProduct() {
             </>
           ) : !published ? (
             <>
-              <button className="btn btn-outline" onClick={async () => {
-                const prev = productStatus
-                setProductStatus('draft')
-                await publishProduct()
-                setProductStatus(prev)
-              }}>{t('add_product.save_draft')}</button>
-              <button className="btn btn-primary" onClick={publishProduct}>
+              <button className="btn btn-outline" onClick={() => publishProduct('draft')}>{t('add_product.save_draft')}</button>
+              <button className="btn btn-primary" onClick={() => publishProduct()}>
                 <span className="material-symbols-outlined">cloud_upload</span>{t('add_product.publish_btn')}
               </button>
             </>
@@ -593,9 +637,9 @@ export default function AddProduct() {
               </span>
               <button className="btn btn-primary" onClick={async () => {
                 const missing = []
-                if (!productName.trim()) missing.push(t('add_product.validation.name_required'))
-                if (!sku.trim())         missing.push(t('add_product.validation.sku_required'))
-                if (!retailPrice)        missing.push(t('add_product.validation.price_required'))
+                if (!productName.trim())          missing.push(t('add_product.validation.name_required'))
+                if (!sku.trim())                  missing.push(t('add_product.validation.sku_required'))
+                if (!priceHidden && !retailPrice) missing.push(t('add_product.validation.price_required'))
                 if (missing.length > 0) { show(t('add_product.validation.missing', { fields: missing.join(', ') })); return }
                 // Save latest form state to the just-created product before leaving
                 const res = await apiFetch(`${API}/boutique/products/${productId}`, {
@@ -638,7 +682,7 @@ export default function AddProduct() {
                     variants:                buildVariantsPayload({ includeIds: true })
                   })
                 }).then(r => r.json())
-                 if (!res.success) { show(res.message || 'Failed to save changes'); return }
+                 if (!res.success) { show(res.message || t('add_product.error_save')); return }
 
                 // Also push stock updates via inventory endpoint
                 if (res.success && stockData.length > 0 && variants.length > 0) {
@@ -691,43 +735,54 @@ export default function AddProduct() {
                   <div className="brand-selected-logo own">
                     <span className="material-symbols-outlined">storefront</span>
                   </div>
-                  <div className="brand-selected-name">{selectedBrand.name}</div>
-                  <div className="brand-selected-tag own-tag">Own Label</div>
+                  <div className="brand-selected-name">{selectedBrand.name ?? t('common.own_label', 'Own Label')}</div>
+                  <div className="brand-selected-tag own-tag">{t('add_product.brand.own_label')}</div>
                   <span className="material-symbols-outlined ap-expand-icon">expand_more</span>
                 </div>
                 <div className={`brand-dropdown${brandOpen ? ' open' : ''}`}>
                   <div className="brand-search">
                     <span className="material-symbols-outlined">search</span>
-                    <input placeholder="Search brands..." />
+                    <input placeholder={t('add_product.brand.search_placeholder', 'Search brands') + '…'} />
                   </div>
                   <div>
-                    <div className="brand-section-lbl">Your Store</div>
+                    <div className="brand-section-lbl">{t('add_product.brand.your_store')}</div>
                     <div className={`brand-option${selectedBrand.id === 'own' ? ' sel' : ''}`}
                       onClick={() => selectBrand({ id:'own', name: boutiqueName, isOwn:true })}>
                       <div className="brand-option-logo own-logo"><span className="material-symbols-outlined">storefront</span></div>
                       <div>
                         <div className="brand-option-name">{boutiqueName}</div>
-                        <div className="brand-option-country">Own Label · {boutiqueName}</div>
+                        <div className="brand-option-country">{t('add_product.brand.own_label')} · {boutiqueName}</div>
                       </div>
                       <span className="material-symbols-outlined brand-option-check">check</span>
                     </div>
-                    <div className="brand-section-lbl">Brands You Carry</div>
+                    {/* An empty picker used to look identical whether the list
+                        was still loading, had failed, or was genuinely empty. */}
+                    {brandsLoading && (
+                      <div className="form-hint">{t('add_product.brand.loading', 'Loading brands') + '…'}</div>
+                    )}
+                    {!brandsLoading && brandsError && (
+                      <div className="form-hint">{t('add_product.brand.err_load', 'Could not load the brand list — only your own label is available right now.')}</div>
+                    )}
+                    {!brandsLoading && !brandsError && brandCarry.length === 0 && brandAll.length === 0 && (
+                      <div className="form-hint">{t('add_product.brand.none_yet', 'No brands added yet. Use "Add a new brand" below to request one.')}</div>
+                    )}
+                    {brandCarry.length > 0 && <div className="brand-section-lbl">{t('add_product.brand.carried')}</div>}
                     {brandCarry.map(b => (
                       <BrandOption key={b.id} brand={b} selected={selectedBrand.id === b.id} onSelect={() => selectBrand(b)} />
                     ))}
-                    <div className="brand-section-lbl">All Mi Italia Brands</div>
+                    {brandAll.length > 0 && <div className="brand-section-lbl">{t('add_product.brand.all_brands')}</div>}
                     {brandAll.map(b => (
                       <BrandOption key={b.id} brand={b} selected={selectedBrand.id === b.id} onSelect={() => selectBrand(b)} />
                     ))}
                     <div className="brand-add-new" onClick={() => { setBrandOpen(false); setShowAddBrand(true) }}>
-                      <span className="material-symbols-outlined">add</span>Add a brand not listed
+                      <span className="material-symbols-outlined">add</span>{t('add_product.brand.add_new')}
                     </div>
                   </div>
                 </div>
               </div>
               <div className="brand-hint">
                 <span className="material-symbols-outlined">info</span>
-                <span>For <strong>own-label products</strong>, select your store name. For <strong>multi-brand boutiques</strong>, select the designer or label.</span>
+                <span>{t('add_product.brand.hint')}</span>
               </div>
             </div>
 
@@ -737,9 +792,10 @@ export default function AddProduct() {
               <CategorySelector
                 onChange={(cat) => {
                   setCategory(cat)
-                  if (classMode === 'suggested') {
+                  if (classMode === 'suggested' && !skipInitialSuggestRef.current) {
                     setReturnsClassId(suggestClass({ division: cat?.l1, type: cat?.l2 }).classId)
                   }
+                  skipInitialSuggestRef.current = false
                 }}
                 initialCategory={initialCategoryPath}
                 initialStyleSlugs={initialStyleSlugs}
@@ -784,8 +840,8 @@ export default function AddProduct() {
                   <div className="ap-designed-italy-left">
                     <span className="ap-flag">🇮🇹</span>
                     <div>
-                      <div className="ap-designed-italy-title">Designed in Italy</div>
-                      <div className="ap-designed-italy-sub">This product was designed in Italy and must be declared as such on the Mi Italia listing.</div>
+                      <div className="ap-designed-italy-title">{t('add_product.details.designed_italy')}</div>
+                      <div className="ap-designed-italy-sub">{t('add_product.details.designed_italy_sub')}</div>
                     </div>
                   </div>
                   <Toggle on={designedInItaly} onToggle={() => setDesignedInItaly(v => !v)} />
@@ -811,7 +867,7 @@ export default function AddProduct() {
           <div className="card">
             <div className="ap-pricing-inner">
               <div className="ap-pricing-hdr">
-                <div className="ap-pricing-title">Pricing</div>
+                <div className="ap-pricing-title">{t('add_product.pricing.title', 'Pricing')}</div>
                 <div className="ap-pricing-toggle-row">
                   <span className="ap-pricing-toggle-lbl">{t('add_product.pricing.hide_price')}</span>
                   <Toggle on={priceHidden} onToggle={() => setPriceHidden(v => !v)} />
@@ -838,10 +894,11 @@ export default function AddProduct() {
                     <span className="material-symbols-outlined">visibility_off</span>
                     {t('add_product.pricing.hidden_alert')}
                   </div>
-                  <div className="form-group ap-no-mb">
+                  {/* Enquiry number for a price-hidden product — WhatsApp only. */}
+                  {isWhatsappEnabled() && <div className="form-group ap-no-mb">
                     <label className="form-lbl">{t('add_product.pricing.whatsapp_label')}</label>
                     <input className="form-input" placeholder="+39..." value={whatsappEnquiry} onChange={e => setWhatsappEnquiry(e.target.value)} />
-                  </div>
+                  </div>}
                 </div>
               )}
             </div>
@@ -859,7 +916,7 @@ export default function AddProduct() {
           <ProductPhotos
             productId={productId}
             initialPhotos={initialPhotos}
-            onNeedPublish={publishProduct}
+            onNeedPublish={() => publishProduct('draft')}
             refreshKey={photoRefreshKey}
             onPhotosChange={bumpPhotoRefresh}
           />
@@ -905,40 +962,42 @@ export default function AddProduct() {
           <div className="card">
             <div className="card-hdr">
               <div>
-                <div className="card-title">Inventory <em>&amp; Costing</em></div>
-                <div className="ap-card-sub">Private — never shown to customers or Mi Italia</div>
+                <div className="card-title">{t('inventory.title', 'Inventory')} <em>{t('add_product.inventory.title_em', '& Costing')}</em></div>
+                <div className="ap-card-sub">{t('add_product.inventory.private_sub', 'Private — never shown to customers or Mi Italia')}</div>
               </div>
-              <span className="ap-private-badge">PRIVATE</span>
+              <span className="ap-private-badge">{t('add_product.inventory.private_badge', 'PRIVATE')}</span>
             </div>
 
             <div className="ap-section-row">
               <span className="material-symbols-outlined ap-section-icon">local_shipping</span>
-              Vendor / Supplier
+              {t('add_product.vendor.title')}
             </div>
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">Vendor Name</label>
+                <label className="form-lbl">{t('add_product.vendor.name_label')}</label>
                 <input className="form-input" value={vendorName} onChange={e => setVendorName(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">Vendor SKU</label>
+                <label className="form-lbl">{t('add_product.vendor.sku_label')}</label>
                 <input className="form-input" value={vendorSku} onChange={e => setVendorSku(e.target.value)} />
               </div>
             </div>
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">Vendor Email</label>
+                <label className="form-lbl">{t('add_product.vendor.email_label')}</label>
                 <input className="form-input" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">Lead Time</label>
+                <label className="form-lbl">{t('add_product.vendor.lead_time_label')}</label>
+                {/* value= is explicit: vendor_lead_time is stored as this English string,
+                    so only the visible label may be translated. */}
                 <select className="form-select" value={vendorLeadTime} onChange={e => setVendorLeadTime(e.target.value)}>
-                  <option>1–2 weeks</option>
-                  <option>2–4 weeks</option>
-                  <option>4–6 weeks</option>
-                  <option>6–8 weeks</option>
-                  <option>8+ weeks</option>
-                  <option>Pre-order only</option>
+                  <option value="1–2 weeks">{t('add_product.vendor.lead_1_2')}</option>
+                  <option value="2–4 weeks">{t('add_product.vendor.lead_2_4')}</option>
+                  <option value="4–6 weeks">4–6 weeks</option>
+                  <option value="6–8 weeks">{t('add_product.vendor.lead_6_8', '6–8 weeks')}</option>
+                  <option value="8+ weeks">{t('add_product.vendor.lead_8_plus')}</option>
+                  <option value="Pre-order only">{t('add_product.vendor.lead_preorder', 'Pre-order only')}</option>
                 </select>
               </div>
             </div>
@@ -950,10 +1009,10 @@ export default function AddProduct() {
               Cost &amp; Margins
             </div>
             <div className="form-row3">
-              <div className="form-group ap-no-mb"><label className="form-lbl">Cost Price (ex. VAT)</label><input className="form-input" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
-              <div className="form-group ap-no-mb"><label className="form-lbl">Shipping &amp; Duty</label><input className="form-input" value={shippingCost} onChange={e => setShippingCost(e.target.value)} /></div>
+              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.cost_price', 'Cost Price (ex. VAT)')}</label><input className="form-input" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
+              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.shipping_duty', 'Shipping & Duty')}</label><input className="form-input" value={shippingCost} onChange={e => setShippingCost(e.target.value)} /></div>
               <div className="form-group ap-no-mb">
-                <label className="form-lbl">Landed Cost</label>
+                <label className="form-lbl">{t('add_product.inventory.landed_cost', 'Landed Cost')}</label>
                 <input className="form-input ap-landed-cost"
                   value={costPrice && shippingCost ? `€${(parseFloat(costPrice||0) + parseFloat(shippingCost||0)).toFixed(2)}` : '—'}
                   readOnly />
@@ -985,11 +1044,11 @@ export default function AddProduct() {
 
             <div className="ap-section-row">
               <span className="material-symbols-outlined ap-section-icon">barcode</span>
-              Barcode
+              {t('add_product.barcode.title')}
             </div>
             <div className="form-row2 ap-no-mb-row">
               <div className="form-group ap-no-mb">
-                <label className="form-lbl">Barcode Format</label>
+                <label className="form-lbl">{t('add_product.barcode.format_label')}</label>
                 <select
                   className="form-select"
                   value={barcodeFormat}
@@ -999,18 +1058,18 @@ export default function AddProduct() {
                     if (!val) setBarcodeValue('')
                   }}
                 >
-                  <option value="">No barcode</option>
-                  <option value="ean13">EAN-13 (European standard)</option>
+                  <option value="">{t('add_product.barcode.none', 'No barcode')}</option>
+                  <option value="ean13">{t('add_product.barcode.ean13')}</option>
                   <option value="code128">Code 128</option>
                 </select>
               </div>
               <div className="form-group ap-no-mb">
-                <label className="form-lbl">Barcode Value</label>
+                <label className="form-lbl">{t('add_product.barcode.value_label')}</label>
                 <div className="ap-barcode-input-row">
                   <input className="form-input" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)} />
                   <button
                     className="btn btn-sm btn-outline"
-                    title="Auto-generate"
+                    title={t('add_product.barcode.autogen', 'Auto-generate')}
                     disabled={!barcodeFormat}
                     onClick={() => setBarcodeValue(generateBarcodeValue(barcodeFormat))}
                   >
@@ -1021,42 +1080,42 @@ export default function AddProduct() {
             </div>
             <div className="ap-barcode-preview">
               <div className="ap-barcode-preview-inner">
-                <div className="ap-barcode-preview-lbl">Barcode Preview</div>
+                <div className="ap-barcode-preview-lbl">{t('add_product.barcode.preview')}</div>
                 <div className="ap-barcode-number">{barcodeValue || '—'}</div>
                 <div className="ap-barcode-type">{BARCODE_TYPE_LABEL[barcodeFormat] ?? ''}</div>
               </div>
               <div className="ap-barcode-actions">
                 <button className="btn btn-sm btn-outline ap-nowrap" onClick={() => setShowPrintTag(true)}>
-                  <span className="material-symbols-outlined">print</span>Print Tag
+                  <span className="material-symbols-outlined">print</span>{t('add_product.barcode.print_tag')}
                 </button>
                 <button className="btn btn-sm btn-outline ap-nowrap" onClick={() => navigator.clipboard.writeText(barcodeValue)}>
                   <span className="material-symbols-outlined">content_copy</span>Copy
                 </button>
               </div>
             </div>
-            <div className="form-hint">EAN-13 for standard retail scanning. Code 128 if your SKU contains letters. Barcodes are used in Primo POS — scan at checkout instead of searching.</div>
+            <div className="form-hint">{t('add_product.barcode.hint')}</div>
           </div>
 
           {/* Showroom */}
           <div className="card">
             <div className="card-hdr">
-              <div className="card-title">Showroom &amp; <em>Wholesale</em></div>
+              <div className="card-title">{t('add_product.wholesale.title')} <em>{t('add_product.wholesale.title_em')}</em></div>
             </div>
             <div className="showroom-row">
               <div className="showroom-icon"><span className="material-symbols-outlined">business_center</span></div>
               <div className="ap-showroom-body">
-                <div className="ap-showroom-title">Push to Showroom</div>
-                <div className="ap-showroom-sub">B2B buyers can discover and order at wholesale price</div>
+                <div className="ap-showroom-title">{t('products.bulk.showroom', 'Push to Showroom')}</div>
+                <div className="ap-showroom-sub">{t('add_product.showroom.sub', 'B2B buyers can discover and order at wholesale price')}</div>
               </div>
               <Toggle on={showroomOn} onToggle={() => setShowroomOn(v => !v)} />
             </div>
             <div className="form-row2 ap-showroom-fields">
               <div className="form-group">
-                <label className="form-lbl">Wholesale Discount</label>
+                <label className="form-lbl">{t('add_product.wholesale.discount_label')}</label>
                 <input className="form-input" value={wholesaleDiscount} onChange={e => setWholesaleDiscount(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">Min Order Qty</label>
+                <label className="form-lbl">{t('add_product.showroom.min_qty', 'Min Order Qty')}</label>
                 <input className="form-input" value={wholesaleMinQty} onChange={e => setWholesaleMinQty(e.target.value)} />
               </div>
             </div>
@@ -1112,13 +1171,13 @@ export default function AddProduct() {
               >
                 {rpClasses.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.en}{rpSuggestion.classId === c.id ? ` (${t('add_product.returns.suggested_tag', 'suggested')})` : ''}
+                    {rpName(c)}{rpSuggestion.classId === c.id ? ` (${t('add_product.returns.suggested_tag', 'suggested')})` : ''}
                   </option>
                 ))}
               </select>
               <div className="form-hint">
                 {rpSuggestion.reasonEn
-                  ? `${t('add_product.returns.suggest_from', 'Suggested class')}: ${findById(rpClasses, rpSuggestion.classId)?.en} · ${rpSuggestion.reasonEn}`
+                  ? `${t('add_product.returns.suggest_from', 'Suggested class')}: ${rpName(findById(rpClasses, rpSuggestion.classId))} · ${rpReason(rpSuggestion)}`
                   : t('add_product.returns.suggest_none', 'No special signal from this category. Defaulting to Standard goods.')}
               </div>
             </div>
@@ -1127,12 +1186,12 @@ export default function AddProduct() {
               <label className="form-lbl">{t('add_product.returns.policy_label', 'Returns policy')}</label>
               <div className="rp-row" style={{ marginBottom: 0 }}>
                 <div className="rp-row-body">
-                  <div className="rp-row-name">{rpResolvedPolicy ? rpResolvedPolicy.en : '—'}</div>
+                  <div className="rp-row-name">{rpResolvedPolicy ? rpName(rpResolvedPolicy) : '—'}</div>
                   <div className="rp-row-desc">
                     {rpResolved.source === 'product'
                       ? t('add_product.returns.src_product', 'Overridden · this product')
                       : rpResolved.source === 'class'
-                        ? `${t('add_product.returns.src_class', 'From returns class')} · ${findById(rpClasses, returnsClassId)?.en}`
+                        ? `${t('add_product.returns.src_class', 'From returns class')} · ${rpName(findById(rpClasses, returnsClassId))}`
                         : t('add_product.returns.src_store', 'Inherited · store default')}
                     {rpResolved.fallback ? ` (${t('add_product.returns.online_fallback', 'online fallback')})` : ''}
                   </div>
@@ -1141,6 +1200,18 @@ export default function AddProduct() {
                   {overrideOpen ? t('common.close', 'Close') : t('add_product.returns.override_btn', 'Override')}
                 </button>
               </div>
+
+              {/* "(online fallback)" above only reads as an explanation if you
+                  already know distance-selling law. Spell out why the chosen
+                  returns class was not applied, and how to make it apply. */}
+              {rpResolved.fallback && (
+                <div className="alert alert-info" style={{ marginTop: 10 }}>
+                  {t('add_product.returns.fallback_explain', {
+                    className: rpName(findById(rpClasses, returnsClassId)),
+                    defaultValue: 'Online sales must allow 14-day returns by law, so "{{className}}" cannot be used while this product is listed online. Switch "Listed online" off to apply it for in-store sales.',
+                  })}
+                </div>
+              )}
 
               <div className="rp-row-meta" style={{ marginTop: 10 }}>
                 <span style={rpResolved.source === 'store' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
@@ -1179,7 +1250,7 @@ export default function AddProduct() {
                       >
                         <div className="rp-opt-radio" />
                         <div className="rp-opt-body">
-                          <div className="rp-opt-name">{p.en}</div>
+                          <div className="rp-opt-name">{rpName(p)}</div>
                           <div className="rp-opt-sub">{p.none ? t('returns_policy.window_none', 'No returns') : `${p.days} ${t('returns_policy.days', 'days')}`}</div>
                         </div>
                         {blocked && (
@@ -1211,7 +1282,7 @@ export default function AddProduct() {
         <div className="modal-backdrop" onClick={() => setShowAddBrand(false)}>
           <div className="modal modal-sm ap-brand-modal-scroll" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">Add a <em>Brand</em></div>
+              <div className="modal-title">{t('add_product.brand_modal.title', 'Add a')} <em>{t('add_product.details.brand_label', 'Brand')}</em></div>
               <div className="modal-close" onClick={() => setShowAddBrand(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1221,50 +1292,60 @@ export default function AddProduct() {
               <div className="ap-brand-success">
                 <div className="ap-brand-success-emoji">✅</div>
                 <div className="ap-brand-success-title">
-                  Brand <em>Submitted</em>
+                  {t('add_product.details.brand_label', 'Brand')} <em>{t('add_product.brand_modal.submitted', 'Submitted')}</em>
                 </div>
                 <div className="ap-brand-success-sub">
-                  <strong>{newBrand.name}</strong> has been added to your Boutique.
+                  <Trans i18nKey="add_product.brand_modal.added" values={{ name: newBrand.name }} components={{ b: <strong /> }} defaults="<b>{{name}}</b> has been added to your Boutique." />
                 </div>
                 <button className="btn btn-primary ap-brand-success-btn"
-                  onClick={() => { setShowAddBrand(false); setBrandSuccess(false) }}>Done</button>
+                  onClick={() => { setShowAddBrand(false); setBrandSuccess(false) }}>{t('common.done', 'Done')}</button>
               </div>
             ) : (
               <>
                 <div className="alert alert-info ap-mb14">
                   <span className="material-symbols-outlined">info</span>
-                  New brands are reviewed by Mi Italia within 24h.
+                  {t('add_product.brand_modal.review_note', 'New brands are reviewed by Mi Italia within 24h.')}
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">Brand Name</label>
-                  <input className="form-input" placeholder="e.g. Loro Piana"
+                  <label className="form-lbl">{t('add_product.brand_modal.name_label', 'Brand Name')}</label>
+                  <input className="form-input" placeholder={t('add_product.brand_modal.name_placeholder', 'e.g. Loro Piana')}
                     value={newBrand.name} onChange={e => setNewBrand(b => ({ ...b, name: e.target.value }))} />
                 </div>
                 <div className="form-row2">
                   <div className="form-group">
-                    <label className="form-lbl">Country of Origin</label>
+                    <label className="form-lbl">{t('add_product.brand_modal.country_label', 'Country of Origin')}</label>
                     <select className="form-select" value={newBrand.country}
                       onChange={e => setNewBrand(b => ({ ...b, country: e.target.value }))}>
-                      <option>Italy</option><option>France</option><option>United Kingdom</option>
-                      <option>United States</option><option>Spain</option><option>Other</option>
+                      {/* value stays English — it is what gets stored and sent
+                          to the API. Only the visible label is translated. */}
+                      {BRAND_COUNTRIES.map(c => (
+                        <option key={c} value={c}>{t(`add_product.brand_modal.country.${countryKey(c)}`, c)}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-lbl">Category</label>
+                    <label className="form-lbl">{t('add_product.details.category_label', 'Category')}</label>
                     <select className="form-select" value={newBrand.category}
                       onChange={e => setNewBrand(b => ({ ...b, category: e.target.value }))}>
-                      <option>Womenswear</option><option>Menswear</option>
-                      <option>Unisex</option><option>Accessories</option>
+                      {BRAND_CATEGORIES.map(c => (
+                        <option key={c} value={c}>{t(`add_product.brand_modal.cat.${c.toLowerCase()}`, c)}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">Brand Website</label>
+                  <label className="form-lbl">{t('add_product.brand_modal.website_label', 'Brand Website')}</label>
                   <input className="form-input" placeholder="https://www.loropiana.com"
                     value={newBrand.website} onChange={e => setNewBrand(b => ({ ...b, website: e.target.value }))} />
                 </div>
+                {brandError && (
+                  <div className="alert alert-red">
+                    <span className="material-symbols-outlined">error</span>
+                    <span>{brandError}</span>
+                  </div>
+                )}
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={() => setShowAddBrand(false)}>Cancel</button>
+                  <button className="btn btn-outline" onClick={() => setShowAddBrand(false)}>{t('common.cancel', 'Cancel')}</button>
                   <button className="btn btn-primary" disabled={!newBrand.name.trim() || brandSubmitting}
                     onClick={async () => {
                       if (!newBrand.name.trim()) return
@@ -1280,8 +1361,9 @@ export default function AddProduct() {
                           })
                         }).then(r => r.json())
                         if (res.success) {
+                          setBrandError('')
                           setBrandSuccess(true)
-                          setBrandCarry(prev => [...prev, {
+                          const created = {
                             id:       res.data.id,
                             name:     res.data.name,
                             sub:      [res.data.country, res.data.category].filter(Boolean).join(' · ') || res.data.slug || '',
@@ -1290,9 +1372,23 @@ export default function AddProduct() {
                             country:  res.data.country ?? '',
                             category: res.data.category ?? '',
                             website:  res.data.website ?? '',
-                          }])
+                            isOwn:    false,
+                          }
+                          setBrandCarry(prev => [...prev, created])
+                          // Select it straight away. You only add a brand
+                          // because you want to use it on the product you are
+                          // editing; leaving it unselected meant the brand
+                          // appeared to save and then did nothing.
+                          setSelectedBrand(created)
+                        } else {
+                          // Previously neither branch reported anything: a failed
+                          // create just left the form sitting there, looking as
+                          // though the button had not been pressed.
+                          setBrandError(res.message || t('add_product.brand_modal.err_create', 'Could not add the brand. Please try again.'))
                         }
-                      } catch {}
+                      } catch {
+                        setBrandError(t('add_product.brand_modal.err_create', 'Could not add the brand. Please try again.'))
+                      }
                       finally { setBrandSubmitting(false) }
                     }}>
                     <span className="material-symbols-outlined">send</span>
@@ -1309,7 +1405,7 @@ export default function AddProduct() {
         <div className="modal-backdrop" onClick={() => setShowCatRequest(false)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">Request New <em>Category</em></div>
+              <div className="modal-title">{t('add_product.cat_request.title', 'Request New')} <em>{t('add_product.details.category_label', 'Category')}</em></div>
               <div className="modal-close" onClick={() => setShowCatRequest(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1318,32 +1414,38 @@ export default function AddProduct() {
             {catRequestSuccess ? (
               <div className="ap-brand-success">
                 <div className="ap-brand-success-emoji">✅</div>
-                <div className="ap-brand-success-title">Request <em>Sent</em></div>
-                <div className="ap-brand-success-sub">Mi Italia will review your request and get back to you.</div>
+                <div className="ap-brand-success-title">{t('add_product.cat_request.request', 'Request')} <em>{t('add_product.cat_request.sent', 'Sent')}</em></div>
+                <div className="ap-brand-success-sub">{t('add_product.cat_request.success_sub', 'Mi Italia will review your request and get back to you.')}</div>
                 <button className="btn btn-primary ap-brand-success-btn"
                   onClick={() => {
                     setShowCatRequest(false); setCatRequestSuccess(false)
                     setCatRequestName(''); setCatRequestExample(''); setCatRequestNote('')
-                  }}>Done</button>
+                  }}>{t('common.done', 'Done')}</button>
               </div>
             ) : (
               <>
                 <div className="form-group">
-                  <label className="form-lbl">Category Name</label>
-                  <input className="form-input" placeholder="e.g. Home Fragrance"
+                  <label className="form-lbl">{t('add_product.cat_request.name_label', 'Category Name')}</label>
+                  <input className="form-input" placeholder={t('add_product.cat_request.name_placeholder', 'e.g. Home Fragrance')}
                     value={catRequestName} onChange={e => setCatRequestName(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">Example Product <span className="sup-optional">(optional)</span></label>
-                  <input className="form-input" placeholder="e.g. Fico d'India diffuser 200ml"
+                  <label className="form-lbl">{t('add_product.cat_request.example_label', 'Example Product')} <span className="sup-optional">{t('common.optional_paren', '(optional)')}</span></label>
+                  <input className="form-input" placeholder={t('add_product.cat_request.example_placeholder', "e.g. Fico d'India diffuser 200ml")}
                     value={catRequestExample} onChange={e => setCatRequestExample(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">Message</label>
+                  <label className="form-lbl">{t('add_product.cat_request.message_label', 'Message')}</label>
                   <textarea className="form-textarea" rows={4}
-                    placeholder="Why do you need this category?"
+                    placeholder={t('add_product.cat_request.message_placeholder', 'Why do you need this category?')}
                     value={catRequestNote} onChange={e => setCatRequestNote(e.target.value)} />
                 </div>
+                {catRequestError && (
+                  <div className="alert alert-red">
+                    <span className="material-symbols-outlined">error</span>
+                    <span>{catRequestError}</span>
+                  </div>
+                )}
                 <div className="modal-footer">
                   <button className="btn btn-primary" disabled={!catRequestName.trim() || catRequestSubmitting}
                     onClick={async () => {
@@ -1361,12 +1463,15 @@ export default function AddProduct() {
                             note:            catRequestNote.trim() || undefined,
                           }),
                         }).then(r => r.json())
-                        if (res?.success) setCatRequestSuccess(true)
-                      } catch {}
+                        if (res?.success) { setCatRequestError(''); setCatRequestSuccess(true) }
+                        else setCatRequestError(res?.message || t('add_product.cat_request.err_send', 'Could not send the request. Please try again.'))
+                      } catch {
+                        setCatRequestError(t('add_product.cat_request.err_send', 'Could not send the request. Please try again.'))
+                      }
                       finally { setCatRequestSubmitting(false) }
                     }}>
                     <span className="material-symbols-outlined">send</span>
-                    {catRequestSubmitting ? 'Sending…' : 'Send'}
+                    {catRequestSubmitting ? t('add_product.cat_request.sending', 'Sending') + '…' : t('add_product.cat_request.send_btn', 'Send')}
                   </button>
                 </div>
               </>

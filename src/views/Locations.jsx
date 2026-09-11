@@ -550,7 +550,7 @@ export default function Locations() {
                     <div className="loc-staff-info">
                       <div className="loc-staff-name">
                         {s.name}
-                        {!s.is_active && <span className="loc-inactive-tag">Inactive</span>}
+                        {!s.is_active && <span className="loc-inactive-tag">{t('common.inactive')}</span>}
                       </div>
                       <div className="loc-staff-email">{s.email}</div>
                       <div className="loc-staff-locs">
@@ -987,7 +987,7 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
           <input className="form-input" value={name} onChange={e => setName(e.target.value)} /></div>
         <div className="form-row2">
           <div className="form-group">
-            <label className="form-lbl">Role</label>
+            <label className="form-lbl">{t('locations.modal.role')}</label>
             <select className="form-select" value={role} onChange={e => setRole(e.target.value)} disabled={isOwner}>
               {isOwner && <option value="owner">Owner</option>}
               <option value="manager">Manager</option>
@@ -1000,7 +1000,7 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
             <div className="loc-staff-active-toggle">
               <label className="loc-assign-item">
                 <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="loc-assign-checkbox" />
-                Active
+                {t('common.active')}
               </label>
             </div>
           </div>

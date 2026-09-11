@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { sortSizeLabels } from '../../common/sizechart'
 
 export default function RestockGrid({ variants, values, onChange, warnThreshold }) {
+  const { t } = useTranslation()
   const sizeList = useMemo(() => {
     const seen = new Set()
     const list = []
@@ -26,14 +28,14 @@ export default function RestockGrid({ variants, values, onChange, warnThreshold 
   }
 
   if (!variants.length) {
-    return <div className="vs-empty">This product has no variants yet.</div>
+    return <div className="vs-empty">{t('restock_grid.no_variants', 'This product has no variants yet.')}</div>
   }
 
   return (
     <table className="variant-tbl">
       <thead>
         <tr>
-          <th>Size</th>
+          <th>{t('restock_grid.size', 'Size')}</th>
           {colourList.map(c => (
             <th key={c || '—'} className="vs-colour-th">{c || '—'}</th>
           ))}

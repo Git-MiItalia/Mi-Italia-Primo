@@ -1,6 +1,8 @@
 // SizeChart.jsx
 // Usage: <SizeChart l1="Women's" l2="Tops" l3="Blouse" />
 
+import { useTranslation } from 'react-i18next'
+
 const ONE_SIZE = { cols: ['Size'], rows: [{ Size: 'ONE SIZE' }] }
 
 const SCHEMAS = {
@@ -348,6 +350,7 @@ export function getSchema(l1, l2, l3) {
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export default function SizeChart({ l1, l2, l3 }) {
+  const { t } = useTranslation()
   const schema = getSchema(l1, l2, l3)
   if (!schema) return null
 
@@ -357,8 +360,8 @@ export default function SizeChart({ l1, l2, l3 }) {
     <div className="sizechart-wrap">
       <div className="sizechart-hdr">
         <span className="material-symbols-outlined sizechart-icon">straighten</span>
-        <span className="sizechart-title">Size Chart</span>
-        <span className="sizechart-unit">All measurements in cm</span>
+        <span className="sizechart-title">{t('sizechart.title', 'Size Chart')}</span>
+        <span className="sizechart-unit">{t('sizechart.unit', 'All measurements in cm')}</span>
       </div>
       <div className="sizechart-tbl-wrap">
         <table className="sizechart-tbl">

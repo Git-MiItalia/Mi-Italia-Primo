@@ -684,7 +684,7 @@ function ConnectedView({
           </div>
           <button className="btn btn-outline btn-sm" disabled={customersBusy} onClick={onImportCustomers}>
             <span className="material-symbols-outlined">group</span>
-            {customersBusy ? t('common.syncing', 'Syncing…') : t('integrations.customers.import_btn', 'Import customers')}
+            {customersBusy ? t('common.syncing', 'Syncing') + '…' : t('integrations.customers.import_btn', 'Import customers')}
           </button>
         </div>
       </div>
@@ -699,11 +699,11 @@ function ConnectedView({
           </div>
           <button className="btn btn-outline btn-sm" disabled={ordersSyncing} onClick={onSyncOrders}>
             <span className="material-symbols-outlined">sync</span>
-            {ordersSyncing ? t('common.syncing', 'Syncing…') : t('integrations.orders.sync_btn', 'Sync orders')}
+            {ordersSyncing ? t('common.syncing', 'Syncing') + '…' : t('integrations.orders.sync_btn', 'Sync orders')}
           </button>
         </div>
         {ordersLoading ? (
-          <div className="shp-order-loading"><span className="material-symbols-outlined">progress_activity</span>{t('integrations.orders.loading', 'Loading orders…')}</div>
+          <div className="shp-order-loading"><span className="material-symbols-outlined">progress_activity</span>{t('integrations.orders.loading', 'Loading orders') + '…'}</div>
         ) : !orders || orders.length === 0 ? (
           <div className="card shp-order-empty">{t('integrations.orders.empty', 'No orders mirrored yet. Sync to pull them from Shopify.')}</div>
         ) : (

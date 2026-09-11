@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { sortSizeLabels } from '../common/sizechart'
 import {
   TAG_DIMS,
   STYLE_PALETTES,
@@ -99,24 +100,24 @@ export default function PriceTags() {
   const { t, i18n } = useTranslation()
 
   const SCENES = [
-    { key:'setup',    label: t('pt.scenes.setup')    },
-    { key:'designer', label: t('pt.scenes.designer') },
-    { key:'select',   label: t('pt.scenes.select')   },
-    { key:'preview',  label: t('pt.scenes.preview')  },
+    { key:'setup',    label: t('pt.scenes.setup',    'Printer Setup') },
+    { key:'designer', label: t('pt.scenes.designer', 'Tag Designer')  },
+    { key:'select',   label: t('pt.scenes.select',   'Select Products') },
+    { key:'preview',  label: t('pt.scenes.preview',  'Print Preview') },
   ]
 
   const STYLES = [
-    { key:'minimal',  label: t('pt.styles.minimal')  },
-    { key:'standard', label: t('pt.styles.standard') },
-    { key:'bold',     label: t('pt.styles.bold')     },
-    { key:'kraft',    label: t('pt.styles.kraft')    },
+    { key:'minimal',  label: t('pt.styles.minimal',  'Minimal')  },
+    { key:'standard', label: t('pt.styles.standard', 'Standard') },
+    { key:'bold',     label: t('pt.styles.bold',     'Bold')     },
+    { key:'kraft',    label: t('pt.styles.kraft',    'Kraft')    },
   ]
 
   const [scene, setScene]         = useState('setup')
   const [printer, setPrinter]     = useState('dymo')
   const [labelSize, setLabelSize] = useState('57x32')
   const [style, setStyle]         = useState('minimal')
-  const [currency, setCurrency]   = useState('€')
+  const currency                  = '€' // Primo price tags are euro-only
   const [priceSize, setPriceSize] = useState('large')
   const [fields, setFields]       = useState({ boutique:true, brand:true, name:true, price:true, size:true, sku:true, barcode:false, origin:false, season:false, qr:false })
   const [qrMap, setQrMap]         = useState({})
@@ -131,18 +132,28 @@ export default function PriceTags() {
   const printerData = PRINTERS[printer]
   const dim         = TAG_DIMS[labelSize] || TAG_DIMS['57x32']
 
-  // Fetch products + profile on mount
+  // Fetch products + profile on mount.
+  // The products list has every field the tag needs but no variants, so the
+  // inventory list is fetched alongside it purely for each product's sizes —
+  // one extra request instead of a per-product detail fanout.
   useEffect(() => {
     Promise.all([
       apiFetch(`${API}/boutique/products`).then(r => r.json()),
       apiFetch(`${API}/boutique/profile`).then(r => r.json()),
-    ]).then(([prodRes, profRes]) => {
+      apiFetch(`${API}/boutique/inventory`).then(r => r.json()).catch(() => null),
+    ]).then(([prodRes, profRes, invRes]) => {
       if (profRes.success) {
         setBoutiqueName(profRes.data.name || '')
         setBoutiqueCity(profRes.data.city || '')
-        if (profRes.data.currency === 'GBP') setCurrency('£')
-        else if (profRes.data.currency === 'USD') setCurrency('$')
-        else if (profRes.data.currency === 'CHF') setCurrency('CHF')
+      }
+
+      // productId → sorted size labels
+      const sizesById = {}
+      if (invRes?.success) {
+        ;(invRes.data.products || []).forEach(p => {
+          const labels = [...new Set((p.variants || []).map(v => v.size_label).filter(Boolean))]
+          if (labels.length) sizesById[p.id] = sortSizeLabels(labels)
+        })
       }
 
       if (prodRes.success) {
@@ -159,8 +170,9 @@ export default function PriceTags() {
             barcodeFormat: p.barcode_format ?? '',
             photo:   p.main_photo || null,
             stock:   parseInt(p.total_stock) || 0,
-            variants: parseInt(p.variant_count) || 1,
-            size:    '',
+            sizes:   sizesById[p.id] ?? [],
+            sizeToPrint: 'ALL',   // 'ALL' | a specific size label
+            size:    '',          // filled per tag at print time
             checked: false,
             qty:     1,
           }))
@@ -175,7 +187,9 @@ export default function PriceTags() {
     .finally(() => setLoading(false))
   }, [i18n.language])
 
-  const SAMPLE = products[0] || { id: null, name: boutiqueName || 'Sample Product', price: 890, sku: 'SKU-001', size: 'M', brand: boutiqueName, madeIn: 'Italy', barcodeValue: '', barcodeFormat: '' }
+  // Give the designer preview a real size so the Size toggle has something to show.
+  const SAMPLE_BASE = products[0] || { id: null, name: boutiqueName || 'Sample Product', price: 890, sku: 'SKU-001', brand: boutiqueName, madeIn: 'Italy', barcodeValue: '', barcodeFormat: '' }
+  const SAMPLE = { ...SAMPLE_BASE, size: SAMPLE_BASE.sizes?.[0] || 'M' }
 
   const toggleField = key => setFields(f => ({ ...f, [key]: !f[key] }))
   const filtered    = products.filter(p =>
@@ -185,11 +199,26 @@ export default function PriceTags() {
 
   function toggleProd(id, checked) { setProducts(prev => prev.map(p => p.id===id ? {...p, checked} : p)) }
   function setQty(id, val)         { setProducts(prev => prev.map(p => p.id===id ? {...p, qty:Math.max(1,parseInt(val)||1)} : p)) }
+  function setSizeToPrint(id, val) { setProducts(prev => prev.map(p => p.id===id ? {...p, sizeToPrint:val} : p)) }
   function toggleAll(checked)      { setProducts(prev => prev.map(p => filtered.some(f => f.id === p.id) ? {...p, checked} : p)) }
   function clearAll()              { setProducts(prev => prev.map(p => ({...p, checked:false}))) }
 
   const selected  = products.filter(p => p.checked)
-  const totalTags = selected.reduce((s, p) => s + p.qty, 0)
+
+  // Which sizes a product actually prints. A product with no variants prints one
+  // sizeless tag, so the empty string keeps the shape uniform.
+  function sizesToPrint(p) {
+    if (!p.sizes?.length) return ['']
+    return p.sizeToPrint === 'ALL' ? p.sizes : [p.sizeToPrint]
+  }
+
+  // One entry per physical tag — `qty` copies of every chosen size.
+  const printJobs = selected.flatMap(p =>
+    sizesToPrint(p).flatMap(size =>
+      Array.from({ length: p.qty }, (_, i) => ({ ...p, size, jobKey: `${p.id}-${size}-${i}` }))
+    )
+  )
+  const totalTags = printJobs.length
 
   const availableFields = getAvailableFields(labelSize)
   const palette = STYLE_PALETTES[style] || STYLE_PALETTES.minimal
@@ -247,7 +276,7 @@ export default function PriceTags() {
   }
 
   async function printTags() {
-    if (!selected.length) { alert(t('pt.no_products_alert')); return }
+    if (!selected.length) { alert(t('pt.no_products_alert', 'Select at least one product to print.')); return }
 
     let freshQrMap = qrMap
     if (fields.qr) {
@@ -262,8 +291,7 @@ export default function PriceTags() {
       }
     }
 
-    const tags = []
-    selected.forEach(p => { for (let i = 0; i < p.qty; i++) tags.push(buildTag(p, 1, freshQrMap)) })
+    const tags = printJobs.map(job => buildTag(job, 1, freshQrMap))
     const opened = openPrintWindow(tags, labelSize)
     if (!opened) alert('Popup blocked — please allow popups for this site to print tags.')
   }
@@ -279,10 +307,10 @@ export default function PriceTags() {
         ))}
         <div className="pt-scene-actions">
           <button className="btn btn-outline btn-sm pt-setup-btn" onClick={() => setScene('setup')}>
-            <span className="material-symbols-outlined">settings</span>{t('pt.printer_setup')}
+            <span className="material-symbols-outlined">settings</span>{t('pt.printer_setup', 'Printer Setup')}
           </button>
           <button className="btn pt-print-btn" onClick={printTags}>
-            <span className="material-symbols-outlined">print</span>{t('pt.print_selected')}
+            <span className="material-symbols-outlined">print</span>{t('pt.print_selected', 'Print Selected')}
           </button>
         </div>
       </div>
@@ -290,7 +318,7 @@ export default function PriceTags() {
       {/* ══ 1. PRINTER SETUP ══ */}
       {scene === 'setup' && (
         <>
-          <SectionDivider label={t('pt.setup.select_printer')} />
+          <SectionDivider label={t('pt.setup.select_printer', 'Select Your Printer')} />
           <div className="pt-printer-grid">
             {PRINTER_CARDS.map(pc => (
               <div key={pc.id} onClick={() => { setPrinter(pc.id); setLabelSize(PRINTERS[pc.id].sizes[0].id) }}
@@ -306,7 +334,7 @@ export default function PriceTags() {
 
           <div className="grid2">
             <div>
-              <SectionDivider label={t('pt.setup.label_size')} />
+              <SectionDivider label={t('pt.setup.label_size', 'Label Size')} />
               <div className="pt-size-list">
                 {printerData.sizes.map(s => {
                   const d  = TAG_DIMS[s.id] || TAG_DIMS['57x32']
@@ -325,7 +353,7 @@ export default function PriceTags() {
                         <div className="pt-size-use">{s.use}</div>
                         <div className="pt-size-mm">{s.dims}mm</div>
                       </div>
-                      {s.rec && <span className="pt-size-rec">✓ {t('pt.setup.recommended')}</span>}
+                      {s.rec && <span className="pt-size-rec">✓ {t('pt.setup.recommended', 'Recommended')}</span>}
                     </div>
                   )
                 })}
@@ -333,7 +361,7 @@ export default function PriceTags() {
             </div>
 
             <div>
-              <SectionDivider label={t('pt.setup.printer_status')} />
+              <SectionDivider label={t('pt.setup.printer_status', 'Printer Status')} />
               <div className="card pt-status-card">
                 <div className="pt-status-hdr">
                   <div className="pt-status-dot" />
@@ -343,14 +371,14 @@ export default function PriceTags() {
                 <div className="pt-status-setup">{printerData.setup}</div>
               </div>
 
-              <SectionDivider label={t('pt.setup.stock_guide')} />
+              <SectionDivider label={t('pt.setup.stock_guide', 'Label Stock')} />
               <div className="pt-stock-guide">
-                <strong className="pt-stock-title">{t('pt.setup.recommended_stock')}</strong><br />{printerData.stock}
+                <strong className="pt-stock-title">{t('pt.setup.recommended_stock', 'Recommended stock:')}</strong><br />{printerData.stock}
               </div>
 
               <div className="pt-next-btn-wrap">
                 <button className="btn btn-outline btn-sm pt-next-btn" onClick={() => setScene('designer')}>
-                  {t('pt.setup.next_design')} →
+                  {t('pt.setup.next_design', 'Next: design your tag')} →
                 </button>
               </div>
             </div>
@@ -362,7 +390,7 @@ export default function PriceTags() {
       {scene === 'designer' && (
         <div className="grid2 pt-designer-grid">
           <div>
-            <SectionDivider label={t('pt.designer.tag_style')} />
+            <SectionDivider label={t('pt.designer.tag_style', 'Tag Style')} />
             <div className="pt-styles-grid">
               {STYLES.map(s => {
                 const p = STYLE_PALETTES[s.key]
@@ -382,18 +410,18 @@ export default function PriceTags() {
               })}
             </div>
 
-            <SectionDivider label={t('pt.designer.fields')} />
+            <SectionDivider label={t('pt.designer.fields', 'Fields on the Tag')} />
             <div className="card pt-fields-card">
               {[
                 { key:'boutique', label:t('pt.fields.boutique', 'Boutique Name & City'), sub: t('pt.fields.boutique_sub', 'Shown as the tag header') },
-                { key:'brand',   label:t('pt.fields.brand'),   sub: boutiqueName ? `${boutiqueName} · ${t('pt.fields.brand_rec')}` : t('pt.fields.brand_sub') },
-                { key:'name',    label:t('pt.fields.name'),    sub: t('pt.fields.name_sub') },
-                { key:'price',   label:t('pt.fields.price'),   sub: t('pt.fields.price_sub') },
-                { key:'size',    label:t('pt.fields.size'),    sub: t('pt.fields.size_sub') },
-                { key:'sku',     label:t('pt.fields.sku'),     sub: t('pt.fields.sku_sub') },
-                { key:'barcode', label:t('pt.fields.barcode'), sub: t('pt.fields.barcode_sub') },
-                { key:'origin',  label:t('pt.fields.origin'),  sub: t('pt.fields.origin_sub') },
-                { key:'season',  label:t('pt.fields.season'),  sub: t('pt.fields.season_sub') },
+                { key:'brand',   label:t('pt.fields.brand', 'Brand'),   sub: boutiqueName ? `${boutiqueName} · ${t('pt.fields.brand_rec', 'recommended')}` : t('pt.fields.brand_sub', 'Brand or designer name') },
+                { key:'name',    label:t('pt.fields.name', 'Product Name'),    sub: t('pt.fields.name_sub', 'Shown under the header') },
+                { key:'price',   label:t('pt.fields.price', 'Retail Price'),   sub: t('pt.fields.price_sub', 'The price the customer pays') },
+                { key:'size',    label:t('pt.fields.size', 'Size'),    sub: t('pt.fields.size_sub', 'Printed next to the price') },
+                { key:'sku',     label:t('pt.fields.sku', 'SKU'),     sub: t('pt.fields.sku_sub', 'Your internal product code') },
+                { key:'barcode', label:t('pt.fields.barcode', 'Barcode'), sub: t('pt.fields.barcode_sub', 'Scannable at the till') },
+                { key:'origin',  label:t('pt.fields.origin', 'Country of Origin'),  sub: t('pt.fields.origin_sub', 'Shows the Made in Italy flag') },
+                { key:'season',  label:t('pt.fields.season', 'Season'),  sub: t('pt.fields.season_sub', 'Collection the item belongs to') },
                 { key:'qr',      label:t('pt.fields.qr', 'QR Code'),      sub: t('pt.fields.qr_sub', 'Links to this product on Mi Italia') },
               ].map((f, i, arr) => {
                 const showKey    = FIELD_TO_SHOW[f.key]
@@ -410,23 +438,19 @@ export default function PriceTags() {
               })}
             </div>
 
-            <SectionDivider label={t('pt.designer.price_display')} />
+            <SectionDivider label={t('pt.designer.price_display', 'Price Display')} />
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">{t('pt.designer.currency')}</label>
-                <select className="form-select" value={currency} onChange={e => setCurrency(e.target.value)}>
-                  <option value="€">€ Euro</option>
-                  <option value="£">£ Sterling</option>
-                  <option value="$">$ USD</option>
-                  <option value="CHF">CHF</option>
-                </select>
+                <label className="form-lbl">{t('pt.designer.currency', 'Currency')}</label>
+                <input className="form-input" value="€ Euro" readOnly />
+                <div className="form-hint">{t('pt.designer.currency_fixed', 'Price tags always print in euro.')}</div>
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('pt.designer.price_size')}</label>
+                <label className="form-lbl">{t('pt.designer.price_size', 'Price Size')}</label>
                 <select className="form-select" value={priceSize} onChange={e => setPriceSize(e.target.value)}>
-                  <option value="large">{t('pt.designer.price_large')}</option>
-                  <option value="medium">{t('pt.designer.price_medium')}</option>
-                  <option value="small">{t('pt.designer.price_small')}</option>
+                  <option value="large">{t('pt.designer.price_large', 'Large')}</option>
+                  <option value="medium">{t('pt.designer.price_medium', 'Medium')}</option>
+                  <option value="small">{t('pt.designer.price_small', 'Small')}</option>
                 </select>
               </div>
             </div>
@@ -434,30 +458,30 @@ export default function PriceTags() {
 
           {/* Live preview */}
           <div>
-            <SectionDivider label={`${t('pt.designer.preview')} — ${dim.wMM}mm × ${dim.hMM}mm`} />
+            <SectionDivider label={`${t('pt.designer.preview', 'Live Preview')} — ${dim.wMM}mm × ${dim.hMM}mm`} />
             <div className="pt-preview-bg">
               <div dangerouslySetInnerHTML={{ __html: buildTag(SAMPLE, 3) }} />
-              <div className="pt-preview-scale-note">{t('pt.designer.scale_note')}</div>
+              <div className="pt-preview-scale-note">{t('pt.designer.scale_note', 'Shown at 3x actual size')}</div>
             </div>
-            <div className="pt-preview-caption">{t('pt.designer.preview_caption')}</div>
+            <div className="pt-preview-caption">{t('pt.designer.preview_caption', 'This is how your tag will print')}</div>
 
-            <SectionDivider label={t('pt.designer.hang_tag')} />
+            <SectionDivider label={t('pt.designer.hang_tag', 'Hang Tags')} />
             <div className="pt-hang-tag-card">
               <div className="pt-hang-tag-hdr">
                 <div className="pt-hang-tag-ico">🏷️</div>
                 <div>
-                  <div className="pt-hang-tag-title">{t('pt.designer.hang_tag_title')}</div>
-                  <div className="pt-hang-tag-sub">{t('pt.designer.hang_tag_sub')}</div>
+                  <div className="pt-hang-tag-title">{t('pt.designer.hang_tag_title', 'Printed hang tags')}</div>
+                  <div className="pt-hang-tag-sub">{t('pt.designer.hang_tag_sub', 'Order professionally printed card hang tags for your collection.')}</div>
                 </div>
               </div>
               <div className="pt-hang-tag-btns">
-                <button className="btn btn-outline btn-sm">{t('pt.designer.design_hang_tag')}</button>
-                <button className="btn btn-outline btn-sm">{t('pt.designer.download_template')}</button>
+                <button className="btn btn-outline btn-sm">{t('pt.designer.design_hang_tag', 'Design a hang tag')}</button>
+                <button className="btn btn-outline btn-sm">{t('pt.designer.download_template', 'Download template')}</button>
               </div>
             </div>
 
             <button className="btn pt-designer-next" onClick={() => setScene('select')}>
-              {t('pt.designer.next_products')} →
+              {t('pt.designer.next_products', 'Next: select products')} →
             </button>
           </div>
         </div>
@@ -467,30 +491,37 @@ export default function PriceTags() {
       {scene === 'select' && (
         <>
           <div className="pt-select-toolbar">
-            <input className="pt-select-search" placeholder={t('pt.select.search')} value={search} onChange={e => setSearch(e.target.value)} />
+            <input className="pt-select-search" placeholder={t('pt.select.search', 'Search by name or SKU')} value={search} onChange={e => setSearch(e.target.value)} />
             <select className="form-select pt-select-cat" value={brandFilter} onChange={e => setBrandFilter(e.target.value)}>
-              <option value="">{t('pt.select.all_brands')}</option>
+              <option value="">{t('pt.select.all_brands', 'All brands')}</option>
               {brandList.map(b => <option key={b} value={b}>{b}</option>)}
-              <option value="__own">{t('pt.select.own_label')}</option>
+              <option value="__own">{t('pt.select.own_label', 'Own label')}</option>
             </select>
             <div className="pt-select-actions">
-              <button className="btn btn-outline btn-sm" onClick={() => toggleAll(true)}>{t('pt.select.select_all')}</button>
-              <button className="btn btn-outline btn-sm" onClick={clearAll}>{t('common.clear')}</button>
-              <div className="pt-select-count">{selected.length} {t('pt.select.selected')} · {totalTags} {t('pt.select.tags')}</div>
+              <button className="btn btn-outline btn-sm" onClick={() => toggleAll(true)}>{t('pt.select.select_all', 'Select all')}</button>
+              <button className="btn btn-outline btn-sm" onClick={clearAll}>{t('common.clear', 'Clear')}</button>
+              <div className="pt-select-count">{selected.length} {t('pt.select.selected', 'selected')} · {totalTags} {t('pt.select.tags', 'tags')}</div>
             </div>
           </div>
 
           {loading ? (
-            <div className="pt-loading">{t('common.loading')}</div>
+            <div className="pt-loading">{t('common.loading', 'Loading...')}</div>
           ) : filtered.length === 0 ? (
-            <div className="pt-loading">{t('pt.select.no_products')}{search ? ` "${search}"` : ''}</div>
+            <div className="pt-loading">{t('pt.select.no_products', 'No products found')}{search ? ` "${search}"` : ''}</div>
           ) : (
             <div className="card pt-product-table">
               <div className="pt-table-hdr">
                 <input type="checkbox" className="pt-checkbox" onChange={e => toggleAll(e.target.checked)} />
                 <div />
-                {[t('pt.select.col_product'), t('pt.select.col_brand'), t('pt.select.col_price'), t('pt.select.col_tags'), ''].map((h, i) => (
-                  <div key={i} className={`pt-th${h===t('pt.select.col_price') ? ' pt-th-right' : h===t('pt.select.col_tags') ? ' pt-th-center' : ''}`}>{h}</div>
+                {[
+                  { label: t('pt.select.col_product', 'Product') },
+                  { label: t('pt.select.col_brand', 'Brand') },
+                  { label: t('pt.select.col_price', 'Price'), cls: ' pt-th-right' },
+                  { label: t('pt.select.col_size', 'Size'), cls: ' pt-th-center' },
+                  { label: t('pt.select.col_tags', 'Tags'), cls: ' pt-th-center' },
+                  { label: '' },
+                ].map((h, i) => (
+                  <div key={i} className={`pt-th${h.cls ?? ''}`}>{h.label}</div>
                 ))}
               </div>
 
@@ -505,10 +536,28 @@ export default function PriceTags() {
                   </div>
                   <div>
                     <div className="pt-product-name">{p.name}</div>
-                    <div className="pt-product-meta">{p.sku} · {p.stock} {t('pt.select.in_stock')}</div>
+                    <div className="pt-product-meta">
+                      {p.sku} · {p.stock} {t('pt.select.in_stock', 'in stock')}
+                      {p.sizes.length > 0 && ` · ${p.sizes.join(', ')}`}
+                    </div>
                   </div>
-                  <div className="pt-product-cat">{p.brand || t('pt.select.own_label_short')}</div>
+                  <div className="pt-product-cat">{p.brand || t('pt.select.own_label_short', 'Own label')}</div>
                   <div className="pt-product-price">{currency}{p.price.toLocaleString()}</div>
+                  <div className="pt-product-size-wrap">
+                    {p.sizes.length === 0 ? (
+                      <span className="pt-product-size-none">{t('pt.select.one_size', 'One size')}</span>
+                    ) : (
+                      <select
+                        className="pt-size-select"
+                        value={p.sizeToPrint}
+                        disabled={!p.checked}
+                        onChange={e => setSizeToPrint(p.id, e.target.value)}
+                      >
+                        <option value="ALL">{t('pt.select.all_sizes', 'All sizes')} ({p.sizes.length})</option>
+                        {p.sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+                  </div>
                   <div className="pt-product-qty-wrap">
                     <input type="number" value={p.qty} min="1" max="99" disabled={!p.checked}
                       onChange={e => setQty(p.id, e.target.value)}
@@ -517,7 +566,7 @@ export default function PriceTags() {
                     />
                   </div>
                   <div>
-                    <button className="btn btn-outline btn-xs" onClick={() => { toggleProd(p.id, true); setScene('preview') }}>{t('common.preview')}</button>
+                    <button className="btn btn-outline btn-xs" onClick={() => { toggleProd(p.id, true); setScene('preview') }}>{t('common.preview', 'Preview')}</button>
                   </div>
                 </div>
               ))}
@@ -527,12 +576,12 @@ export default function PriceTags() {
           <div className="pt-select-footer">
             <div>
               <div className="pt-select-footer-title">
-                {t('pt.select.footer_count', { products: selected.length, tags: totalTags })}
+                {t('pt.select.footer_count', { products: selected.length, tags: totalTags, defaultValue: '{{products}} product(s) - {{tags}} tag(s)' })}
               </div>
               <div className="pt-select-footer-sub">{printerData.name} · {dim.wMM}×{dim.hMM}mm · {style.charAt(0).toUpperCase()+style.slice(1)}</div>
             </div>
             <button className="btn pt-select-print-btn" onClick={() => setScene('preview')}>
-              <span className="material-symbols-outlined">preview</span>{t('pt.select.preview_print')} →
+              <span className="material-symbols-outlined">preview</span>{t('pt.select.preview_print', 'Preview & print')} →
             </button>
           </div>
         </>
@@ -543,37 +592,35 @@ export default function PriceTags() {
         <>
           <div className="pt-preview-topbar">
             <div>
-              <div className="pt-preview-title">{t('pt.select.footer_count', { products: selected.length, tags: totalTags })}</div>
+              <div className="pt-preview-title">{t('pt.select.footer_count', { products: selected.length, tags: totalTags, defaultValue: '{{products}} product(s) - {{tags}} tag(s)' })}</div>
               <div className="pt-preview-subtitle">{printerData.name} · {dim.wMM}mm × {dim.hMM}mm</div>
             </div>
             <button className="btn btn-outline btn-sm" onClick={() => setScene('select')}>
-              <span className="material-symbols-outlined">arrow_back</span>{t('common.back')}
+              <span className="material-symbols-outlined">arrow_back</span>{t('common.back', 'Back')}
             </button>
             <button className="btn pt-print-btn" onClick={printTags}>
-              <span className="material-symbols-outlined">print</span>{t('pt.preview.print_now')}
+              <span className="material-symbols-outlined">print</span>{t('pt.preview.print_now', 'Print Now')}
             </button>
           </div>
 
           <div className="clm-alert clm-alert-info pt-print-hint">
             <span className="material-symbols-outlined clm-alert-icon">print</span>
             <div>
-              {t('pt.preview.hint_prefix')} <strong>{dim.wMM}mm × {dim.hMM}mm {t('pt.preview.hint_for')} {printerData.name}</strong>. {t('pt.preview.hint_suffix')}
+              {t('pt.preview.hint_prefix', 'These tags are sized for')} <strong>{dim.wMM}mm × {dim.hMM}mm {t('pt.preview.hint_for', 'on')} {printerData.name}</strong>. {t('pt.preview.hint_suffix', 'Print at 100% scale - do not use "fit to page".')}
             </div>
           </div>
 
           <div className="pt-preview-sheet">
-            <div className="pt-preview-sheet-lbl">{t('pt.preview.sheet_label')} — {t('pt.preview.tag_count', { count: totalTags })}</div>
+            <div className="pt-preview-sheet-lbl">{t('pt.preview.sheet_label', 'Print sheet')} — {t('pt.preview.tag_count', { count: totalTags, defaultValue: '{{count}} tag(s)' })}</div>
             <div className="pt-preview-tags">
               {selected.length === 0 ? (
-                <div className="pt-preview-empty">{t('pt.preview.empty')}</div>
+                <div className="pt-preview-empty">{t('pt.preview.empty', 'No products selected yet.')}</div>
               ) : (
-                selected.flatMap(p =>
-                  Array.from({ length: p.qty }, (_, i) => (
-                    <div key={`${p.id}-${i}`} className="pt-preview-tag-wrap"
-                      dangerouslySetInnerHTML={{ __html: buildTag(p, 2.5) }}
-                    />
-                  ))
-                )
+                printJobs.map(job => (
+                  <div key={job.jobKey} className="pt-preview-tag-wrap"
+                    dangerouslySetInnerHTML={{ __html: buildTag(job, 2.5) }}
+                  />
+                ))
               )}
             </div>
           </div>

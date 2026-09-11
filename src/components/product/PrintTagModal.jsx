@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
 import {
   TAG_DIMS,
@@ -20,13 +21,13 @@ const SIZE_OPTIONS = [
 
 // Field toggles surfaced to the user (map to `show.*` in buildBoutiqueTagHtml).
 const FIELD_OPTIONS = [
-  { key: 'boutique',   label: 'Boutique name & city' },
-  { key: 'product',    label: 'Product name & brand' },
-  { key: 'price',      label: 'Price' },
-  { key: 'barcode',    label: 'Barcode (for POS scanning)' },
-  { key: 'madeInFlag', label: 'Made in Italy flag' },
-  { key: 'qr',         label: 'QR code (links to Mi Italia listing)' },
-  { key: 'sku',        label: 'SKU & Vendor SKU' },
+  { key: 'boutique',   fallback: 'Boutique name & city' },
+  { key: 'product',    fallback: 'Product name & brand' },
+  { key: 'price',      fallback: 'Price' },
+  { key: 'barcode',    fallback: 'Barcode (for POS scanning)' },
+  { key: 'madeInFlag', fallback: 'Made in Italy flag', tkey: 'made_in_flag' },
+  { key: 'qr',         fallback: 'QR code (links to Mi Italia listing)' },
+  { key: 'sku',        fallback: 'SKU & Vendor SKU' },
 ]
 
 /**
@@ -48,6 +49,7 @@ export default function PrintTagModal({
   sizes     = [],
   productId = null,
 }) {
+  const { t } = useTranslation()
   const [boutique,    setBoutique]     = useState({ name: '', city: '' })
   const [sizeId,      setSizeId]       = useState('57x32')
   const [sizeToPrint, setSizeToPrint]  = useState('ALL')
@@ -197,7 +199,7 @@ export default function PrintTagModal({
 
     const opened = openPrintWindow(tags, sizeId)
     if (!opened) {
-      alert('Popup blocked — please allow popups for this site to print tags.')
+      alert(t('ptm.popup_blocked', 'Popup blocked — please allow popups for this site to print tags.'))
     }
   }
 
@@ -207,7 +209,7 @@ export default function PrintTagModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal ptm-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">Print <em>Product Tag</em></div>
+          <div className="modal-title">{t('ptm.title', 'Print')} <em>{t('ptm.title_em', 'Product Tag')}</em></div>
           <div className="modal-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </div>
@@ -217,10 +219,10 @@ export default function PrintTagModal({
 
           {/* ── LEFT: Preview ─────────────────────────────────────────── */}
           <div>
-            <div className="ptm-section-lbl">Tag Preview</div>
+            <div className="ptm-section-lbl">{t('ptm.preview', 'Tag Preview')}</div>
 
             <div className="ptm-size-picker">
-              <span className="ptm-size-picker-lbl">Print size:</span>
+              <span className="ptm-size-picker-lbl">{t('ptm.print_size', 'Print size:')}</span>
               {SIZE_OPTIONS.map(opt => (
                 <button
                   key={opt.id}
@@ -237,37 +239,42 @@ export default function PrintTagModal({
             </div>
 
             <div className="ptm-preview-hint">
-              Print on {SIZE_OPTIONS.find(s => s.id === sizeId)?.label} label paper · Dymo / Zebra / Brother compatible
+              {t('ptm.preview_hint', 'Print on {{size}} label paper · Dymo / Zebra / Brother compatible',
+                 { size: SIZE_OPTIONS.find(s => s.id === sizeId)?.label })}
             </div>
 
             {product.barcodeValue && !barcode.valid && (
               <div className="ptm-barcode-warn">
-                ⚠ Barcode value doesn't match {product.barcodeFormat?.toUpperCase() || 'EAN-13'} format — pattern is decorative and may not scan.
+                ⚠ {t('ptm.barcode_warn', "Barcode value doesn't match {{format}} format — pattern is decorative and may not scan.",
+                      { format: product.barcodeFormat?.toUpperCase() || 'EAN-13' })}
               </div>
             )}
           </div>
 
           {/* ── RIGHT: Settings ───────────────────────────────────────── */}
           <div>
-            <div className="ptm-section-lbl">Tag Settings</div>
+            <div className="ptm-section-lbl">{t('ptm.settings', 'Tag Settings')}</div>
 
             <div className="form-group">
-              <label className="form-lbl">Size to print</label>
+              <label className="form-lbl">{t('ptm.size_to_print', 'Size to print')}</label>
               <select
                 className="form-select"
                 value={sizeToPrint}
                 onChange={e => setSizeToPrint(e.target.value)}
               >
-                <option value="ALL">All sizes ({sizes.map(s => s.size).join(', ') || 'One Size'})</option>
+                <option value="ALL">
+                  {t('ptm.all_sizes', 'All sizes ({{sizes}})',
+                     { sizes: sizes.map(s => s.size).join(', ') || t('ptm.one_size', 'One Size') })}
+                </option>
                 {sizes.map(s => (
-                  <option key={s.size} value={s.size}>Size {s.size} only</option>
+                  <option key={s.size} value={s.size}>{t('ptm.size_only', 'Size {{size}} only', { size: s.size })}</option>
                 ))}
-                {sizes.length === 0 && <option value="One Size">One Size only</option>}
+                {sizes.length === 0 && <option value="One Size">{t('ptm.one_size_only', 'One Size only')}</option>}
               </select>
             </div>
 
             <div className="form-group">
-              <label className="form-lbl">Quantity per size</label>
+              <label className="form-lbl">{t('ptm.qty_per_size', 'Quantity per size')}</label>
               <input
                 className="form-input"
                 type="number"
@@ -279,7 +286,7 @@ export default function PrintTagModal({
               />
             </div>
 
-            <div className="ptm-section-lbl ptm-section-lbl-mt">Show on tag</div>
+            <div className="ptm-section-lbl ptm-section-lbl-mt">{t('ptm.show_on_tag', 'Show on tag')}</div>
             <div className="ptm-fields-list">
               {FIELD_OPTIONS.map(f => (
                 <label key={f.key} className="ptm-field-lbl">
@@ -289,16 +296,18 @@ export default function PrintTagModal({
                     onChange={() => toggleField(f.key)}
                     className="ptm-field-cb"
                   />
-                  {f.label}
+                  {t(`ptm.fields.${f.tkey ?? f.key}`, f.fallback)}
                 </label>
               ))}
             </div>
 
             <div className="ptm-footer-btns">
-              <button className="btn btn-dark ptm-flex-1" onClick={onClose}>Cancel</button>
+              <button className="btn btn-dark ptm-flex-1" onClick={onClose}>{t('common.cancel')}</button>
               <button className="btn btn-primary ptm-flex-1" onClick={handlePrint} disabled={totalTags === 0}>
                 <span className="material-symbols-outlined">print</span>
-                Print {totalTags} tag{totalTags !== 1 ? 's' : ''}
+                {totalTags === 1
+                  ? t('ptm.print_one', 'Print 1 tag')
+                  : t('ptm.print_many', 'Print {{count}} tags', { count: totalTags })}
               </button>
             </div>
           </div>
