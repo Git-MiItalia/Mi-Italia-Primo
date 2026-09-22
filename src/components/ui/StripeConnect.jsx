@@ -40,7 +40,7 @@ export default function StripeConnect({ onConnected, onSkip }) {
     try {
       const raw = localStorage.getItem('primo_user') || localStorage.getItem('user')
       if (raw) return JSON.parse(raw)?.email || ''
-    } catch {}
+    } catch { /* unreadable or malformed storage — fall through to '' below */ }
     return ''
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
@@ -9,9 +10,6 @@ const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 // logged-in user's photo changed, without a shared store or full reload.
 const MY_PHOTO_UPDATED_EVENT = 'primo:my-photo-updated'
 
-function ini(name) {
-  return (name ?? '').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
-}
 
 export default function ViewProfile() {
   const navigate = useNavigate()
@@ -66,12 +64,9 @@ export default function ViewProfile() {
     setPhotoUploading(false)
   }
 
-  if (loading) return (
-    <div className="vp-loading">
-      <span className="material-symbols-outlined">hourglass_empty</span>
-      Loading profile…
-    </div>
-  )
+  /* Was its own block with the words hardcoded in English — the only loading
+     state in the portal that never translated at all. */
+  if (loading) return <Loading page />
 
   return (
     <div className="vp-wrap">

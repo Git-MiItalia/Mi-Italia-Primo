@@ -67,7 +67,9 @@ export default function CategorySelectorDropdown({ onChange }) {
         value={state.l1}
         onChange={selectL1}
         options={l1Options}
-        placeholder={loading ? 'Loading divisions…' : 'Select division…'}
+        placeholder={loading
+          ? t('catsel.loading_divisions', 'Loading divisions') + '…'
+          : t('catsel.division_placeholder', 'Select division…')}
         disabled={loading}
       />
 
@@ -105,7 +107,7 @@ export default function CategorySelectorDropdown({ onChange }) {
             {state.l4.length > 0 && <div className="catsel-result-attrs">{state.l4.join(', ')}</div>}
           </div>
           <button className="btn btn-xs btn-outline catsel-reset" onClick={reset}>
-            <span className="material-symbols-outlined" style={{ fontSize:13 }}>refresh</span>Reset
+            <span className="material-symbols-outlined" style={{ fontSize:13 }}>refresh</span>{t('common.reset', 'Reset')}
           </button>
         </div>
       )}

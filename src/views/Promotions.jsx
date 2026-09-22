@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import useLangStore from '../store/langStore'
 import Toast, { useToast } from '../components/ui/Toast'
+import Loading from '../components/ui/Loading'
 
 const API      = import.meta.env.VITE_API_URL
 
@@ -220,7 +221,7 @@ function PriceHistoryModal({ t, loading, history, onClose }) {
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-title">{t('promotions.history.title', 'Price history')}</div>
         {loading
-          ? <div className="dc-loading">{t('promotions.items.loading')}</div>
+          ? <Loading />
           : (history.length === 0
             ? <div className="empty">{t('promotions.history.empty', 'No recorded price history')}</div>
             : (
@@ -327,19 +328,45 @@ export default function Promotions() {
   const [selfCostVisible, setSelfCostVisible]   = useState(false)
   const [selfLoading, setSelfLoading]           = useState(true)
 
+  /* False until we know which start date to price against.
+   *
+   * selfStart begins as today, but a boutique with a saved draft has its own
+   * start date, which only arrives with the campaign further down. So the items
+   * were fetched twice on every visit — once for today, then again for the real
+   * date once the draft landed — and the first set was discarded unseen. The
+   * Saldi side already worked this way by accident, since saldiStart begins
+   * empty and its effect returns until the region's rules arrive.
+   *
+   * Set on every path that ends the lookup, including the failures: a flag that
+   * can stay false would leave the section on its spinner forever. */
+  const [startResolved, setStartResolved] = useState(false)
+
+  /* `cancelled` is what the rest of this codebase's fetch effects do and this
+     one was missing. Without it the start-date input could leave two requests
+     racing and let the slower, older reply overwrite the newer list — and in
+     development StrictMode's deliberate double mount made the items load,
+     clear and load again, visibly. The guard settles both. */
   useEffect(() => {
+    // selfLoading is deliberately left true here: the section stays on its
+    // spinner through the wait rather than flashing an empty table.
+    if (!startResolved) return
+    let cancelled = false
     setSelfLoading(true)
     api(`${API}/boutique/promotions/items?startsAt=${selfStart}&seasonalOnly=false&page=1&limit=100`)
       .then(res => {
+        if (cancelled) return
         if (!res.success) { markLoad('products', false); return }
         setSelfProducts(res.data.items ?? [])
         setSelfCostVisible(!!res.data.context?.costVisible)
         markLoad('products', true)
       })
-      .finally(() => setSelfLoading(false))
-  }, [selfStart, lang, markLoad])
+      .finally(() => { if (!cancelled) setSelfLoading(false) })
+    return () => { cancelled = true }
+  }, [startResolved, selfStart, lang, markLoad])
 
   function hydrateSelfCampaign(id) {
+    // .finally, not .then: a draft we cannot read still ends the wait, leaving
+    // selfStart at today, which is the right fallback.
     api(`${API}/boutique/promotions/sales/${id}`).then(res => {
       if (!res.success) return
       const c = res.data.campaign
@@ -351,7 +378,7 @@ export default function Promotions() {
       setSelfEnd(isoToDateOnly(c.endsAt))
       const { selected, overrides } = hydrateSelection(c.items, c.discountValue)
       setSelfSelected(selected); setSelfOverride(overrides)
-    })
+    }).finally(() => setStartResolved(true))
   }
 
   function toggleSelf(id) { setSelfSelected(s => ({ ...s, [id]: !s[id] })) }
@@ -480,15 +507,20 @@ export default function Promotions() {
     // matters: returning while it's still true left the tab on "Loading…"
     // forever for any boutique whose region has no rules.
     if (!saldiStart) { setSaldiLoading(false); return }
+    // Same cancel guard as the boutique-promo items effect above, for the same
+    // reasons — this is its Saldi twin.
+    let cancelled = false
     setSaldiLoading(true)
     api(`${API}/boutique/promotions/items?startsAt=${saldiStart}&seasonalOnly=true&page=1&limit=100`)
       .then(res => {
+        if (cancelled) return
         if (!res.success) { markLoad('saldi_products', false); return }
         setSaldiProducts(res.data.items ?? [])
         setSaldiCostVisible(!!res.data.context?.costVisible)
         markLoad('saldi_products', true)
       })
-      .finally(() => setSaldiLoading(false))
+      .finally(() => { if (!cancelled) setSaldiLoading(false) })
+    return () => { cancelled = true }
   }, [saldiStart, lang, markLoad])
 
   function hydrateSaldiCampaign(id) {
@@ -509,7 +541,8 @@ export default function Promotions() {
     api(`${API}/boutique/promotions/sales?page=1&limit=50`).then(res => {
       // Without this the tab opens as a blank new draft and the merchant's
       // saved work looks deleted — the worst possible silent failure here.
-      if (!res.success) { markLoad('campaigns', false); return }
+      // Each early exit releases the items fetch as well, or it would never run.
+      if (!res.success) { markLoad('campaigns', false); setStartResolved(true); return }
       markLoad('campaigns', true)
       const campaigns = res.data.campaigns ?? []
       const pick = kind => campaigns
@@ -517,7 +550,9 @@ export default function Promotions() {
         .sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt))[0]
       const selfC  = pick('boutique_promo')
       const saldiC = pick('saldi')
-      if (selfC)  hydrateSelfCampaign(selfC.id)
+      // No saved draft: today stands, so nothing more to wait for.
+      if (selfC) hydrateSelfCampaign(selfC.id)
+      else       setStartResolved(true)
       if (saldiC) hydrateSaldiCampaign(saldiC.id)
     })
   }, [markLoad])
@@ -731,7 +766,7 @@ export default function Promotions() {
             </div>
             <div className="prm-ref-note">{t('promotions.self.ref_note')}</div>
             {selfLoading
-              ? <div className="dc-loading">{t('promotions.items.loading')}</div>
+              ? <Loading />
               : <SaleItemsTable t={t} products={selfProducts} saleDisc={selfDisc} selected={selfSelected} overrides={selfOverride} costVisible={selfCostVisible} aiNotes={selfAiNotes}
                   onToggle={toggleSelf} onEdit={editSelfLine} onReset={resetSelfLine} onHistory={openHistory} onToggleSeasonal={toggleSelfSeasonal} />}
           </div>
@@ -820,7 +855,7 @@ export default function Promotions() {
                   </button>
                 </div>
                 {saldiLoading
-                  ? <div className="dc-loading">{t('promotions.items.loading')}</div>
+                  ? <Loading />
                   : <SaleItemsTable t={t} products={saldiProducts} saleDisc={saldiDisc} selected={saldiSelected} overrides={saldiOverride} costVisible={saldiCostVisible} aiNotes={saldiAiNotes}
                       onToggle={toggleSaldi} onEdit={editSaldiLine} onReset={resetSaldiLine} onHistory={openHistory}
                       emptyHint={saldiStart
@@ -854,7 +889,7 @@ export default function Promotions() {
       {activeTab === 2 && (
         <div>
           {invLoading
-            ? <div className="dc-loading">{t('promotions.items.loading')}</div>
+            ? <Loading />
             : invitations.length === 0
               ? <div className="empty">{t('promotions.mi.empty', 'No platform sale invitations right now.')}</div>
               : invitations.map(inv => {
@@ -895,7 +930,7 @@ export default function Promotions() {
                             )}
                             <div className="prm-mi-select-lbl">{t('promotions.mi.select_items')}</div>
                             {selfLoading
-                              ? <div className="dc-loading">{t('promotions.items.loading')}</div>
+                              ? <Loading />
                               : (
                                 <table className="tbl">
                                   <thead><tr><th></th><th>{t('promotions.mi.col_item')}</th><th className="prm-num">{t('promotions.mi.col_retail')}</th><th className="prm-num">{t('promotions.mi.col_sale', { depth: inv.suggestedDepthPct })}</th></tr></thead>

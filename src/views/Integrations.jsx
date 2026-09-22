@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { activeLocale } from '../lib/dateHelpers'
+import Loading from '../components/ui/Loading'
 import CategorySelectorDropdown from '../components/product/CategorySelectorDropdown'
 import { useCategoryTree, findDivision, findType, findStyle } from '../lib/categoryTree'
 import Toast, { useToast } from '../components/ui/Toast'
@@ -17,9 +19,35 @@ function slugify(s) {
     .replace(/^-+|-+$/g, '')
 }
 
-function fmt(n) { return (n ?? 0).toLocaleString('en-US') }
+// 'en-US' was pinned here, so a boutique reading its own product counts in
+// Italian saw 1,240 where the rest of the portal writes 1.240.
+function fmt(n) { return (n ?? 0).toLocaleString(activeLocale()) }
 
 function errMsg(err, fallback) { return err?.message || fallback }
+
+/* ── Shopify store handle ──────────────────────────────────────────────────
+ * The field takes the handle only — the ".myshopify.com" is printed beside the
+ * input, not typed. The form used to accept anything non-empty, so an email
+ * address went through and the backend built
+ *     https://strom@mailinator.com.myshopify.com/admin/api/…
+ * which its HTTP client rejected outright ("URL that includes credentials" —
+ * everything before the @ reads as a username). The connection was stored and
+ * every later call 500'd, with nothing on screen to say the domain was the
+ * problem.
+ *
+ * normaliseShop absorbs what people actually paste — the full admin URL, the
+ * suffix, a trailing slash, capitals — and isShopHandle then holds the line.
+ * Shopify handles are lowercase letters, digits and hyphens, not starting or
+ * ending with a hyphen; anything with '@', a dot or a space is not one. */
+function normaliseShop(v) {
+  return String(v ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')                 // /admin/… and any trailing slash
+    .replace(/\.myshopify\.com$/, '')
+}
+const isShopHandle = (v) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(v)
 
 export default function Integrations() {
   const { t } = useTranslation()
@@ -291,9 +319,7 @@ export default function Integrations() {
   }
 
   // ═══════════════════════════════════════════════════════════
-  if (locLoading) {
-    return <div className="sp-page-loading"><span className="material-symbols-outlined">hourglass_empty</span><div className="sp-page-loading-text">{t('integrations.loading', 'Loading locations…')}</div></div>
-  }
+  if (locLoading) return <Loading page />
 
   return (
     <>
@@ -304,9 +330,7 @@ export default function Integrations() {
         <MappingStep {...{ t, mapRows, mapFilter, setMapFilter, mapOpenIdx, setMapOpenIdx, setRowCategory, mapBusy }}
           onApply={applyMapping} onCancel={() => setStep(null)} />
       )}
-      {step === null && connLoading && locations.length > 0 && (
-        <div className="sp-page-loading"><span className="material-symbols-outlined">hourglass_empty</span><div className="sp-page-loading-text">{t('integrations.connection_loading', 'Checking Shopify connection…')}</div></div>
-      )}
+      {step === null && connLoading && locations.length > 0 && <Loading page />}
       {step === null && !connLoading && (
         <div className="shp-wrap">
           <div className="card">
@@ -374,10 +398,17 @@ function NotConnectedHero({ t, onConnect }) {
 
 function ConnectStep({ t, show, currentLocation, domain, setDomain, accessToken, setAccessToken, scopes, toggleScope, setStep, onContinue }) {
   function handleContinue() {
-    if (!domain.trim()) {
+    const shop = normaliseShop(domain)
+    if (!shop) {
       show(t('integrations.toast.domain_required', 'Enter the Shopify store domain to continue.'), 'error')
       return
     }
+    if (!isShopHandle(shop)) {
+      show(t('integrations.toast.domain_invalid', 'That is not a Shopify store domain. Use just the store handle — the part before .myshopify.com in your Shopify Admin address, such as sartoria-belloni. Not an email address or a web address.'), 'error')
+      return
+    }
+    // Write the cleaned handle back, so what is sent is what is shown.
+    if (shop !== domain) setDomain(shop)
     if (!accessToken.trim()) {
       show(t('integrations.toast.token_required', 'Enter the Shopify Admin API access token to continue.'), 'error')
       return
@@ -652,7 +683,7 @@ function ConnectedView({
           <div className="shp-health-dot" />
           <div className="shp-health-body">
             {conn.domain}.myshopify.com
-            <div className="shp-health-sub">{t('integrations.connected.health_sub', 'Connected · {{count}} products · last synced {{when}}', { count: conn.productCount ?? 0, when: conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleString() : t('integrations.connected.never_synced', 'never') })}</div>
+            <div className="shp-health-sub">{t('integrations.connected.health_sub', 'Connected · {{count}} products · last synced {{when}}', { count: conn.productCount ?? 0, when: conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleString(activeLocale()) : t('integrations.connected.never_synced', 'never') })}</div>
           </div>
           <button className="btn btn-outline btn-sm" onClick={onSyncNow}><span className="material-symbols-outlined">sync</span>{t('integrations.connected.sync_btn', 'Sync now')}</button>
         </div>
@@ -703,7 +734,7 @@ function ConnectedView({
           </button>
         </div>
         {ordersLoading ? (
-          <div className="shp-order-loading"><span className="material-symbols-outlined">progress_activity</span>{t('integrations.orders.loading', 'Loading orders') + '…'}</div>
+          <Loading className="ld-cell" />
         ) : !orders || orders.length === 0 ? (
           <div className="card shp-order-empty">{t('integrations.orders.empty', 'No orders mirrored yet. Sync to pull them from Shopify.')}</div>
         ) : (

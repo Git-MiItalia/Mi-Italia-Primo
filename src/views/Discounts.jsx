@@ -2,10 +2,19 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import Toast, { useToast } from '../components/ui/Toast'
+import Loading from '../components/ui/Loading'
 import useLangStore from '../store/langStore'
 import { useCategoryTree } from '../lib/categoryTree'
 
-const API = import.meta.env.VITE_API_URL
+const API      = import.meta.env.VITE_API_URL
+const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
+
+// The pickup endpoint returns main_photo as a full URL, while the product
+// endpoints elsewhere return a path relative to the API host. Accept either, so
+// this keeps working if the two are ever made consistent.
+function photoUrl(url) {
+  return !url ? null : url.startsWith('http') ? url : `${IMG_BASE}${url}`
+}
 
 // These three lists are all rendered with .filter/.map, so a non-array from the
 // API takes the whole page down with "x.filter is not a function" — a blank
@@ -321,9 +330,19 @@ export default function Discounts() {
   const [prodSearch, setProdSearch]           = useState('')
   const [savingStore, setSavingStore]         = useState(false)
   const debounceRef                           = useRef(null)
+  // Two flags for one fetch, because the two halves of the pickup tab wait for
+  // different things. `pickupLoading` is per-request and drives the product
+  // list, which reloads on every debounced search. `pickupReady` only flips
+  // once, and gates the store-wide slider: that number is not search-dependent,
+  // so blanking it on every keystroke would flicker the card for no reason.
+  const [pickupLoading, setPickupLoading]     = useState(true)
+  const [pickupReady, setPickupReady]         = useState(false)
 
   const [promoCodes, setPromoCodes]           = useState([])
-  const [promoLoading, setPromoLoading]       = useState(false)
+  // true, not false: the fetch starts in an effect, which runs after the first
+  // paint, so a false start rendered one frame of "No promo codes yet" to every
+  // boutique that has some.
+  const [promoLoading, setPromoLoading]       = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm]     = useState(null)
   const [extendConfirm, setExtendConfirm]     = useState(null)
@@ -361,7 +380,13 @@ export default function Discounts() {
   // helper: a helper defined in the component body counts as a changing
   // dependency, which would drag all three loaders into the fetch effect's
   // dependency list. State setters are stable, so inlining keeps them out.
-  function loadPickup(search = '') {
+  // `quiet` skips the spinner. Saving one product's override reloads the list
+  // to pick up what the server made of it, but the list is already on screen
+  // and the user is still working in it — replacing it with a spinner on every
+  // blur would yank the rows out from under them. A quiet reload just swaps the
+  // data in. First load, search and the Refresh action all spin normally.
+  function loadPickup(search = '', quiet = false) {
+    if (!quiet) setPickupLoading(true)
     const q = search ? `&product_name=${encodeURIComponent(search)}` : ''
     apiFetch(`${API}/boutique/discounts/pickup?page=1&limit=${PICKUP_LIMIT}${q}`)
       .then(r => r.json())
@@ -372,6 +397,9 @@ export default function Discounts() {
         setProducts(asList(res.data?.products))
       })
       .catch(() => setLoadError(''))
+      // In `finally`, so a failed load stops spinning and lets the error
+      // banner above be the answer, rather than spinning under it forever.
+      .finally(() => { setPickupLoading(false); setPickupReady(true) })
   }
 
   function loadPromos() {
@@ -439,7 +467,7 @@ export default function Discounts() {
         method: 'PUT',
         body: JSON.stringify({ pickup_discount_pct: pct })
       }).then(r => r.json())
-      if (res.success) { show(t('discounts.pickup.toast_product_saved', { name: res.data.name, defaultValue: 'Updated {{name}}' }), 'success'); loadPickup(prodSearch) }
+      if (res.success) { show(t('discounts.pickup.toast_product_saved', { name: res.data.name, defaultValue: 'Updated {{name}}' }), 'success'); loadPickup(prodSearch, true) }
       else show(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'), 'error')
     } catch {
       show(t('common.error_network', 'Network error. Please check your connection.'), 'error')
@@ -650,6 +678,12 @@ export default function Discounts() {
               <div className="card-hdr">
                 <div className="card-title">{t('discounts.pickup.title', 'Pickup')} <em>{t('discounts.pickup.title_em', 'Discounts')}</em></div>
               </div>
+              {/* Until the fetch lands, `localDiscount` is the useState seed of
+                  5, not the boutique's setting — so the card used to show a
+                  confident "5%" that could jump to something else a moment
+                  later. Nothing truthful to draw yet, so draw the spinner. */}
+              {!pickupReady && <Loading />}
+              {pickupReady && (
               <div className="dc-store-discount-inner">
                 <div className="dc-store-discount-row">
                   <div className="dc-store-discount-body">
@@ -672,6 +706,7 @@ export default function Discounts() {
                   </button>
                 )}
               </div>
+              )}
               <div className="alert alert-info">
                 <span className="material-symbols-outlined">info</span>
                 {t('discounts.pickup.alert', 'Pickup discounts only apply to in-store pickup orders, not shipped orders.')}
@@ -687,17 +722,32 @@ export default function Discounts() {
                 <span className="material-symbols-outlined dc-prod-search-icon">search</span>
                 <input className="dc-prod-search-input" value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder={t('discounts.pickup.search_placeholder', 'Search products…')} />
               </div>
-              {products.length === 0 && (
+              {/* Search is server-side, so every keystroke re-fetches. Without
+                  this the list sat on the previous results — or, on the very
+                  first load, on "No products found." — with nothing to say a
+                  request was in flight. The empty state waits for the answer. */}
+              {pickupLoading && <Loading />}
+              {!pickupLoading && products.length === 0 && (
                 <div className="dc-empty">
                   {prodSearch ? t('discounts.pickup.no_results', 'No products match your search.') : t('discounts.pickup.no_products', 'No products found.')}
                 </div>
               )}
-              {products.map(p => {
+              {!pickupLoading && products.map(p => {
                 const pct  = p.pickup_discount_pct ?? p.effective_pickup_pct ?? storeDiscount
                 const calc = calcDiscounted(p.retail_price ?? p.retail, pct)
                 return (
                   <div key={p.id} className="discount-card">
-                    <div className="discount-img" style={{ backgroundImage:`url('${p.img ?? p.image_url}')`, background:(!p.img && !p.image_url) ? 'var(--mist)' : undefined }} />
+                    {/* `main_photo`. This read `p.img ?? p.image_url`, and the
+                        pickup endpoint has never returned either name, so every
+                        tile on the page fell through to the blank grey square —
+                        which looked exactly like a catalogue with no photos
+                        rather than like a bug. */}
+                    <div
+                      className="discount-img"
+                      style={photoUrl(p.main_photo)
+                        ? { backgroundImage: `url('${photoUrl(p.main_photo)}')` }
+                        : { background: 'var(--mist)' }}
+                    />
                     <div className="discount-body">
                       <div className="discount-name">{p.name}</div>
                       <div className="discount-meta">{t('discounts.pickup.retail', { price: parseFloat(p.retail_price ?? p.retail ?? 0).toFixed(2), defaultValue: 'Retail: €{{price}}' })}</div>
@@ -711,7 +761,7 @@ export default function Discounts() {
                   </div>
                 )
               })}
-              {products.length >= PICKUP_LIMIT && (
+              {!pickupLoading && products.length >= PICKUP_LIMIT && (
                 <div className="dc-empty">
                   {t('discounts.pickup.more_products', { count: PICKUP_LIMIT, defaultValue: 'Showing the first {{count}} products. Use the search above to find a specific one.' })}
                 </div>
@@ -726,7 +776,12 @@ export default function Discounts() {
                 <span className="material-symbols-outlined">add</span>{t('discounts.promo.new_btn', 'New Code')}
               </button>
             </div>
-            <PromoList codes={promoCodes} onDeleteConfirm={setDeleteConfirm} onToggleStatus={togglePromoStatus} />
+            {/* Same list as tab 1, so it waits the same way — this copy used to
+                show "No promo codes yet" while tab 1 showed a spinner. */}
+            {promoLoading
+              ? <Loading />
+              : <PromoList codes={promoCodes} onDeleteConfirm={setDeleteConfirm} onToggleStatus={togglePromoStatus} />
+            }
           </div>
         </div>
       )}
@@ -741,7 +796,7 @@ export default function Discounts() {
             </button>
           </div>
           {promoLoading
-            ? <div className="dc-loading">{t('discounts.promo.loading', 'Loading promo codes…')}</div>
+            ? <Loading />
             : <PromoList codes={promoCodes} onDeleteConfirm={setDeleteConfirm} onToggleStatus={togglePromoStatus} />
           }
         </div>
@@ -760,7 +815,7 @@ export default function Discounts() {
             </button>
           </div>
 
-          {salesLoading && <div className="dc-loading">{t('discounts.seasonal.loading', 'Loading sales') + '…'}</div>}
+          {salesLoading && <Loading />}
 
           {!salesLoading && activeSales.length === 0 && pastSales.length === 0 && (
             <div className="ss-empty">

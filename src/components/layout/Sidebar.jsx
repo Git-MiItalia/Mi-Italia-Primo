@@ -10,6 +10,10 @@ import useSidebarStore from '../../store/sidebarStore'
 const BASE_URL = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
+// Shows the ORO / Royalty entry in Settings. Off while the loyalty programme is
+// out of scope — see the note beside the entry below.
+const SHOW_ORO = false
+
 // Matches ViewProfile.jsx's MY_PHOTO_UPDATED_EVENT — fired after a successful
 // photo upload so this avatar updates immediately without a page reload.
 const MY_PHOTO_UPDATED_EVENT = 'primo:my-photo-updated'
@@ -40,7 +44,7 @@ function SbItem({ to, icon, label, badge, onClick }) {
   )
 }
 
-function NavSection({ sectionKey, label, icon, items, collapsed, isOpen, onToggle, flyoutOpen, flyoutTop, onOpenFlyout, onCloseFlyout }) {
+function NavSection({ label, icon, items, collapsed, isOpen, onToggle, flyoutOpen, flyoutTop, onOpenFlyout, onCloseFlyout }) {
   const sectionBadge = items.reduce((sum, item) => sum + (item.badge || 0), 0)
 
   if (collapsed) {
@@ -178,7 +182,12 @@ function Sidebar() {
         { to: '/showroom',      icon: 'business_center',    label: t('sidebar.showroom') },
         { to: '/store',         icon: 'storefront',         label: t('sidebar.store_profile') },
         { to: '/integrations',  icon: 'cable',               label: t('sidebar.integrations', 'Integrations') },
-        { to: '/oro-points',    icon: 'toll',                label: t('sidebar.oro_royalty') },
+        // ORO / Royalty is hidden — the page is still a mockup (no endpoints at
+        // all: the customer, the balance and the whole history are typed into
+        // OroPoints.jsx) and the programme is not a near-term requirement. The
+        // route in App.jsx is left in place, so /oro-points still opens if typed
+        // directly; putting the entry back is this one flag.
+        ...(SHOW_ORO ? [{ to: '/oro-points', icon: 'toll', label: t('sidebar.oro_royalty') }] : []),
         { to: '/price-tags',    icon: 'label',               label: t('sidebar.price_tags') },
         { to: '/notifications', icon: 'notifications',      label: t('sidebar.notifications') },
         { to: '/tryon',         icon: 'person_raised_hand', label: t('sidebar.ai_model_studio', 'AI Model Studio') },

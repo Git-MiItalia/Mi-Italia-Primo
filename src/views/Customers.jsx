@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { isWhatsappEnabled } from '../lib/auth'
 import { statusLabel } from '../lib/statusLabel'
+import Loading from '../components/ui/Loading'
 import useLangStore from '../store/langStore'
 
 const API = import.meta.env.VITE_API_URL
@@ -246,6 +247,11 @@ export default function Customers() {
     return matchSearch && matchTag
   })
 
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
+
   return (
     <div className="grid2 cu-grid">
 
@@ -285,12 +291,6 @@ export default function Customers() {
             <div className="card-title">{t('customers.card_title', 'All')} <em>{t('customers.card_title_em', 'Customers')}</em></div>
           </div>
 
-          {loading && (
-            <div className="cu-loading">
-              <span className="material-symbols-outlined">hourglass_empty</span>
-              <div>{t('customers.loading', 'Loading customers…')}</div>
-            </div>
-          )}
 
           {!loading && filteredCustomers.map((c, i) => {
             const tag = c.segment || 'new'

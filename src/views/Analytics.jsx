@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { isWhatsappEnabled } from '../lib/auth'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -956,6 +957,11 @@ export default function Analytics() {
     if (!peak) for (const row of heatmapData.grid) for (const v of row) if (v > peak) peak = v
     return { ...heatmapData, peak: peak || 1 }
   }, [heatmapData])
+
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loadingMain) return <Loading page />
 
   return (
     <>

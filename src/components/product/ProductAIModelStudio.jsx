@@ -524,7 +524,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         <div className="modal-backdrop" onClick={() => setShowAllModelsModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ overflowY:'auto', maxHeight:'85vh' }}>
             <div className="modal-hdr">
-              <div className="modal-title">All <em>Available Models</em></div>
+              <div className="modal-title">{t('ais_legacy.all_models_pre', 'All')} <em>{t('ais_legacy.all_models_em', 'Available Models')}</em></div>
               <div className="modal-close" onClick={() => setShowAllModelsModal(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>

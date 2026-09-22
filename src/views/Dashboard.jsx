@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { statusLabel } from '../lib/statusLabel'
 import useLangStore from '../store/langStore'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -188,6 +189,11 @@ export default function Dashboard() {
     if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`
     return `${h}h ${m}m`
   }
+
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (statsLoading || resLoading) return <Loading page />
 
   return (
     <>

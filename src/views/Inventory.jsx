@@ -7,6 +7,7 @@ import CategorySelectorDropdown from '../components/product/CategorySelectorDrop
 import RestockGrid from '../components/product/RestockGrid'
 import useNotifStore from '../store/notifStore'
 import { sortSizeLabels } from '../common/sizechart'
+import Loading from '../components/ui/Loading'
 
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL ?? ''
@@ -580,6 +581,11 @@ export default function Inventory() {
       .finally(() => setSubmitting(false))
   }
 
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
+
   return (
     <>
       {/* Toast */}
@@ -683,12 +689,9 @@ export default function Inventory() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="inv-cat-prompt">
-            <span className="material-symbols-outlined">hourglass_empty</span>
-            <div>{t('inventory.loading')}</div>
-          </div>
-        ) : loadFailed ? (
+        {/* The loading arm is gone: the page-level spinner above means this is
+            only reached once the fetch has settled. */}
+        {loadFailed ? (
           <div className="inv-cat-prompt">
             <span className="material-symbols-outlined">cloud_off</span>
             <div>{t('common.error_generic')}</div>
@@ -717,7 +720,17 @@ export default function Inventory() {
                     <tr key={row.rowKey} className={row.total === 0 ? 'row-out' : ''}>
                       <td style={{ position:'sticky', left:0, background:'var(--card)', zIndex:1 }}>
                         <div className="inv-product-cell">
-                          <div className="inv-product-img" style={{ backgroundImage:`url('${row.img}')` }} />
+                          {/* A product with no photo produced url('null') here,
+                              and the class sets no background colour, so the
+                              cell was an invisible gap rather than an empty
+                              thumbnail — the name looked misaligned against the
+                              rows around it. */}
+                          <div
+                            className="inv-product-img"
+                            style={row.img
+                              ? { backgroundImage: `url('${row.img}')` }
+                              : { background: 'var(--mist)' }}
+                          />
                           <div>
                             <div className="inv-product-name">{row.productName}</div>
                             {row.colour && <div className="inv-product-color">{row.colour}</div>}

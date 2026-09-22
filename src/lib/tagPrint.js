@@ -1,3 +1,10 @@
+/* eslint-disable no-useless-escape --
+   The print document is assembled as a template literal that contains its own
+   <script> block. The closing tag inside it is written as <\/script> on
+   purpose: unescaped, it would terminate the surrounding script element in the
+   generated document rather than the string. The rule cannot see that context,
+   so it is switched off for this file rather than the escape being removed. */
+
 // ══ Shared tag print utilities ══════════════════════════════════════════════
 //
 // Used by:

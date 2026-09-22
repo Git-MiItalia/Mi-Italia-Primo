@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/api'
 import { AGE_BRACKETS, bracketName, bracketRange } from '../lib/ageBracket'
 import useLangStore from '../store/langStore'
 import Toast, { useToast } from '../components/ui/Toast'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -320,7 +321,7 @@ function LoadError({ t, error, retry }) {
 
 /* ── Tab 1: Rules ── */
 function RulesTab({ t, settings, preview, loading, error, retry, bracketLabels, getRule, toggleRule, stepRulePct, setRuleMode, openSettings }) {
-  if (loading) return <div className="empty">{t('markdowns.loading', 'Loading') + '…'}</div>
+  if (loading) return <Loading />
   if (error) return <LoadError t={t} error={error} retry={retry} />
   return (
     <>
@@ -390,7 +391,7 @@ function PreviewTab({ t, lang, preview, loading, error, retry, bracketLabels, ap
   const autoCount = s.auto_eligible ?? rows.filter(r => (r.proposal?.outcome ?? r.outcome) === 'auto').length
   const needApproval = s.need_approval ?? rows.filter(r => (r.proposal?.outcome ?? r.outcome) === 'approval').length
 
-  if (loading) return <div className="empty">{t('markdowns.loading', 'Loading') + '…'}</div>
+  if (loading) return <Loading />
   if (error) return <LoadError t={t} error={error} retry={retry} />
 
   return (
@@ -492,7 +493,7 @@ function PreviewTab({ t, lang, preview, loading, error, retry, bracketLabels, ap
 function ApprovalsTab({ t, lang, items, loading, error, retry, settings, bracketLabels, approveOne, skipOne }) {
   const [adjust, setAdjust] = useState({})
 
-  if (loading) return <div className="empty">{t('markdowns.loading', 'Loading') + '…'}</div>
+  if (loading) return <Loading />
   if (error) return <LoadError t={t} error={error} retry={retry} />
 
   return (
@@ -573,7 +574,7 @@ function HistoryTab({ t, lang, history, loading, error, retry, exportHistory, pa
         </button>
       </div>
       {loading ? (
-        <div className="empty">{t('markdowns.loading', 'Loading') + '…'}</div>
+        <Loading />
       ) : error ? (
         <LoadError t={t} error={error} retry={retry} />
       ) : history.length === 0 ? (

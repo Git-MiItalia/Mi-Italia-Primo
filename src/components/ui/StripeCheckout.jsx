@@ -1,12 +1,31 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
+import Loading from './Loading'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
-export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
+// Plan names are the product's own — Starter, Connect, Pro — so they are
+// capitalised rather than translated, the same as everywhere else in billing.
+const planName = (p) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : '')
+
+/* `error` holds either the server's own message (a string) or one of these,
+   worded at render. Calling t() inside the effect instead would make the
+   translation function a dependency of it, and re-running this effect tears
+   down and rebuilds Stripe's embedded checkout — so a language change
+   mid-payment would restart the form. */
+const ERR_SESSION = { key: 'sco.err_session',      fallback: 'Could not start checkout. Please try again.' }
+const ERR_GENERIC = { key: 'common.error_generic', fallback: 'Something went wrong. Please try again.' }
+
+/* No onSuccess callback: this is Stripe's EMBEDDED checkout, which does not
+   call back into the page on completion — it redirects the browser to the
+   session's return_url, which the backend sets and which lands on
+   /subscription/return (views/SubscriptionReturn). Both callers used to pass an
+   onSuccess that could therefore never fire; they no longer do. */
+export default function StripeCheckout({ plan = 'pro', onClose }) {
+  const { t } = useTranslation()
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState('')
-  const [mounted, setMounted]   = useState(false)
 
   useEffect(() => {
     let checkout = null
@@ -20,7 +39,7 @@ export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
           body: JSON.stringify({ plan }),
         })
         const data = await res.json()
-        if (!data.success) { setError(data.message || 'Failed to create checkout session.'); setLoading(false); return }
+        if (!data.success) { setError(data.message || ERR_SESSION); setLoading(false); return }
 
         const { client_secret, publishable_key } = data.data
 
@@ -33,7 +52,10 @@ export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
             const script = document.createElement('script')
             script.src = 'https://js.stripe.com/v3/'
             script.onload = resolve
-            script.onerror = () => reject(new Error('Failed to load Stripe.js'))
+            // Rejected with no message so the catch below shows its translated
+            // fallback rather than putting "Failed to load Stripe.js" — a
+            // sentence for us, not for a boutique — in front of the merchant.
+            script.onerror = () => reject(new Error(''))
             document.head.appendChild(script)
           })
         }
@@ -49,11 +71,10 @@ export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
 
         checkout.mount('#stripe-checkout-container')
         setLoading(false)
-        setMounted(true)
 
       } catch (err) {
         if (!destroyed) {
-          setError(err.message || 'Something went wrong. Please try again.')
+          setError(err.message || ERR_GENERIC)
           setLoading(false)
         }
       }
@@ -72,8 +93,10 @@ export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
       <div className="sco-modal">
         {/* Header */}
         <div className="sco-hdr">
+          {/* Said "Upgrade to Pro" for every plan, ignoring the `plan` prop —
+              so a boutique buying Connect was told it was buying Pro. */}
           <div className="sco-title">
-            Upgrade to <em>Pro</em>
+            {t('sco.title_pre', 'Upgrade to')} <em>{planName(plan)}</em>
           </div>
           <button className="sco-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -82,16 +105,12 @@ export default function StripeCheckout({ plan = 'pro', onClose, onSuccess }) {
 
         {/* Body */}
         <div className="sco-body">
-          {loading && (
-            <div className="sco-loading">
-              <span className="material-symbols-outlined sco-spin">sync</span>
-              <div>Preparing secure checkout…</div>
-            </div>
-          )}
+          {loading && <Loading className="ld-cell" label={t('sco.preparing', 'Preparing secure checkout') + '…'} />}
 
           {error && (
             <div className="alert alert-red sco-error">
-              <span className="material-symbols-outlined">error</span>{error}
+              <span className="material-symbols-outlined">error</span>
+              {typeof error === 'string' ? error : t(error.key, error.fallback)}
             </div>
           )}
 

@@ -1,7 +1,9 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { activeLocale } from '../lib/dateHelpers'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -19,21 +21,54 @@ const ROLE_META = {
   staff:   { style: { background: 'var(--mist)',          color: 'var(--stone)' } },
 }
 
+/* Backend enums that were rendered raw.
+ *
+ * `loc.type` printed as "popup" in the table but "Popup" on the card, because
+ * one place capitalised it by hand — the same value appearing two ways on one
+ * screen. The role tag printed "staff", the Stripe status "connected", the
+ * transfer status "complete": all lowercase English, in every language.
+ *
+ * Each now goes through a label map, the pattern lib/statusLabel.js already
+ * uses for order statuses. A value we do not know about falls through to
+ * itself rather than to a blank, so a new value the backend starts sending is
+ * visible and reportable instead of silently disappearing. */
+const LOC_TYPE_EN = { standard: 'Standard', flagship: 'Flagship', popup: 'Pop-up', outlet: 'Outlet' }
+const ROLE_EN     = { owner: 'Owner', manager: 'Manager', staff: 'Staff' }
+const TERMINAL_EN = { connected: 'Connected', none: 'Not connected', pending: 'Pending', disconnected: 'Disconnected' }
+const TRANSFER_EN = { complete: 'Complete', completed: 'Completed', pending: 'Pending', cancelled: 'Cancelled', failed: 'Failed' }
+
+function enumLabel(t, group, value, english) {
+  if (value == null || value === '') return '—'
+  const key = String(value).toLowerCase()
+  return t(`locations.${group}.${key}`, { defaultValue: english[key] ?? value })
+}
+const locTypeLabel  = (t, v) => enumLabel(t, 'type',     v, LOC_TYPE_EN)
+const roleLabel     = (t, v) => enumLabel(t, 'role',     v, ROLE_EN)
+const terminalLabel = (t, v) => enumLabel(t, 'terminal', v ?? 'none', TERMINAL_EN)
+const transferLabel = (t, v) => enumLabel(t, 'tstatus',  v ?? 'complete', TRANSFER_EN)
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function typeMeta(t) { return SUBJECT_TYPE_META[t] ?? SUBJECT_TYPE_META.standard }
 function initials(n) { return (n ?? '').trim().split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?' }
 function shortName(name) { return (name ?? '').replace(/^[^—]+—\s*/, '') }
+/* `undefined` as the locale follows the BROWSER's language, not the portal's —
+   so an Italian boutique on an English browser read "Sep 2026" while every
+   other date on the page said "set 2026". activeLocale() is the portal's. */
 function formatSince(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  return d.toLocaleDateString(activeLocale(), { month: 'short', year: 'numeric' })
 }
-function formatHours(oh) {
+/* Day names and "Closed" were baked in English into a string the merchant
+   reads in the locations table. The hours themselves ("10:00-19:30") are what
+   they typed, so they stay exactly as entered. */
+function formatHours(t, oh) {
   if (!oh) return '—'
   const parts = []
-  if (oh.mon_sat) parts.push(`Mon–Sat ${oh.mon_sat}`)
-  if (oh.sun)     parts.push(`Sun ${oh.sun === 'Closed' ? 'Closed' : oh.sun}`)
+  const closed = t('locations.hours.closed', 'Closed')
+  if (oh.mon_sat) parts.push(`${t('locations.hours.mon_sat', 'Mon–Sat')} ${oh.mon_sat}`)
+  if (oh.sun)     parts.push(`${t('locations.hours.sun', 'Sun')} ${/^closed$/i.test(oh.sun) ? closed : oh.sun}`)
   return parts.join(' / ') || '—'
 }
 function statusStyleForBadge(status) {
@@ -46,6 +81,23 @@ function permIconVal(v) {
   if (v === 'limited') return 2
   return 0
 }
+
+/* A staff member's assigned locations.
+ *
+ * Two shapes are in play: the assignment endpoint TAKES an array of id
+ * strings, but the staff endpoint RETURNS an array of location objects. The
+ * code read the returned objects as if they were ids and used them as object
+ * keys, which stringifies them — so editing a staff member sent
+ *   { locationIds: ["[object Object]"] }
+ * and the server rejected it with exactly that text. Saving assigned
+ * locations from the Edit Staff dialog could therefore never succeed.
+ *
+ * Accepts either shape, so this keeps working whichever the backend settles
+ * on, and anything that is not a usable id is dropped rather than sent. */
+const locationIdOf = (v) =>
+  (v && typeof v === 'object') ? (v.id ?? v.location_id ?? v.locationId ?? null) : v
+const locationIdsOf = (list) =>
+  (list ?? []).map(locationIdOf).filter(id => typeof id === 'string' && id)
 
 // ── Small components ─────────────────────────────────────────────────────
 function SectionTitle({ children }) {
@@ -94,7 +146,6 @@ export default function Locations() {
 
   // ── Permissions matrix ──────────────────────────────────────────────────
   const [permMatrix, setPermMatrix]     = useState([])
-  const [callerRole, setCallerRole]     = useState('')
   const [loadingPerms, setLoadingPerms] = useState(true)
 
   // ── Stock ───────────────────────────────────────────────────────────────
@@ -138,7 +189,7 @@ export default function Locations() {
           setLocations(res.data?.locations ?? [])
           setSummary(res.data?.summary ?? null)
         } else {
-          setLocationsError(res?.message ?? 'Failed to load locations')
+          setLocationsError(res?.message ?? true)
         }
       })
       .catch(err => { console.error('[Locations] fetchLocations', err); setLocationsError('Network error') })
@@ -152,7 +203,7 @@ export default function Locations() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setStaff(res.data?.staff ?? [])
-        else setStaffError(res?.message ?? 'Failed to load staff')
+        else setStaffError(res?.message ?? true)
       })
       .catch(err => { console.error('[Locations] fetchStaff', err); setStaffError('Network error') })
       .finally(() => setLoadingStaff(false))
@@ -164,8 +215,9 @@ export default function Locations() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) {
+          // res.data.role is deliberately dropped: it was held in state that
+          // nothing ever read, so storing it only cost a render.
           setPermMatrix(res.data?.matrix ?? [])
-          setCallerRole(res.data?.role ?? '')
         }
       })
       .catch(err => console.error('[Locations] fetchPermissions', err))
@@ -179,7 +231,7 @@ export default function Locations() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setStock(res.data ?? { locations: [], items: [] })
-        else setStockError(res?.message ?? 'Failed to load stock')
+        else setStockError(res?.message ?? true)
       })
       .catch(err => { console.error('[Locations] fetchStock', err); setStockError('Network error') })
       .finally(() => setLoadingStock(false))
@@ -235,7 +287,7 @@ export default function Locations() {
           </div>
         ))}
         <div className="loc-subnav-actions">
-          <button className="btn btn-outline btn-sm" disabled title="Coming soon">
+          <button className="btn btn-outline btn-sm" disabled title={t('common.coming_soon', 'Coming soon')}>
             <span className="material-symbols-outlined">download</span>{t('common.export')}
           </button>
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/locations/new')}>
@@ -259,13 +311,13 @@ export default function Locations() {
             ))}
           </div>
 
-          {loadingLocations && <div className="state-empty">Loading locations…</div>}
-          {!loadingLocations && locationsError && <Alert type="warn" icon="error">{locationsError}</Alert>}
+          {loadingLocations && <Loading />}
+          {!loadingLocations && locationsError && <Alert type="warn" icon="error">{typeof locationsError === 'string' ? locationsError : t('locations.err.load_locations', 'Could not load your locations.')}</Alert>}
 
           {!loadingLocations && !locationsError && (
             <>
               <SectionTitle>{t('locations.overview.location_status')}</SectionTitle>
-              {locations.length === 0 && <div className="state-empty">No locations yet. Add your first location to get started.</div>}
+              {locations.length === 0 && <div className="state-empty">{t('locations.empty.locations', 'No locations yet. Add your first location to get started.')}</div>}
               {locations.map(loc => {
                 const m = typeMeta(loc.type)
                 return (
@@ -275,15 +327,15 @@ export default function Locations() {
                       <div className="loc-card-info">
                         <div className="loc-card-name">
                           {loc.name}
-                          {loc.isPrimary && <span className="loc-primary-badge">Primary</span>}
+                          {loc.isPrimary && <span className="loc-primary-badge">{t('locations.primary', 'Primary')}</span>}
                         </div>
                         <div className="loc-card-addr">
                           {loc.address?.line1}{loc.address?.city ? `, ${loc.address.city}` : ''}
-                          {loc.type && <strong> · {loc.type.charAt(0).toUpperCase() + loc.type.slice(1)}</strong>}
+                          {loc.type && <strong> · {locTypeLabel(t, loc.type)}</strong>}
                         </div>
                       </div>
                       <span className="loc-status-badge" style={statusStyleForBadge(loc.status)}>
-                        {loc.status === 'active' ? 'Active' : 'Inactive'}
+                        {loc.status === 'active' ? t('common.active') : t('common.inactive')}
                       </span>
                       <button className="btn btn-outline btn-sm" onClick={() => setShowEditLoc(loc)}>{t('locations.settings')}</button>
                     </div>
@@ -317,8 +369,8 @@ export default function Locations() {
       {view === 'locations' && (
         <>
           <Alert type="info" icon="store">{t('locations.settings_alert')}</Alert>
-          {loadingLocations && <div className="state-empty">Loading locations…</div>}
-          {!loadingLocations && locationsError && <Alert type="warn" icon="error">{locationsError}</Alert>}
+          {loadingLocations && <Loading />}
+          {!loadingLocations && locationsError && <Alert type="warn" icon="error">{typeof locationsError === 'string' ? locationsError : t('locations.err.load_locations', 'Could not load your locations.')}</Alert>}
           {!loadingLocations && !locationsError && (
             <div className="card loc-table-card">
               <table className="tbl">
@@ -344,18 +396,18 @@ export default function Locations() {
                               <div className="loc-tbl-name">{shortName(loc.name)}</div>
                               <div className="loc-tbl-addr">
                                 {loc.address?.line1 ?? '—'}
-                                {loc.isPrimary && <> · <strong>Primary</strong></>}
+                                {loc.isPrimary && <> · <strong>{t('locations.primary', 'Primary')}</strong></>}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td><span className="loc-type-tag" style={{ color: m.color }}>{loc.type}</span></td>
+                        <td><span className="loc-type-tag" style={{ color: m.color }}>{locTypeLabel(t, loc.type)}</span></td>
                         <td className="loc-tbl-hours">
-                          {formatHours(loc.openingHours).split(' / ').map((h, i) => <div key={i}>{h}</div>)}
+                          {formatHours(t, loc.openingHours).split(' / ').map((h, i) => <div key={i}>{h}</div>)}
                         </td>
                         <td>
                           <span className="loc-stripe-status" style={{ color: loc.stripeTerminal?.status === 'connected' ? 'var(--green)' : 'var(--stone)' }}>
-                            {loc.stripeTerminal?.status ?? 'none'}
+                            {terminalLabel(t, loc.stripeTerminal?.status)}
                           </span>
                         </td>
                         <td className="loc-tbl-since">{formatSince(loc.activatedOn)}</td>
@@ -381,8 +433,8 @@ export default function Locations() {
               </button>
             </div>
           </div>
-          {loadingStock && <div className="state-empty">Loading stock…</div>}
-          {!loadingStock && stockError && <Alert type="warn" icon="error">{stockError}</Alert>}
+          {loadingStock && <Loading />}
+          {!loadingStock && stockError && <Alert type="warn" icon="error">{typeof stockError === 'string' ? stockError : t('locations.err.load_stock', 'Could not load stock by location.')}</Alert>}
           {!loadingStock && !stockError && (
             <div className="card loc-table-card">
               <table className="tbl">
@@ -397,7 +449,7 @@ export default function Locations() {
                 </thead>
                 <tbody>
                   {stock.items.length === 0 && (
-                    <tr><td colSpan={stock.locations.length + 4} className="state-empty">No products with stock yet.</td></tr>
+                    <tr><td colSpan={stock.locations.length + 4} className="state-empty">{t('locations.empty.stock', 'No products with stock yet.')}</td></tr>
                   )}
                   {stock.items.map(p => (
                     <tr key={p.productId}>
@@ -445,7 +497,7 @@ export default function Locations() {
             </button>
           </div>
 
-          {loadingTransfers && <div className="state-empty">Loading transfers…</div>}
+          {loadingTransfers && <Loading />}
 
           {!loadingTransfers && (
             <>
@@ -486,7 +538,7 @@ export default function Locations() {
               <SectionTitle>{t('locations.transfers.history')}</SectionTitle>
               <div className="card loc-table-card">
                 {transferHistory.length === 0 ? (
-                  <div className="state-empty">No transfers yet.</div>
+                  <div className="state-empty">{t('locations.empty.transfers', 'No transfers yet.')}</div>
                 ) : (
                   <table className="tbl">
                     <thead>
@@ -509,7 +561,7 @@ export default function Locations() {
                           <td className="loc-tbl-hours">{th.toLocationName ?? '—'}</td>
                           <td><strong>{th.quantity ?? '—'}</strong></td>
                           <td className="loc-tbl-since">{th.actorName ?? '—'}</td>
-                          <td><span className="loc-complete-badge">{th.status ?? 'complete'}</span></td>
+                          <td><span className="loc-complete-badge">{transferLabel(t, th.status)}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -535,15 +587,15 @@ export default function Locations() {
             <div>
               <SectionTitle>{t('locations.staff.by_location')}</SectionTitle>
 
-              {loadingStaff && <div className="state-empty">Loading staff…</div>}
-              {!loadingStaff && staffError && <Alert type="warn" icon="error">{staffError}</Alert>}
+              {loadingStaff && <Loading />}
+              {!loadingStaff && staffError && <Alert type="warn" icon="error">{typeof staffError === 'string' ? staffError : t('locations.err.load_staff', 'Could not load your staff.')}</Alert>}
               {!loadingStaff && !staffError && staff.length === 0 && (
-                <div className="state-empty">No staff members yet.</div>
+                <div className="state-empty">{t('locations.empty.staff', 'No staff members yet.')}</div>
               )}
 
               {!loadingStaff && !staffError && staff.map(s => {
                 const roleStyle = ROLE_META[s.role]?.style ?? ROLE_META.staff.style
-                const locNames = (s.locations ?? []).map(id => locations.find(l => l.id === id)?.name ?? '?').filter(Boolean)
+                const locNames = locationIdsOf(s.locations).map(id => locations.find(l => l.id === id)?.name).filter(Boolean)
                 return (
                   <div key={s.id} className="card loc-staff-card">
                     <div className="loc-staff-av" style={roleStyle}>{initials(s.name)}</div>
@@ -555,13 +607,13 @@ export default function Locations() {
                       <div className="loc-staff-email">{s.email}</div>
                       <div className="loc-staff-locs">
                         {locNames.length === 0
-                          ? <span className="loc-staff-loc-empty">No locations assigned</span>
+                          ? <span className="loc-staff-loc-empty">{t('locations.staff.no_locations', 'No locations assigned')}</span>
                           : locNames.map(n => <span key={n} className="loc-staff-loc-tag">{shortName(n)}</span>)
                         }
                       </div>
                     </div>
                     <div className="loc-staff-actions">
-                      <span className="loc-staff-role-tag" style={roleStyle}>{s.role}</span>
+                      <span className="loc-staff-role-tag" style={roleStyle}>{roleLabel(t, s.role)}</span>
                       <button className="btn btn-outline btn-xs" onClick={() => setShowEditStaff(s)}>{t('common.edit')}</button>
                     </div>
                   </div>
@@ -571,14 +623,14 @@ export default function Locations() {
 
             <div>
               <SectionTitle>{t('locations.staff.permissions')}</SectionTitle>
-              {loadingPerms && <div className="state-empty">Loading permissions…</div>}
+              {loadingPerms && <Loading />}
               {!loadingPerms && (
                 <div className="card loc-table-card">
                   <table className="loc-perm-table">
                     <thead>
                       <tr>
                         <th className="loc-perm-th-left">{t('locations.staff.feature')}</th>
-                        {['Owner', 'Manager', 'Staff'].map(r => <th key={r} className="loc-perm-th">{r}</th>)}
+                        {['owner', 'manager', 'staff'].map(r => <th key={r} className="loc-perm-th">{roleLabel(t, r)}</th>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -614,9 +666,9 @@ export default function Locations() {
         <>
           <Alert type="info" icon="calendar_today">{t('locations.reservations.alert')}</Alert>
           <SectionTitle>{t('locations.reservations.today_title')}</SectionTitle>
-          {loadingReservations && <div className="state-empty">Loading reservations…</div>}
+          {loadingReservations && <div className="state-empty">{t('common.loading')}</div>}
           {!loadingReservations && reservations.length === 0 && (
-            <div className="state-empty">No reservations across your locations yet.</div>
+            <div className="state-empty">{t('locations.empty.reservations', 'No reservations across your locations yet.')}</div>
           )}
           {/* Reservation rendering follows real schema once backend populates it */}
         </>
@@ -703,8 +755,8 @@ function EditLocationModal({ location, onClose, onSaved }) {
         }),
       }).then(r => r.json())
       if (res?.success) onSaved()
-      else setError(res?.message ?? 'Failed to update location')
-    } catch (err) { console.error('[EditLocationModal] failed', err); setError('Network error') }
+      else setError(res?.message ?? t('locations.err.save_location', 'Could not save this location.'))
+    } catch (err) { console.error('[EditLocationModal] failed', err); setError(t('common.error_network')) }
     finally { setSaving(false) }
   }
 
@@ -718,8 +770,8 @@ function EditLocationModal({ location, onClose, onSaved }) {
         body: JSON.stringify({ status: isActive ? 'inactive' : 'active' }),
       }).then(r => r.json())
       if (res?.success) onSaved()
-      else setError(res?.message ?? 'Failed to update status')
-    } catch (err) { console.error('[EditLocationModal] deactivate failed', err); setError('Network error') }
+      else setError(res?.message ?? t('locations.err.save_status', 'Could not change this location status.'))
+    } catch (err) { console.error('[EditLocationModal] deactivate failed', err); setError(t('common.error_network')) }
     finally { setDeactivating(false) }
   }
 
@@ -739,10 +791,10 @@ function EditLocationModal({ location, onClose, onSaved }) {
               <input className="form-input" value={name} onChange={e => setName(e.target.value)} /></div>
             <div className="form-group"><label className="form-lbl">{t('locations.modal.type')}</label>
               <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
-                <option value="standard">Standard</option>
-                <option value="flagship">Flagship</option>
-                <option value="popup">Pop-up</option>
-                <option value="outlet">Outlet</option>
+                <option value="standard">{locTypeLabel(t, 'standard')}</option>
+                <option value="flagship">{locTypeLabel(t, 'flagship')}</option>
+                <option value="popup">{locTypeLabel(t, 'popup')}</option>
+                <option value="outlet">{locTypeLabel(t, 'outlet')}</option>
               </select></div>
             <div className="form-group"><label className="form-lbl">{t('locations.modal.address')}</label>
               <input className="form-input" value={addressLine1} onChange={e => setAddr(e.target.value)} /></div>
@@ -753,18 +805,18 @@ function EditLocationModal({ location, onClose, onSaved }) {
                 <input className="form-input" value={postcode} onChange={e => setPostcode(e.target.value)} /></div>
             </div>
             <div className="form-group"><label className="form-lbl">{t('locations.modal.phone')}</label>
-              <input className="form-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+39..." /></div>
+              <input className="form-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder={t('locations.modal.phone_ph', '+39 055 123 4567')} /></div>
             <div className="form-group"><label className="form-lbl">{t('locations.modal.email')}</label>
-              <input className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="..." /></div>
+              <input className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder={t('locations.modal.email_ph', 'name@boutique.it')} /></div>
             <SectionTitle>{t('locations.modal.opening_hours')}</SectionTitle>
             <div className="loc-hours-list">
               <div className="loc-hours-row">
-                <span className="loc-hours-day">Mon–Sat</span>
+                <span className="loc-hours-day">{t('locations.hours.mon_sat', 'Mon–Sat')}</span>
                 <input className="form-input loc-hours-input" value={monSat} onChange={e => setMonSat(e.target.value)} placeholder="10:00-19:30" />
               </div>
               <div className="loc-hours-row">
-                <span className="loc-hours-day">Sunday</span>
-                <input className="form-input loc-hours-input" value={sun} onChange={e => setSun(e.target.value)} placeholder="11:00-18:00 or Closed" />
+                <span className="loc-hours-day">{t('locations.hours.sunday', 'Sunday')}</span>
+                <input className="form-input loc-hours-input" value={sun} onChange={e => setSun(e.target.value)} placeholder={t('locations.hours.sun_ph', '11:00-18:00 or Closed')} />
               </div>
             </div>
           </div>
@@ -782,26 +834,26 @@ function EditLocationModal({ location, onClose, onSaved }) {
               <div className="loc-terminal-info">
                 <div className="loc-terminal-name">Stripe Terminal</div>
                 <div className="loc-terminal-status">
-                  Status: {location.stripeTerminal?.status ?? 'none'}
-                  {location.stripeTerminal?.id && <> · Reader ID: {location.stripeTerminal.id}</>}
+                  {t('locations.modal.terminal_status', 'Status')}: {terminalLabel(t, location.stripeTerminal?.status)}
+                  {location.stripeTerminal?.id && <> · {t('locations.modal.reader_id', 'Reader ID')}: {location.stripeTerminal.id}</>}
                 </div>
               </div>
-              <button className="btn btn-outline btn-xs" disabled title="Coming soon">{t('locations.modal.replace')}</button>
+              <button className="btn btn-outline btn-xs" disabled title={t('common.coming_soon', 'Coming soon')}>{t('locations.modal.replace')}</button>
             </div>
-            <button className="btn btn-outline btn-sm loc-add-terminal-btn" disabled title="Coming soon">
+            <button className="btn btn-outline btn-sm loc-add-terminal-btn" disabled title={t('common.coming_soon', 'Coming soon')}>
               <span className="material-symbols-outlined">add</span>{t('locations.modal.add_terminal')}
             </button>
 
             <SectionTitle>{t('locations.modal.danger_zone')}</SectionTitle>
             <div className="loc-danger-zone">
               <div className="loc-danger-title">
-                {isActive ? t('locations.modal.deactivate_title') : 'Reactivate this location'}
+                {isActive ? t('locations.modal.deactivate_title') : t('locations.modal.reactivate_title', 'Reactivate this location')}
               </div>
               <div className="loc-danger-sub">
-                {isActive ? t('locations.modal.deactivate_sub') : 'This location will become available again for POS, orders, and reservations.'}
+                {isActive ? t('locations.modal.deactivate_sub') : t('locations.modal.reactivate_sub', 'This location will become available again for POS, orders, and reservations.')}
               </div>
               <button className={`btn btn-sm ${isActive ? 'btn-red' : 'btn-primary'}`} onClick={deactivate} disabled={deactivating}>
-                {deactivating ? 'Working…' : (isActive ? t('locations.modal.deactivate_btn') : 'Reactivate Location')}
+                {deactivating ? t('common.loading') : (isActive ? t('locations.modal.deactivate_btn') : t('locations.modal.reactivate_btn', 'Reactivate Location'))}
               </button>
             </div>
           </div>
@@ -840,10 +892,10 @@ function AddStaffModal({ locations, onClose, onInvited }) {
         body: JSON.stringify({ email, name: fullName, role }),
       }).then(r => r.json())
 
-      if (!invRes?.success) { setError(invRes?.message ?? 'Failed to invite'); return }
+      if (!invRes?.success) { setError(invRes?.message ?? t('locations.err.invite', 'Could not send the invitation.')); return }
 
       // Step 2: assign locations (if any picked)
-      const locationIds = Object.entries(locAssign).filter(([, on]) => on).map(([id]) => id)
+      const locationIds = locationIdsOf(Object.entries(locAssign).filter(([, on]) => on).map(([id]) => id))
       if (locationIds.length > 0) {
         const newId = invRes.data?.id
         await apiFetch(`${API}/boutique/locations/staff/${newId}`, {
@@ -852,7 +904,7 @@ function AddStaffModal({ locations, onClose, onInvited }) {
         }).then(r => r.json())
       }
       onInvited()
-    } catch (err) { console.error('[AddStaffModal] invite failed', err); setError('Network error') }
+    } catch (err) { console.error('[AddStaffModal] invite failed', err); setError(t('common.error_network')) }
     finally { setInviting(false) }
   }
 
@@ -874,21 +926,21 @@ function AddStaffModal({ locations, onClose, onInvited }) {
         <div className="form-group">
           <label className="form-lbl">{t('locations.modal.role')}</label>
           <select className="form-select" value={role} onChange={e => setRole(e.target.value)}>
-            <option value="staff">Staff</option>
-            <option value="manager">Manager</option>
+            <option value="staff">{roleLabel(t, 'staff')}</option>
+            <option value="manager">{roleLabel(t, 'manager')}</option>
           </select>
           <div className="form-hint">{t('locations.modal.role_hint')}</div>
         </div>
         <div className="form-group">
           <label className="form-lbl">{t('locations.modal.assigned_locations')}</label>
           <div className="loc-assign-list">
-            {locations.length === 0 && <div className="loc-assign-empty">No locations to assign yet.</div>}
+            {locations.length === 0 && <div className="loc-assign-empty">{t('locations.modal.no_locations_assignable', 'No locations to assign yet.')}</div>}
             {locations.map(l => (
               <label key={l.id} className="loc-assign-item">
                 <input type="checkbox" checked={!!locAssign[l.id]}
                   onChange={e => setLocAssign(p => ({ ...p, [l.id]: e.target.checked }))}
                   className="loc-assign-checkbox" />
-                {shortName(l.name)}{l.isPrimary && <span className="loc-primary-badge-sm">Primary</span>}
+                {shortName(l.name)}{l.isPrimary && <span className="loc-primary-badge-sm">{t('locations.primary', 'Primary')}</span>}
               </label>
             ))}
           </div>
@@ -898,7 +950,7 @@ function AddStaffModal({ locations, onClose, onInvited }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={invite} disabled={inviting || !email.trim() || !firstName.trim()}>
-            <span className="material-symbols-outlined">send</span>{inviting ? 'Sending…' : t('locations.modal.send_invite')}
+            <span className="material-symbols-outlined">send</span>{inviting ? t('common.loading') : t('locations.modal.send_invite')}
           </button>
         </div>
       </div>
@@ -914,7 +966,7 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
   const [isActive, setIsActive] = useState(staff.is_active !== false)
   const [locAssign, setLocAssign] = useState(() => {
     const initial = {}
-    ;(staff.locations ?? []).forEach(id => { initial[id] = true })
+    locationIdsOf(staff.locations).forEach(id => { initial[id] = true })
     return initial
   })
   const [saving, setSaving]         = useState(false)
@@ -933,18 +985,18 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
         body: JSON.stringify({ name, role, is_active: isActive }),
       }).then(r => r.json())
 
-      if (!infoRes?.success) { setError(infoRes?.message ?? 'Failed to update staff'); return }
+      if (!infoRes?.success) { setError(infoRes?.message ?? t('locations.err.save_staff', 'Could not save this staff member.')); return }
 
       // Step 2: update location assignments
-      const locationIds = Object.entries(locAssign).filter(([, on]) => on).map(([id]) => id)
+      const locationIds = locationIdsOf(Object.entries(locAssign).filter(([, on]) => on).map(([id]) => id))
       const locRes = await apiFetch(`${API}/boutique/locations/staff/${staff.id}`, {
         method: 'PUT',
         body: JSON.stringify({ locationIds }),
       }).then(r => r.json())
 
-      if (!locRes?.success) { setError(locRes?.message ?? 'Failed to assign locations'); return }
+      if (!locRes?.success) { setError(locRes?.message ?? t('locations.err.assign', 'Could not save the assigned locations.')); return }
       onSaved()
-    } catch (err) { console.error('[EditStaffModal] save failed', err); setError('Network error') }
+    } catch (err) { console.error('[EditStaffModal] save failed', err); setError(t('common.error_network')) }
     finally { setSaving(false) }
   }
 
@@ -956,8 +1008,8 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
         method: 'PUT',
       }).then(r => r.json())
       if (res?.success) setNotice(res?.message ?? 'Password reset email sent')
-      else setError(res?.message ?? 'Failed to send reset email')
-    } catch (err) { console.error('[EditStaffModal] resetPassword failed', err); setError('Network error') }
+      else setError(res?.message ?? t('locations.err.reset', 'Could not send the password reset email.'))
+    } catch (err) { console.error('[EditStaffModal] resetPassword failed', err); setError(t('common.error_network')) }
     finally { setResetting(false) }
   }
 
@@ -967,8 +1019,8 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
     try {
       const res = await apiFetch(`${API}/boutique/staff/${staff.id}`, { method: 'DELETE' }).then(r => r.json())
       if (res?.success) onSaved()
-      else setError(res?.message ?? 'Failed to delete')
-    } catch (err) { console.error('[EditStaffModal] delete failed', err); setError('Network error') }
+      else setError(res?.message ?? t('locations.err.delete', 'Could not remove this staff member.'))
+    } catch (err) { console.error('[EditStaffModal] delete failed', err); setError(t('common.error_network')) }
     finally { setDeleting(false) }
   }
 
@@ -978,25 +1030,25 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <span className="modal-title">Edit <em>Staff</em></span>
+          <span className="modal-title">{t('locations.modal.edit_staff_title', 'Edit')} <em>{t('locations.modal.edit_staff_title_em', 'Staff')}</em></span>
           <button className="modal-close" onClick={onClose}><span className="material-symbols-outlined">close</span></button>
         </div>
-        <div className="form-group"><label className="form-lbl">Email (read-only)</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.modal.email_readonly', 'Email (read-only)')}</label>
           <input className="form-input" value={staff.email} readOnly /></div>
-        <div className="form-group"><label className="form-lbl">Name</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.modal.staff_name', 'Name')}</label>
           <input className="form-input" value={name} onChange={e => setName(e.target.value)} /></div>
         <div className="form-row2">
           <div className="form-group">
             <label className="form-lbl">{t('locations.modal.role')}</label>
             <select className="form-select" value={role} onChange={e => setRole(e.target.value)} disabled={isOwner}>
-              {isOwner && <option value="owner">Owner</option>}
-              <option value="manager">Manager</option>
-              <option value="staff">Staff</option>
+              {isOwner && <option value="owner">{roleLabel(t, 'owner')}</option>}
+              <option value="manager">{roleLabel(t, 'manager')}</option>
+              <option value="staff">{roleLabel(t, 'staff')}</option>
             </select>
-            {isOwner && <div className="form-hint">Owner role cannot be changed here.</div>}
+            {isOwner && <div className="form-hint">{t('locations.modal.owner_role_locked', 'Owner role cannot be changed here.')}</div>}
           </div>
           <div className="form-group">
-            <label className="form-lbl">Status</label>
+            <label className="form-lbl">{t('locations.modal.status', 'Status')}</label>
             <div className="loc-staff-active-toggle">
               <label className="loc-assign-item">
                 <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="loc-assign-checkbox" />
@@ -1006,15 +1058,15 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
           </div>
         </div>
         <div className="form-group">
-          <label className="form-lbl">Assigned locations</label>
+          <label className="form-lbl">{t('locations.modal.assigned_locations')}</label>
           <div className="loc-assign-list">
-            {locations.length === 0 && <div className="loc-assign-empty">No locations to assign yet.</div>}
+            {locations.length === 0 && <div className="loc-assign-empty">{t('locations.modal.no_locations_assignable', 'No locations to assign yet.')}</div>}
             {locations.map(l => (
               <label key={l.id} className="loc-assign-item">
                 <input type="checkbox" checked={!!locAssign[l.id]}
                   onChange={e => setLocAssign(p => ({ ...p, [l.id]: e.target.checked }))}
                   className="loc-assign-checkbox" />
-                {shortName(l.name)}{l.isPrimary && <span className="loc-primary-badge-sm">Primary</span>}
+                {shortName(l.name)}{l.isPrimary && <span className="loc-primary-badge-sm">{t('locations.primary', 'Primary')}</span>}
               </label>
             ))}
           </div>
@@ -1022,20 +1074,20 @@ function EditStaffModal({ staff, locations, onClose, onSaved }) {
         {notice && <div className="alert alert-info loc-inline-alert"><span className="material-symbols-outlined">check_circle</span>{notice}</div>}
         {error  && <div className="alert alert-red  loc-inline-alert"><span className="material-symbols-outlined">error</span>{error}</div>}
 
-        <SectionTitle>Danger Zone</SectionTitle>
+        <SectionTitle>{t('locations.modal.danger_zone')}</SectionTitle>
         <div className="loc-danger-zone">
-          <div className="loc-danger-title">Send password reset email</div>
-          <div className="loc-danger-sub">The staff member will receive a link to set a new password.</div>
+          <div className="loc-danger-title">{t('locations.modal.reset_title', 'Send password reset email')}</div>
+          <div className="loc-danger-sub">{t('locations.modal.reset_sub', 'The staff member will receive a link to set a new password.')}</div>
           <button className="btn btn-outline btn-sm" onClick={resetPassword} disabled={resetting}>
-            <span className="material-symbols-outlined">key</span>{resetting ? 'Sending…' : 'Send reset link'}
+            <span className="material-symbols-outlined">key</span>{resetting ? t('common.loading') : t('locations.modal.reset_btn', 'Send reset link')}
           </button>
         </div>
         {!isOwner && (
           <div className="loc-danger-zone loc-danger-zone-mt">
-            <div className="loc-danger-title">Remove this staff member</div>
-            <div className="loc-danger-sub">Their access will be revoked immediately.</div>
+            <div className="loc-danger-title">{t('locations.modal.remove_title', 'Remove this staff member')}</div>
+            <div className="loc-danger-sub">{t('locations.modal.remove_sub', 'Their access will be revoked immediately.')}</div>
             <button className="btn btn-red btn-sm" onClick={del} disabled={deleting}>
-              <span className="material-symbols-outlined">delete</span>{deleting ? 'Removing…' : 'Remove staff'}
+              <span className="material-symbols-outlined">delete</span>{deleting ? t('common.loading') : t('locations.modal.remove_btn', 'Remove staff')}
             </button>
           </div>
         )}
@@ -1115,8 +1167,8 @@ function StockTransferModal({ prefill, locations, stockItems, onClose, onComplet
         }),
       }).then(r => r.json())
       if (res?.success) onCompleted()
-      else setError(res?.message ?? 'Failed to create transfer')
-    } catch (err) { console.error('[StockTransferModal] submit failed', err); setError('Network error') }
+      else setError(res?.message ?? t('locations.err.transfer', 'Could not create this transfer.'))
+    } catch (err) { console.error('[StockTransferModal] submit failed', err); setError(t('common.error_network')) }
     finally { setSubmitting(false) }
   }
 
@@ -1147,16 +1199,16 @@ function StockTransferModal({ prefill, locations, stockItems, onClose, onComplet
         <div className="form-group">
           <label className="form-lbl">{t('locations.modal.product')}</label>
           <select className="form-select" value={productId} onChange={e => handleProductChange(e.target.value)}>
-            <option value="">Select a product…</option>
+            <option value="">{t('locations.modal.select_product', 'Select a product…')}</option>
             {stockItems.map(p => <option key={p.productId} value={p.productId}>{p.productName} ({p.sku})</option>)}
           </select>
         </div>
 
         {productId && (
           <div className="form-group">
-            <label className="form-lbl">Variant</label>
+            <label className="form-lbl">{t('locations.modal.variant', 'Variant')}</label>
             <select className="form-select" value={variantId} onChange={e => setVariantId(e.target.value)}>
-              {variants.length === 0 && <option value="">No variants available</option>}
+              {variants.length === 0 && <option value="">{t('locations.modal.no_variants', 'No variants available')}</option>}
               {variants.map(v => (
                 <option key={v.variantId} value={v.variantId}>
                   {v.label} (at source: {qtyAt(v, fromId)})
@@ -1182,7 +1234,7 @@ function StockTransferModal({ prefill, locations, stockItems, onClose, onComplet
 
         <div className="form-group">
           <label className="form-lbl">{t('locations.modal.note')}</label>
-          <input className="form-input" placeholder="e.g. For Marco Rossi reservation at 16:30"
+          <input className="form-input" placeholder={t('locations.modal.note_ph', 'e.g. for a reservation at 16:30')}
             value={note} onChange={e => setNote(e.target.value)} />
         </div>
 
@@ -1194,7 +1246,7 @@ function StockTransferModal({ prefill, locations, stockItems, onClose, onComplet
           <button className="btn btn-primary" onClick={submit}
             disabled={submitting || !variantId || !quantity || sourceQty === 0}>
             <span className="material-symbols-outlined">swap_horiz</span>
-            {submitting ? 'Transferring…' : t('locations.modal.confirm_transfer')}
+            {submitting ? t('common.loading') : t('locations.modal.confirm_transfer')}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
+import Loading from '../components/ui/Loading'
 import useNotifStore from '../store/notifStore'
 import { timeAgo } from '../lib/timeAgo'
 
@@ -229,12 +230,14 @@ export default function Notifications() {
           <div className="card-action" onClick={markAllRead}>{t('notifications.mark_all_read', 'Mark all as read')}</div>
         </div>
 
-        {loading && (
-          <div className="notif-state">
-            <span className="material-symbols-outlined notif-state-icon">hourglass_empty</span>
-            {t('notifications.loading', 'Loading notifications...')}
-          </div>
-        )}
+        {/* The shared indicator, but the in-card one rather than the page-level
+            spinner the data-heavy tabs use. Two reasons. The list is usually
+            already in the store — Layout fetches it at startup, and the effect
+            above returns without fetching when it is there, so `loading` never
+            turns true and no spinner is wanted at all. And `loading` starts
+            false, so a page-level gate would paint the real tab for a frame
+            before replacing it, which reads as a flicker rather than a load. */}
+        {loading && <Loading className="ld-cell" />}
 
         {!loading && notifications.length === 0 && (
           <div className="notif-state">

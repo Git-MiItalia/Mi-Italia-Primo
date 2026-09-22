@@ -16,7 +16,17 @@ const EMPTY_BODY = JSON.stringify({})
 async function toData(res) {
   if (res.status === 404) return null
   const body = await res.json().catch(() => null)
-  if (!res.ok || !body?.success) throw new Error(body?.message || `Request failed (${res.status})`)
+  // The thrown message reaches the screen through Integrations' errMsg(), which
+  // prefers err.message over its own translated fallback. A hand-written
+  // "Request failed (500)" here therefore won the toast and printed English in
+  // an Italian portal. With no message from the server there is now nothing to
+  // prefer, so the caller's translated fallback shows; the status is kept on the
+  // error for the console, where English is the right language anyway.
+  if (!res.ok || !body?.success) {
+    const err = new Error(body?.message || '')
+    err.status = res.status
+    throw err
+  }
   return body.data
 }
 
@@ -55,11 +65,41 @@ function normalizeConnection(raw, extra = {}) {
   }
 }
 
+/* The connection row outlives both the ways it can end, and GET keeps handing
+ * it back regardless, so the portal used to show a store as connected in two
+ * situations where it was not:
+ *
+ *   DELETE /connection soft-deletes. It answers
+ *   {"success":true,"message":"Disconnected"} but keeps the row, blanking the
+ *   token and connected_at and setting status "not_connected". Disconnect
+ *   therefore appeared to work and the store came back on the next reload.
+ *
+ *   POST /connect writes the row BEFORE it verifies the shop with Shopify. A
+ *   failed connect returns success:false — and still leaves a row behind, with
+ *   status "error". So a connection the boutique was told had failed showed up
+ *   connected a moment later.
+ *
+ * Both observed states are listed here rather than matching against the
+ * connected word, because we have never seen a successful connect and so do
+ * not know what that word is. An unknown status is treated as connected: that
+ * keeps a working store working, where guessing wrong the other way would hide
+ * one. The cost is that a new word for "not usable" reopens this — the full
+ * vocabulary is asked for in docs/backend-issues-for-sir.txt. 'failed',
+ * 'pending' and 'inactive' are pre-empted on the same reasoning: each would
+ * mean a store that cannot be used, none could mean a live one. */
+const DISCONNECTED_STATUSES = new Set([
+  'not_connected', 'disconnected', 'revoked',   // observed after DELETE
+  'error',                                      // observed after a failed POST /connect
+  'failed', 'pending', 'inactive',              // not observed; unusable either way
+])
+
 export async function getConnection(locationId) {
   if (!locationId) return null
   const res = await apiFetch(`${BASE}/locations/${locationId}/connection`)
   const data = await toData(res)
-  return normalizeConnection(data?.connection)
+  const raw = data?.connection
+  if (raw && DISCONNECTED_STATUSES.has(String(raw.status || '').toLowerCase())) return null
+  return normalizeConnection(raw)
 }
 
 export async function connectStore(locationId, { domain, accessToken, scopes }) {

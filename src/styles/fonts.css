@@ -66,3 +66,61 @@
   font-display: swap;
   src: url('/fonts/bodoni-moda-400-italic.woff2') format('woff2');
 }
+
+/* ── Material Symbols (UI icons) ─────────────────────────────
+ *
+ * Subset to the 211 icon names this app actually renders: 26 KB, against the
+ * 3.9 MB full font the `material-symbols` package ships. That full file never
+ * finished downloading on the dev server — it sat Pending past seven seconds,
+ * so it never reached the browser cache, so every page load began the whole
+ * download again and every icon rendered as its own name ("chevron_left",
+ * "more_vert") once font-display's block period expired.
+ *
+ * Built by Google Fonts' own subsetter and then saved here, so the portal
+ * self-hosts it exactly like Jost and Bodoni — no request to Google at
+ * runtime. Only the FILL axis is kept variable, as that is the only one the
+ * app varies (0 normally, 1 for filled states); weight, grade and optical size
+ * are pinned at the single values every rule uses.
+ *
+ * The names are listed in docs/material-symbols-icons.txt — a deliberate
+ * superset, since an icon left out renders as its own name on screen, forever,
+ * while a spare glyph costs a few bytes. It is built by taking every quoted
+ * lowercase token in src/ that is also a real Material Symbols name (the full
+ * list ships in node_modules/material-symbols/index.d.ts). A narrower scan
+ * missed gpp_bad, which appears only as a ternary branch in Promotions.jsx.
+ *
+ * REGENERATING, when new icons are used: rebuild that list, then fetch
+ *   https://fonts.googleapis.com/css2
+ *     ?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0
+ *     &icon_names=<comma-separated list>
+ * and save the woff2 that CSS points at over this file. */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 400;
+  /* block, not swap: an unstyled icon is its ligature text, so swapping would
+     show "chevron_left" in the layout before the font arrives. At 26 KB the
+     block period is never reached in practice. */
+  font-display: block;
+  src: url('/fonts/material-symbols-subset.woff2') format('woff2');
+}
+
+/* Replaces the rules the `material-symbols` package's stylesheet provided.
+   index.css adds the font-variation-settings and user-select on top. */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga';
+}

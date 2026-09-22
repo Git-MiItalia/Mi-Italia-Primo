@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { activeLocale } from '../lib/dateHelpers'
 import { statusLabel } from '../lib/statusLabel'
+import Loading from '../components/ui/Loading'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -163,6 +164,11 @@ export default function Financials() {
 
   const totalOrders = channels.reduce((s, c) => s + c.orders, 0)
   const totalComm   = channels.reduce((s, c) => s + c.comm,   0)
+
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
 
   return (
     <div>

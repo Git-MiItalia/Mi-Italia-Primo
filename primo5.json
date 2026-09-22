@@ -115,7 +115,8 @@
       "just_now": "just now",
       "minutes_ago": "{{count}} min ago",
       "hours_ago": "{{count}}h ago"
-    }
+    },
+    "reset": "Reset"
   },
   "reservations": {
     "loading": "Loading reservations…",
@@ -318,13 +319,22 @@
       "hint": "An invitation email will be sent with a temporary password.",
       "submit_btn": "Add Employee",
       "sending": "Sending...",
-      "error_required": "Name and email are required."
+      "error_required": "Name and email are required.",
+      "error_failed": "Could not send the invitation. Please try again.",
+      "email": "Email Address",
+      "name": "Full Name",
+      "name_ph": "First and last name",
+      "role_staff": "Staff — POS, reservations, view orders",
+      "role_manager": "Manager — also products, discounts and DHL labels",
+      "store": "Assign to Store",
+      "send": "Send Invitation"
     },
     "invite_success": {
       "title": "Employee",
       "title_em": "Added",
       "msg1": "{{name}} has been added as {{role}}.",
-      "msg2": "An invitation email has been sent to {{email}} with their temporary password."
+      "msg2": "An invitation email has been sent to {{email}} with their temporary password.",
+      "sent_to": "An invitation email has been sent to"
     },
     "edit_modal": {
       "title_em": "Profile",
@@ -367,8 +377,30 @@
       "modified": "Modified",
       "recommended": "Recommended",
       "all_enabled": "All {{count}} permissions enabled",
-      "enabled_count": "{{enabled}}/{{total}} enabled"
-    }
+      "enabled_count": "{{enabled}}/{{total}} enabled",
+      "title_pre": "Role",
+      "col": "Permission",
+      "partial_hint": "Partial = read-only access",
+      "rows": {
+        "view_dashboard": "View Dashboard",
+        "edit_products": "Add / Edit Products",
+        "reservations": "Manage Reservations",
+        "pos_sales": "Process POS Sales",
+        "view_orders": "View Orders",
+        "dhl_labels": "Generate DHL Labels",
+        "view_financials": "View Financials",
+        "manage_staff": "Manage Staff",
+        "discounts": "Manage Discounts",
+        "store_profile": "Edit Store Profile",
+        "showroom": "Showroom Settings"
+      }
+    },
+    "title_em": "Accounts",
+    "invite_btn": "Invite Staff",
+    "stat_total": "Total Staff",
+    "stat_pending": "Pending Invite",
+    "invite_pending": "Invite pending",
+    "resend": "Resend"
   },
   "discounts": {
     "tabs": {
@@ -444,7 +476,6 @@
       "err_delete": "Failed to delete sale.",
       "err_save": "Failed to save sale.",
       "err_status": "Failed to update sale.",
-      "loading": "Loading sales",
       "modal": {
         "applies_all": "All Products",
         "applies_label": "Applies To",
@@ -737,6 +768,8 @@
       "terminal_note": "This simulates a Stripe Terminal reader for testing.",
       "try_again": "Try Again",
       "method_external": "External",
+      "ext_take": "Take the payment on your card terminal",
+      "ext_note": "Confirm once the terminal approves it. Primo records the sale — it does not charge the card.",
       "fattura_info": "Fiscal details (CF / P.IVA / SDI / PEC) captured when customer attach is wired."
     },
     "receipt": {
@@ -1568,7 +1601,8 @@
       "feature": "Feature",
       "full_access": "Full access",
       "limited_access": "Limited access",
-      "no_access": "No access"
+      "no_access": "No access",
+      "no_locations": "No locations assigned"
     },
     "reservations": {
       "alert": "A customer can reserve an item on Mi Italia and select any Neglia location for pick-up — even if the item is stocked at a different location.",
@@ -1633,7 +1667,31 @@
       "role_hint": "Managers can edit stock, view analytics, and manage their location's profile. Staff can only use the POS.",
       "assigned_locations": "Assigned Locations",
       "locations_hint": "Staff can only access Primo and the POS for their assigned locations.",
-      "send_invite": "Send Invite"
+      "send_invite": "Send Invite",
+      "phone_ph": "+39 055 123 4567",
+      "email_ph": "name@boutique.it",
+      "terminal_status": "Status",
+      "reader_id": "Reader ID",
+      "reactivate_title": "Reactivate this location",
+      "reactivate_sub": "This location will become available again for POS, orders, and reservations.",
+      "reactivate_btn": "Reactivate Location",
+      "no_locations_assignable": "No locations to assign yet.",
+      "edit_staff_title": "Edit",
+      "edit_staff_title_em": "Staff",
+      "email_readonly": "Email (read-only)",
+      "staff_name": "Name",
+      "owner_role_locked": "Owner role cannot be changed here.",
+      "status": "Status",
+      "reset_title": "Send password reset email",
+      "reset_sub": "The staff member will receive a link to set a new password.",
+      "reset_btn": "Send reset link",
+      "remove_title": "Remove this staff member",
+      "remove_sub": "Their access will be revoked immediately.",
+      "remove_btn": "Remove staff",
+      "select_product": "Select a product…",
+      "variant": "Variant",
+      "no_variants": "No variants available",
+      "note_ph": "e.g. for a reservation at 16:30"
     },
     "wizard": {
       "activate": "Activate location",
@@ -1730,67 +1788,70 @@
       "timezone": "Time zone",
       "type": "Location type",
       "unnamed": "The location",
-      "vat_rate": "VAT rate"
-    }
-  },
-  "marketing": {
-    "tabs": {
-      "campaigns": "Campaigns",
-      "create": "Create Campaign",
-      "segments": "Segments",
-      "templates": "Templates"
+      "vat_rate": "VAT rate",
+      "ph_loc_name": "e.g. Sartoria Belloni Firenze",
+      "ph_listing": "e.g. Sartoria Belloni",
+      "ph_first": "e.g. Elena",
+      "ph_last": "e.g. Conti"
     },
-    "stats": {
-      "sent": "Campaigns Sent (30d)",
-      "vs_last": "vs last month",
-      "open_rate": "Avg Open Rate",
-      "revenue": "Revenue from Campaigns"
+    "hours": {
+      "closed": "Closed",
+      "mon_sat": "Mon–Sat",
+      "sun": "Sun",
+      "sunday": "Sunday",
+      "sun_ph": "11:00-18:00 or Closed"
     },
-    "create": {
-      "title": "New",
-      "title_em": "Campaign",
-      "name_label": "Campaign Name",
-      "name_placeholder": "e.g. Spring New Arrivals",
-      "channel_label": "Channel",
-      "audience_label": "Audience",
-      "selected": "Selected",
-      "all_recipients": "All Customers (284 recipients)",
-      "n_segments": "{{count}} segment(s) selected",
-      "send_label": "Send",
-      "send_now": "Send Now",
-      "schedule": "Schedule",
-      "datetime_label": "Date & Time"
+    "err": {
+      "load_locations": "Could not load your locations.",
+      "load_stock": "Could not load stock by location.",
+      "load_staff": "Could not load your staff.",
+      "save_location": "Could not save this location.",
+      "save_status": "Could not change this location status.",
+      "invite": "Could not send the invitation.",
+      "save_staff": "Could not save this staff member.",
+      "assign": "Could not save the assigned locations.",
+      "reset": "Could not send the password reset email.",
+      "delete": "Could not remove this staff member.",
+      "transfer": "Could not create this transfer.",
+      "create": "Could not create this location."
     },
-    "composer": {
-      "title": "Message",
-      "title_em": "Composer",
-      "ai_draft": "AI Draft",
-      "wa_preview": "WhatsApp Preview",
-      "message_label": "Message",
-      "cta_label": "CTA Button Text",
-      "cta_default": "View New Arrivals",
-      "link_label": "Link to",
-      "link_boutique": "Boutique page on Mi Italia",
-      "link_product": "Specific product",
-      "link_arrivals": "New arrivals collection",
-      "preview_btn": "Preview",
-      "send_btn": "Send Campaign"
+    "empty": {
+      "locations": "No locations yet. Add your first location to get started.",
+      "stock": "No products with stock yet.",
+      "transfers": "No transfers yet.",
+      "staff": "No staff members yet.",
+      "reservations": "No reservations across your locations yet."
     },
-    "segments": {
-      "title": "Customer",
-      "title_em": "Segments",
-      "win_back": "Win Back",
-      "campaign_btn": "Campaign",
-      "table": {
-        "segment": "Segment",
-        "customers": "Customers",
-        "app": "App Users",
-        "walkin": "Walk-in Only",
-        "last": "Last Campaign"
-      }
+    "primary": "Primary",
+    "type": {
+      "standard": "Standard",
+      "flagship": "Flagship",
+      "popup": "Pop-up",
+      "outlet": "Outlet"
     },
-    "templates": {
-      "use_btn": "Use Template"
+    "role": {
+      "owner": "Owner",
+      "manager": "Manager",
+      "staff": "Staff"
+    },
+    "terminal": {
+      "connected": "Connected",
+      "none": "Not connected",
+      "pending": "Pending",
+      "disconnected": "Disconnected"
+    },
+    "tstatus": {
+      "complete": "Complete",
+      "completed": "Completed",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "failed": "Failed"
+    },
+    "country": {
+      "it": "Italy",
+      "fr": "France",
+      "uk": "UK",
+      "ae": "UAE"
     }
   },
   "messages": {
@@ -1874,7 +1935,11 @@
       "refund": "Refund",
       "qty": "Qty",
       "discount": "Discount",
-      "message_customer": "Message Customer"
+      "message_customer": "Message Customer",
+      "dhl_label": "DHL Label",
+      "label_loading": "Fetching…",
+      "label_needs_tracking": "Save a DHL tracking number first — the label is looked up by it.",
+      "tracking_format": "DHL numbers are {{min}}–{{max}} characters."
     },
     "confirm_status": {
       "title": "Confirm status change",
@@ -1891,7 +1956,6 @@
     "timeline": {
       "delivered": "Delivered",
       "delivered_sub": "Order completed",
-      "dhl_generate": "Generate label to continue",
       "dhl_pending": "DHL Label — Pending",
       "dhl_status": "Status: {{status}}",
       "dhl_tracked": "DHL · {{tracking}}",
@@ -1905,13 +1969,23 @@
       "processing": "Processing",
       "processing_sub": "Boutique notified · preparing your order",
       "shipped": "Shipped",
-      "shipped_sub": "DHL pickup or drop-off"
+      "shipped_sub": "DHL pickup or drop-off",
+      "dhl_no_label": "No label yet — add a tracking number below"
     },
     "toast": {
       "cannot_transition": "Cannot transition from '{{from}}' to '{{to}}'",
       "status_updated": "Status updated to {{status}}",
       "tracking_saved": "Tracking number saved",
-      "tracking_error": "Could not save the tracking number. Please try again."
+      "tracking_error": "Could not save the tracking number. Please try again.",
+      "label_opened": "DHL label opened in a new tab",
+      "label_not_ready": "No DHL label has been created for this order yet.",
+      "tracking_unknown": "DHL has no record of this tracking number. Check it against the label — a new shipment can also take a few hours to appear.",
+      "label_failed": "Could not fetch the DHL label.",
+      "tracking_invalid": "A DHL tracking number is {{min}}–{{max}} characters. This one is {{len}}.",
+      "tracking_rejected": "DHL did not recognise that tracking number. It should be {{min}}–{{max}} characters — check it against the label.",
+      "ship_failed": "Could not book this shipment with DHL. The order has not been marked as shipped.",
+      "ship_label_ready": "Shipped — the DHL label is ready",
+      "ship_booked": "Shipped — booked with DHL, fetching the label"
     },
     "tooltip": {
       "cancel_window": "Orders can only be cancelled before processing begins",
@@ -2014,6 +2088,24 @@
       "attached": "attached.",
       "attached_desc": "She'll appear in your CRM after this sale.",
       "how_to_send": "How to send the opt-in request",
+      "method": {
+        "mi": {
+          "name": "Mi Italia app",
+          "desc": "Notification appears in their app immediately"
+        },
+        "email": {
+          "name": "Email",
+          "desc": "Sent to their registered Mi Italia email"
+        },
+        "qr": {
+          "name": "Show QR now",
+          "desc": "They scan and accept in-store on their phone"
+        },
+        "skip": {
+          "name": "Skip for now",
+          "desc": "Record sale only, send later automatically"
+        }
+      },
       "covers": "Opt-in covers (all optional per channel)",
       "email_label": "Email marketing from Neglia",
       "email_desc": "New collections, events, personalised offers",
@@ -2066,6 +2158,24 @@
       "phone_hint": "For WhatsApp opt-in only — not stored without consent",
       "language": "Nationality / Language",
       "invite_title": "After Sale — Invite to Mi Italia",
+      "invite": {
+        "email": {
+          "name": "Email invite",
+          "desc": "Send Mi Italia invite + receipt"
+        },
+        "wa": {
+          "name": "WhatsApp",
+          "desc": "Send invite via WhatsApp"
+        },
+        "qr": {
+          "name": "Show QR",
+          "desc": "Download app on their phone now"
+        },
+        "none": {
+          "name": "Receipt only",
+          "desc": "No invite — sale record only"
+        }
+      },
       "gdpr": "Walk-in contacts are stored as transactional records only until they join Mi Italia and set their preferences.",
       "create_btn": "Create & Attach"
     },
@@ -2363,7 +2473,40 @@
     "export_success": "{{name}} exported",
     "export_failed": "Failed to export: {{error}}",
     "schedule_pending": "Scheduled reports — endpoints coming soon",
-    "edit_schedule_pending": "Edit schedule {{id}} — endpoints coming soon"
+    "edit_schedule_pending": "Edit schedule {{id}} — endpoints coming soon",
+    "sched": {
+      "new_title": "New scheduled report",
+      "edit_title": "Edit schedule",
+      "empty": "No scheduled reports yet. Use New Schedule to have one emailed to you automatically.",
+      "err_load": "Could not load your scheduled reports — this list may be incomplete. Reload the page to try again.",
+      "err_save": "Could not save this schedule.",
+      "err_no_recipients": "Add at least one email address.",
+      "err_too_many": "At most {{max}} recipients — you have entered {{count}}.",
+      "err_bad_email": "“{{email}}” does not look like an email address.",
+      "recipients_ph": "owner@boutique.it, finance@boutique.it",
+      "recipients_hint": "Up to {{max}} addresses, separated by commas.",
+      "locked_hint": "The report and format cannot be changed — create a new schedule instead.",
+      "paused": "Paused",
+      "saving": "Saving…",
+      "toast_created": "Schedule created",
+      "toast_updated": "Schedule updated",
+      "freq_daily": "Daily",
+      "freq_weekly": "Weekly",
+      "freq_monthly": "Monthly",
+      "active2": "Active — send this report automatically",
+      "active_hint": "Untick to pause. The schedule stays in the list, but no emails are sent.",
+      "paused_hint": "Paused — no emails will be sent. Tick to start again."
+    },
+    "preview": {
+      "empty": "This report has no data for the selected period.",
+      "blocked": "Your browser blocked the print window. Allow pop-ups for this site, then press Save as PDF again.",
+      "view": "Preview"
+    },
+    "fmt_sub": {
+      "csv": "Plain text, opens in Excel",
+      "pdf": "Print or save",
+      "xlsx": "Excel, one tab per section"
+    }
   },
   "ret": {
     "tabs": {
@@ -2600,7 +2743,7 @@
       "feat_500_contacts": "Up to <strong>500 contacts</strong>",
       "feat_1500_contacts": "Up to <strong>1,500 contacts</strong>",
       "feat_unlimited_contacts": "<strong>Unlimited contacts</strong>",
-      "feat_2_campaigns": "2 email campaigns/month",
+      "feat_2_campaigns": "100 email campaigns/month",
       "feat_10_renders": "10 AI Studio renders/month",
       "feat_25_renders": "25 AI Studio renders/month",
       "feat_unlimited_renders": "Unlimited AI Studio renders",
@@ -2608,12 +2751,13 @@
       "feat_8_langs": "All 8 translation languages",
       "feat_no_whatsapp": "No WhatsApp",
       "feat_no_tiers": "No tier discounts",
-      "feat_unlimited_email": "Unlimited email campaigns",
+      "feat_unlimited_email": "200 email  campaigns/month",
       "feat_wa_print": "WhatsApp & Print campaigns",
+      "feat_print_only": "Print campaigns",
       "feat_tier_discounts": "Tier discounts (Silver → Platinum)",
       "feat_floor": "Floor protection",
       "feat_ig_dm": "Instagram DM",
-      "feat_unlimited_campaigns": "Unlimited campaigns · all channels",
+      "feat_unlimited_campaigns": "1000 email  campaigns/month",
       "feat_multi_location": "Multi-location support",
       "feat_custom_checkout": "Custom branded checkout",
       "feat_account_manager": "Dedicated account manager",
@@ -2634,6 +2778,8 @@
       "title": "Subscription &",
       "title_em": "Billing",
       "subtitle": "Manage your plan, usage, and attribution",
+      "pct_of_capacity": "{{pct}}% of plan capacity",
+      "wa_rate": "€0.10/msg",
       "tab_overview": "Overview & Usage",
       "tab_attribution": "Attribution",
       "tab_billing": "Billing & Invoices",
@@ -2809,7 +2955,16 @@
       "top_tier": "You are on the highest tier — this is the lowest commission rate available.",
       "trend_tooltip": "{{identified}} of {{total}} orders identified",
       "tx_total_count": "{{count}} transactions · {{identified}} identified",
-      "you_at": "You: {{pct}}%"
+      "you_at": "You: {{pct}}%",
+      "csv": {
+        "date": "Date",
+        "customer": "Customer",
+        "item": "Item",
+        "sale": "Sale",
+        "source": "Source",
+        "rate_pct": "Rate %",
+        "fee": "Fee"
+      }
     },
     "bill": {
       "next_charge": "Next charge",
@@ -3305,7 +3460,8 @@
       "customers_imported": "{{created}} new, {{merged}} matched to existing customers",
       "domain_required": "Enter the Shopify store domain to continue.",
       "orders_synced": "Orders synced from Shopify.",
-      "token_required": "Enter the Shopify Admin API access token to continue."
+      "token_required": "Enter the Shopify Admin API access token to continue.",
+      "domain_invalid": "That is not a Shopify store domain. Use just the store handle — the part before .myshopify.com in your Shopify Admin address, such as sartoria-belloni. Not an email address or a web address."
     },
     "wb": {
       "fulfil_lbl": "Fulfil online orders from POS",
@@ -3328,7 +3484,6 @@
       "col_order": "Order",
       "col_status": "Status",
       "empty": "No orders mirrored yet. Sync to pull them from Shopify.",
-      "loading": "Loading orders",
       "status_fulfilled": "Fulfilled",
       "status_unfulfilled": "Unfulfilled",
       "sub": "{{count}} orders mirrored",
@@ -4343,7 +4498,6 @@
     }
   },
   "store_profile": {
-    "loading": "Loading profile…",
     "save_changes_btn": "Save Changes",
     "save_btn": "Save",
     "replace_btn": "Replace",
@@ -4455,9 +4609,13 @@
       "opt_website_custom": "Yes — Custom / other platform",
       "website_url_label": "Website URL",
       "website_url_placeholder": "https://yourstore.com",
-      "shopify_title": "Shopify Integration — Coming Soon",
-      "shopify_body": "When the Mi Italia Shopify app launches, your products, stock levels, and orders will sync automatically between Shopify and Primo.",
-      "notify_btn": "Notify Me When Available",
+      "shopify_live_title": "Shopify Integration",
+      "shopify_live_body": "Mirror your Shopify catalogue, orders, and customers, and write POS sales back to Shopify. Set it up under Settings › Integrations.",
+      "shopify_connected": "Connected to {{domain}} — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.",
+      "shopify_connected_multi": "Connected for {{n}} locations — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.",
+      "manage_integration_btn": "Manage integration",
+      "invalid_website_url": "That does not look like a website address",
+      "use_shopify_domain": "Use {{domain}}",
       "woo_title": "WooCommerce Integration — Coming Soon",
       "woo_body": "A Mi Italia WooCommerce plugin will allow automatic product and inventory sync between your WordPress store and Primo.",
       "no_website_alert": "Mi Italia + Primo is your complete online retail presence. Your boutique page on Mi Italia serves as your public storefront.",
@@ -4605,7 +4763,8 @@
       "save": "Save",
       "close": "Close",
       "edit": "Edit",
-      "duplicate": "Duplicate"
+      "duplicate": "Duplicate",
+      "quota_resets": "resets {{date}}"
     },
     "look_sheet": {
       "err_name": "Give the look a name before saving.",
@@ -4814,6 +4973,8 @@
       "recent_pre": "Recent",
       "recent_em": "generations",
       "loading_recent": "Loading recent generations…",
+      "show_less": "Show less",
+      "load_more": "Load more",
       "no_generations": "No generations yet",
       "no_generations_note": "Run your first shoot and it appears here.",
       "start_shoot": "Start a shoot",
@@ -5521,6 +5682,8 @@
     "add_to_gallery": "Add to Gallery",
     "select_source_pre": "Select",
     "select_source_em": "Source Photo",
+    "all_models_pre": "All",
+    "all_models_em": "Available Models",
     "select_source_info": "Choose which product photo will be used as the garment reference.",
     "chip": {
       "studio_white": "Studio white background",
@@ -5668,7 +5831,9 @@
     "loading": "Loading categories",
     "occasion_hint": "Helps surface this product in occasion-based filters in the app",
     "occasion_optional": "(optional · select all that apply)",
-    "selected_label": "Selected Category"
+    "selected_label": "Selected Category",
+    "loading_divisions": "Loading divisions",
+    "division_placeholder": "Select division…"
   },
   "ptm": {
     "all_sizes": "All sizes ({{sizes}})",
@@ -5731,5 +5896,10 @@
     "last_month": "Last month",
     "last_quarter": "Last quarter",
     "ytd": "Year to date"
+  },
+  "sco": {
+    "title_pre": "Upgrade to",
+    "preparing": "Preparing secure checkout",
+    "err_session": "Could not start checkout. Please try again."
   }
 }

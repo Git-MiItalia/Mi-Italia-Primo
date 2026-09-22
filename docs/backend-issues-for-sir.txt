@@ -207,15 +207,114 @@ ORDERS
     "Guest". We will remove the workaround once this is fixed.
 
 
---- No DHL label endpoint -----------------------------------------------------
+--- Nothing creates the DHL shipment -------------------------------------------
 
-  The Orders detail panel has a "Generate DHL Label" button, and the timeline
-  shows "DHL Label - Pending / Generate label to continue". There is no
-  endpoint behind it, so the button does nothing.
+  Thank you for GET /boutique/orders/:id/tracking — it is wired and working.
+  We confirmed it reaches DHL for real: a bad number came back with DHL's own
+  400 (minLength=10, maxLength=11), and a valid-format one returned
+  shipments: [] as expected. That half is done.
 
-  NEEDED: either an endpoint that creates a DHL shipment and returns
-  dhl_tracking_number and dhl_label_url, or confirmation that it is out of
-  scope — in which case we will disable the button so it does not look broken.
+  The step BEFORE it is what is missing: nothing ever asks DHL to create the
+  shipment, so there is never a tracking number or a label to look up.
+
+    EVIDENCE — a brand new order, created 07:39:35, set to shipped 07:40:00:
+
+      order  13246e3e-89e8-4c96-a8a1-817e867d9015
+      status                 "shipped"
+      dhl_shipment_id        null
+      dhl_tracking_number    null
+      dhl_status             null
+      dhl_label_url          null
+
+    Same on e4418b18-2c4e-4971-bda3-b61953a575a7. Moving an order to shipped
+    populates none of the four dhl_* columns, so they stay null forever and
+    the portal's DHL Label button has nothing to open.
+
+  Everything the DHL call needs is already on the order:
+
+      shipping_address_snapshot   name, address_line1, city, postal_code,
+                                  country_code, phone, email
+      shipping_method             "N"  — the DHL service code the customer
+                                  chose; your tracking response returns the
+                                  same value as service_code
+      four dhl_* columns          already there, waiting to be filled
+
+  NEEDED: a call to DHL's create-shipment API when an order is marked shipped
+  (or an endpoint we can trigger), storing what DHL returns:
+
+      dhl_shipment_id, dhl_tracking_number, dhl_label_url
+
+  DHL returns the tracking number and the label PDF together in that one call,
+  which is why a hand-typed tracking number can never produce a label — nobody
+  ever booked the shipment.
+
+  RESOLVED — you sent POST /boutique/orders/:id/ship { "service_code": "I" },
+  and confirmed it returns the DHL label URL. That is exactly the missing step.
+  It is now wired: the Shipped button calls it instead of PATCH /status, then
+  re-reads the order so the label, tracking number and status come from the
+  order's own dhl_* columns rather than from field names we would have had to
+  guess. A failed booking leaves the status unchanged rather than showing
+  "Shipped" over a parcel DHL never accepted.
+
+
+  TESTED AND WORKING — order 43fefb26-716b-4cf7-b9f9-6e1ce3f4087a:
+
+      status                 "shipped"
+      dhl_shipment_id        "2844953112"
+      dhl_tracking_number    "2844953112"
+      dhl_status             "created"
+      dhl_label_url          .../uploads/labels/43fefb26-….pdf
+
+    The label opens, survives a reload, and the 10-character tracking number
+    passes the length check. Weight came back as 1.0 kg on the label, so you
+    are defaulting it server-side — that answers our weight question. Thank
+    you. This item is closed.
+
+
+--- DHL is still on test credentials --------------------------------------------
+
+  The label that came back is stamped "DO NOT PRINT — SAMPLE ONLY", so /ship
+  is pointed at DHL's test environment. Correct for now, and safer — nothing
+  is being charged and no courier is being booked.
+
+  It does mean the tracking lookup will keep returning shipments: [] for these
+  numbers, because the shipments do not exist at DHL. Not a bug in either of
+  our halves.
+
+    NEEDED: when does this switch to production credentials, and is it a
+    config change on your side only? We would rather not find out on the
+    morning of a demo. Nothing changes in the portal either way.
+
+
+  SETTLED — service_code is the delivery service the customer chooses at
+  checkout on the webshop, stored on the order as shipping_method. The portal
+  sends that value straight through to /ship, so the shopper gets the service
+  they paid for. On 43fefb26 that was "7" and DHL booked a domestic service
+  for a Rome-to-Rome parcel, as expected.
+
+  (Only remaining oddity: our packing slip prints shipping_method through a
+  small map that knows "I" = International and "D" = Domestic, so a "7" prints
+  as a bare "7". Cosmetic, and ours to fix once we have the full list of codes
+  the webshop can produce — no action needed from you beyond that list.)
+
+  (The customer question is answered too: the tracking number already shows on
+  the webshop, so the shopper can see it there. Nothing needed from the
+  portal.)
+
+  You are already integrated with DHL for tracking, so this should be the same
+  credentials and the same client, one more endpoint.
+
+  MEANWHILE, on our side:
+    - the tracking number field is manual entry only, validated to DHL's 10-11
+      characters so a bad number is caught on entry rather than surfacing later
+      as a raw DHL 400
+    - the DHL Label button is disabled until a tracking number or label exists,
+      with the reason shown underneath
+    - "Generate DHL Label" is now just "DHL Label", and the timeline no longer
+      says "Generate label to continue" — there was never a Generate button
+
+  If creating shipments is out of scope for now, say so and we will hide the
+  label button entirely rather than leave a promise on screen.
 
 
 ################################################################################
@@ -355,6 +454,125 @@ AGING & MARKDOWNS
 
 
 ################################################################################
+REPORTS
+################################################################################
+
+  Thank you for top-products and the payouts pointer — both are wired now and
+  downloading correctly. All 8 reports work.
+
+
+--- GET /boutique/reports/top-products -----------------------------------------
+
+  views and try_ons come back as 0 on every row
+
+    WHAT WE SEE
+      name           units_sold   revenue     views   try_ons
+      Strom Jacket   15           14699.80    0       0
+      ff             5            440         0       0
+
+    Fifteen of that jacket sold and nobody viewed it, which cannot be true.
+
+    You already compute per-product views: GET /boutique/analytics/matrix
+    returns viewsNormalized per product, which is what the "Visibility vs
+    Conversion" chart plots. So the underlying data exists.
+
+    We deliberately did NOT copy that figure into this report — it is
+    normalised for charting, not a raw count, and it comes from a different
+    period window. Two endpoints disagreeing on the same column is worse than
+    an empty one.
+
+    On try_ons you have already answered this yourself. The Looks Feed export
+    carries:
+
+      Note          try_ons, shares and look-attributed revenue require event
+                    tracking that is not yet recorded.
+      Unavailable   try_ons; shares; revenue
+
+    So try_ons is not measured anywhere — the 0 in this report is not a count.
+
+    NEEDED:
+      - views:   populate as a raw count for the requested period, from the
+                 same source /analytics/matrix already uses.
+      - try_ons: either drop the column, or declare it the way Looks Feed
+                 does (below) until event tracking exists.
+
+
+--- Please use the Looks Feed "unavailable" pattern everywhere ------------------
+
+  Every figure in every report is printed as-is, so a field you do not send
+  arrives in the CSV as 0. A boutique cannot tell "genuinely zero" from "not
+  measured" — and zero is a number people act on.
+
+  Looks Feed already solves this, and solves it well: it sends `note` and
+  `unavailable`, and the export prints both. On that report, Looks 0 and
+  Likes 0 read as true zeros precisely because they are absent from the
+  unavailable list. Nothing is ambiguous.
+
+  NEEDED: the same `unavailable` array on the other reports — sales, vat,
+  inventory, returns, top-products, payouts. No new measurement required, just
+  a declaration of what each endpoint cannot currently fill. We already render
+  it; nothing changes on our side.
+
+
+--- Scheduled reports: built, two things outstanding ---------------------------
+
+  Thank you for the scheduling endpoints. The card is now live — the "coming
+  soon" toasts are gone and it creates and edits real schedules:
+
+      POST   /boutique/reports/schedules      report_type, format, frequency,
+                                              recipients
+      PATCH  /boutique/reports/schedules/:id  frequency, recipients, is_active
+
+  Two things lined up exactly, which saved a mapping layer on our side:
+
+    - our internal report keys are already identical to your eight
+      report_type values, so the dropdown sends them unchanged
+    - the formats each report advertises on its card match your per-type
+      allowed list exactly, all eight of them
+
+  The format dropdown filters itself by the chosen report, and recipients are
+  validated for shape and for the 1–10 limit before anything is sent, so the
+  common mistakes never reach you as a 400.
+
+  Because PATCH takes only frequency, recipients and is_active, the edit
+  dialog shows the report and format as read-only text rather than as
+  dropdowns that would look editable and then not save.
+
+  GET /boutique/reports/schedules turned out to exist as well — tested end to
+  end and working: the empty state shows on a fresh boutique, a created
+  schedule appears in the table immediately, and editing its frequency saves
+  and re-renders. The row field names matched what we expected, so nothing is
+  being guessed. Nothing further needed on the main flow.
+
+    Download formats — no longer anything needed from you.
+
+    The cards advertise CSV / PDF / XLSX per report, from the bundle's
+    reports.items.*.fmts lists, but Export only ever produced CSV. We checked
+    whether the endpoints already took a format parameter:
+
+        GET /boutique/reports/sales?period=this_month
+        GET /boutique/reports/sales?period=this_month&format=pdf
+        GET /boutique/reports/sales?period=this_month&format=xlsx
+
+    All returned 200 with an identical JSON body, so `format` is ignored. Both
+    formats are now produced in the browser instead — PDF through the print
+    dialog (the same route the packing slip takes) and XLSX by writing the
+    workbook directly, since an .xlsx is a ZIP of XML and needs no library.
+    Each report's menu offers only its own formats, so the menu and the badges
+    agree.
+
+    Nothing is required from you here. If you ever do want ?format= honoured
+    server-side we will switch to it, but it is not blocking anything.
+
+    NEEDED (2): how is a schedule removed? There is no DELETE in what you sent.
+    We have assumed is_active:false is the intended way to stop one, so the
+    edit dialog offers it as a switch and paused rows are greyed in the table
+    with a "Paused" tag. If there is a DELETE, say so and we will add a proper
+    remove button — a merchant who has scheduled the wrong report currently
+    has to leave the row there, switched off, rather than tidy it away.
+
+
+################################################################################
 FINANCIALS
 ################################################################################
 
@@ -387,25 +605,550 @@ FINANCIALS
 
 
 ################################################################################
+LOCATIONS
+################################################################################
+
+--- Staff locations: the list you return cannot be sent back ------------------
+
+  Editing a staff member's assigned locations always failed, with your own
+  message:
+
+      locationIds must be an array of location id strings, not objects
+      — got: ["[object Object]"]
+
+  The cause is a shape mismatch between two endpoints that describe the same
+  thing:
+
+      GET  /boutique/locations/staff   returns  locations: [ {id, name, …} ]
+      PUT  /boutique/locations/staff/:id  expects  locationIds: ["<id>", …]
+
+  So what you hand us cannot be handed straight back. Our code was reading the
+  returned objects as if they were id strings, which is our bug and is fixed —
+  we now take `.id` off each entry and accept either shape, so this keeps
+  working whichever you settle on.
+
+    NOT BLOCKING, but worth aligning: having the same field be objects on the
+    way out and id strings on the way in is the kind of difference that bites
+    again later. Either is fine by us — just ideally the same in both
+    directions.
+
+  (Worth checking whether the mobile or web clients hit the same thing, since
+  the error was produced by your validator rather than by us.)
+
+
+################################################################################
+INTEGRATIONS — SHOPIFY
+################################################################################
+
+--- 1. Disconnect does not disconnect ----------------------------------------
+
+  DELETE /boutique/shopify/locations/:locationId/connection
+
+  answers cleanly:
+
+      {"success":true,"message":"Disconnected","data":{"ok":true}}
+
+  but the row survives, and GET .../connection keeps returning it on every
+  reload:
+
+      "shop_domain":   "strom@mailinator.com"
+      "access_token":  null
+      "connected_at":  null
+      "status":        "not_connected"
+
+  So the boutique disconnects, sees the success toast, reloads, and the store
+  is connected again — with no token behind it, so every action then fails.
+  There was no way to get out of it from the UI.
+
+  We have fixed our half: GET's record is now treated as "no connection" when
+  status is one of not_connected / disconnected / revoked / error / failed /
+  pending / inactive, so Disconnect sticks.
+
+    QUESTION, so our check cannot drift out of date: what is the full set of
+    values `status` can take, and which of them mean connected? We have never
+    seen a successful connect, so we do not know the connected word — we match
+    the unusable ones and treat anything unknown as connected, so that a live
+    store is never hidden. That means a new word for "off" reopens this bug.
+
+    ALSO WORTH CONSIDERING: if the row is kept deliberately (audit trail, or
+    to preserve the mapping for a reconnect), GET could simply 404 while it is
+    in that state. We already handle 404 as "not connected". Either way suits
+    us — we just need to know which.
+
+
+--- 1b. A FAILED connect also leaves a row behind -----------------------------
+
+  Same shape of problem, and the reason the status list above had to grow.
+
+  POST /boutique/shopify/locations/:locationId/connect with shop "strom"
+  answered, correctly:
+
+      {"success": false,
+       "message": "Shopify shop not found for \"strom.myshopify.com\" — the
+                   store may not exist, may have been deleted/renamed, …"}
+
+  Nothing was connected, and we showed the boutique that error. But the next
+  GET .../connection returned a saved row anyway:
+
+      "shop_domain":  "strom"
+      "status":       "error"
+      "connected_at": null
+
+  So the row is written BEFORE the shop is verified, and a connect the
+  boutique was just told had failed shows as connected on the next reload.
+
+    NEEDED: verify first, write only on success. A connect that returns
+    success:false should leave no row at all.
+
+  Combined with issue 1, there was no way out of this from the UI: connecting
+  failed but stuck, and disconnecting succeeded but did not stick.
+
+
+--- 1c. SECURITY: the access token is returned in plaintext -------------------
+
+  GET /boutique/shopify/locations/:locationId/connection returns:
+
+      "access_token": "strom@123"
+
+  That is the Shopify Admin API token, in a GET response, in full. A Shopify
+  Admin token can read orders and customers and — with the scopes this
+  integration asks for — write fulfilments and inventory.
+
+  The portal never reads this field; it is dropped on arrival. But it is in
+  the JSON, which means it is in every browser's network log, in any proxy or
+  monitoring in between, and in anything that caches responses.
+
+  We noticed it only because the DELETE response happens to null it, which is
+  what made it visible as a difference between two responses.
+
+    NEEDED: do not return access_token. If the UI ever needs to show that a
+    token exists, a boolean (has_token) or a last-4 suffix is enough — we ask
+    for neither today.
+
+
+--- 2. An unusable shop domain is accepted and stored -------------------------
+
+  POST /boutique/shopify/locations/:locationId/connect
+
+  accepted shopDomain "strom@mailinator.com" — an email address — and saved
+  the connection. The failure only surfaced later, on sync-types:
+
+      500  "Request cannot be constructed from a URL that includes
+            credentials:
+            https://strom@mailinator.com.myshopify.com/admin/api/2026-07/
+            graphql.json"
+
+  Everything before the '@' is read as a username, so the request could never
+  be built. The connection was stored in a permanently broken state, and the
+  message gives a boutique no way to know that the domain field was at fault.
+
+  Our half is fixed: the field now normalises what is pasted (strips
+  https://, a trailing .myshopify.com, /admin/..., capitals, whitespace) and
+  refuses anything that is not a Shopify handle before it is sent.
+
+    NEEDED: reject the domain at connect time rather than storing it. A
+    Shopify handle is lowercase letters, digits and hyphens — no '@', dots,
+    spaces or scheme. Your own 400 with a readable message would be ideal,
+    since the portal is not the only client.
+
+
+--- 3. Smaller: no way to list a store's Shopify locations --------------------
+
+  The store's available Shopify locations come back only inside POST
+  /connect's `verify.locations`. GET .../connection returns just the one
+  already mapped. After a reload we therefore rebuild a single-item list from
+  the saved mapping, so the "Sellable stock" dropdown shows the current value
+  but cannot be changed to another location without disconnecting.
+
+    NICE TO HAVE: GET /boutique/shopify/connections/:id/locations, or the same
+    list included in GET .../connection.
+
+  Also, no Style display-name field on the mapping API: overridden rows have
+  to print the raw slug ("mini") where the other two levels print names.
+
+
+--- 4. The import brings no product images ------------------------------------
+
+  POST /boutique/shopify/connections/:id/mapping/apply
+
+  imports the products correctly — name, SKU, price, stock, variant count all
+  arrive — but every imported product comes in with no photo. On the Products
+  table the whole Shopify catalogue is a column of blank grey tiles.
+
+  GET /boutique/products, same boutique, same response: every SHOPIFY- product
+  has main_photo null, and the three products created by hand in the portal
+  have a real one.
+
+      "name":       "The Collection Snowboard: Liquid"
+      "sku":        "SHOPIFY-gid://shopify/Product/9305627689098"
+      "main_photo": null            ← every imported product
+
+      "name":       "Clover Pendant"
+      "sku":        "WQE-5674"
+      "main_photo": "https://apidev.revoltution.com/uploads/products/8912…png"
+
+  Nothing to fix on our side: the portal draws main_photo when it is there and
+  an empty tile when it is not, which is what it is doing. The field is null in
+  your response, so there is no image to draw.
+
+  Checked at source before reporting this: the products do have images in
+  Shopify. The store is the dev store primo-test-uw6ao3l9, created with
+  Shopify's generated test data, and its products carry photos in the Shopify
+  admin. So there is something to import and it is not arriving.
+
+    NEEDED: carry the images across during the import. Shopify returns them on
+    the same product query the import already makes — `featuredImage { url }`
+    and `media(first: n)` / `images(first: n)` — so no extra Shopify call and
+    no new scope is needed.
+
+    ONE THING TO DECIDE, because it changes the size of the job: every photo
+    in Primo today is re-hosted under /uploads/products/, so matching that
+    means downloading each Shopify CDN image and storing a copy, then writing
+    the product_photos rows with one marked main. Storing Shopify's CDN URL
+    directly is much less work and the portal handles it either way — imgSrc()
+    passes an absolute http(s) URL straight through and only prefixes the
+    relative ones — but then the image disappears if the product is deleted in
+    Shopify or the store disconnects. Your call; we need no change for either.
+
+    CONFIRMED, so this is not just a missing main flag: GET
+    /boutique/products/:id/photos on an imported product comes back with no
+    photos. Nothing is stored — the images are never fetched from Shopify in
+    the first place, and the Photos section of an imported product is empty
+    when you open it in the portal.
+
+
+--- 4b. Customer import returns a wall of raw Shopify error --------------------
+
+  Not a fault in the import itself. The catalogue side is fine — this is only
+  about what comes back when Shopify refuses.
+
+  POST /boutique/shopify/connections/:id/customers/import
+
+      "success": false,
+      "message": "Shopify GraphQL errors: This app is not approved to access
+                  the Customer object. Access to personally identifiable
+                  information (PII) like customer names, addresses, emails,
+                  phone numbers is only available on Shopify, Advanced, and
+                  Plus plans. Learn more: https://admin.shopify.com/store/
+                  primo-test-uw6ao3l9/settings/apps/development/424692547585/
+                  configuration; <the same sentence three more times>"
+
+  The refusal itself is correct and is ours to sort out — the app needs
+  protected customer data access, or the store a higher plan. Nothing needed
+  from you there.
+
+  What we would ask for is the shape of the message. It arrives as one string
+  with Shopify's sentence repeated four times, an internal admin URL in each
+  copy, and our own toast prints it verbatim. A boutique sees a paragraph of
+  GraphQL error across the screen.
+
+    NEEDED: collapse the duplicates and return one readable sentence — e.g.
+    "Shopify did not allow access to customer data on this store's plan." The
+    full GraphQL text belongs in your logs. An error code we can match on
+    (rather than the prose) would let us word it ourselves per language.
+
+  Worth noting for the roadmap rather than as a bug: Shopify restricts customer
+  PII to the Shopify, Advanced and Plus plans, so a boutique on Shopify Basic
+  can never use this button at all. If that is a plan we expect to support, the
+  button should say so up front rather than fail on click.
+
+
+--- 5. The mapped category never reaches the products -------------------------
+
+  Same endpoint, separate problem, and this one is the bigger of the two: the
+  whole point of the mapping screen is that the boutique places each Shopify
+  product type into the Primo category tree. That placement is not applied.
+
+  The mapping row is set, overridden by hand, and reports 14 products on it:
+
+      "shopifyProductType": "snowboard"
+      "categoryTypeId":     "ab4f9214-5b93-40ac-be19-10bb0a656bd4"
+      "categoryName":       "Men"
+      "typeName":           "Knitwear"
+      "styleSlug":          "turtlenecks"
+      "productCount":       14
+      "status":             "over"
+
+  Apply then answers:
+
+      "message":  "Mapping applied — catalogue imported"
+      "imported": 17
+
+  But GET /boutique/products afterwards has, on all 17 imported products:
+
+      "category_path": null
+
+  Not one of the 14 carries "Men / Knitwear / Turtlenecks". By contrast the
+  hand-made products in the same response carry theirs
+  ("Accessories / Jewelry / Necklaces", "Women / Dresses / Maxi"), so the field
+  and the list query are both fine — the import is not writing it.
+
+  The 3 rows still in review are correctly null; they have no category yet.
+  It is the 14 mapped ones that should not be.
+
+    NEEDED: apply writes the row's categoryTypeId and styleSlug onto every
+    product of that Shopify product type.
+
+
+--- 5b. Re-running apply changes nothing, but still reports success -----------
+
+  Noticed while testing issue 5. The products were first imported on
+  17 September at 13:34. The category override was set afterwards, so we
+  re-ran apply to pick it up. It answered "Mapping applied — catalogue
+  imported", "imported": 17 — and nothing changed: category_path still null on
+  all 17, and created_at still 2026-09-17T13:34:31 on every row, so no record
+  was rewritten.
+
+  So "imported": 17 appears to be the number of products the mapping covers,
+  not the number of records created or updated. A boutique that corrects a
+  mapping and re-applies is told it worked and gets no change.
+
+    NEEDED: apply should update products that already exist, not skip them —
+    correcting a mapping is exactly when a boutique will use this. If a
+    re-apply is deliberately a no-op, the count should not be called
+    "imported", and the message should say nothing was changed.
+
+
+################################################################################
+SUBSCRIPTION & BILLING
+################################################################################
+
+--- 1. Plan feature text is not translatable, and is duplicated -------------
+
+  GET /boutique/subscription/plans returns each plan's feature list as finished
+  sentences:
+
+      "features": [ { "text": "2 email campaigns/month", "included": true }, … ]
+
+  The portal prints `text` exactly as sent, because there is no key to look up.
+  So this list is the one part of the portal that does not follow the
+  translation bundle: an Italian boutique reads the plan cards in whatever
+  language the rows were written in, and reloading translations changes
+  nothing on that card.
+
+  This caught us out in a real way. We edited the plan wording in primo5.json
+  ("2 email campaigns/month" → 100), you loaded it, the bundle updated, and the
+  Subscription page still showed the old numbers — because the words on that
+  card never came from the bundle.
+
+  The duplication behind it: the same nine-or-so feature lines exist twice, as
+  bundle keys (sub.setup.feat_*, used by the plan chooser at
+  /subscription-setup) and as your `features[].text`. Editing either one leaves
+  the other stale, and the two screens then disagree about what a plan
+  includes.
+
+    NEEDED, and the smaller of the two options: send a key per feature
+    alongside the text, e.g. { "key": "feat_2_campaigns", "text": "…" }. We
+    look up the key and fall back to your text when we do not have it, the
+    wording lives in the bundle like everything else, and we can delete our
+    hardcoded copy so there is one source.
+
+    Numbers that differ per plan (500 contacts, 2 campaigns, 25 renders) are
+    better sent as interpolation values than baked into the sentence —
+    { "key": "feat_campaigns", "count": 2 } — otherwise every limit change is
+    a translation change in eight languages.
+
+
+--- 2. The plan cards advertise WhatsApp to boutiques that cannot use it ------
+
+  Follows from issue 1. The Connect plan's feature list contains
+
+      "WhatsApp & Print campaigns"
+
+  and it renders for every boutique, including those whose login response says
+  whatsapp_enabled: false.
+
+  Everywhere else in the portal we honour that flag — the Messages tab, the
+  campaign channels, the consent dots, the enquiry-number field, the usage
+  meter on this same page are all hidden for those boutiques. This list is the
+  one thing we cannot hide, because matching on the words "WhatsApp" inside a
+  free-text sentence would break the first time the wording or the language
+  changes.
+
+  You confirmed the flag is account-level — not a plan tier — so for these
+  boutiques the line is not an upsell. It is advertising something no plan
+  would give them.
+
+    NEEDED: either leave that feature out of the response when the boutique
+    has no WhatsApp entitlement, or send the per-feature key from issue 1 so we
+    can filter on something stable. Note the line covers Print as well, which
+    they do get — so dropping the whole line loses a real feature. Splitting it
+    into two features, or sending a print-only variant, is cleaner.
+
+  For reference, our own copy of this list at /subscription-setup already
+  handles it: the line reads "Print campaigns" for a boutique without WhatsApp,
+  and Starter's "No WhatsApp" line is dropped entirely.
+
+
+################################################################################
+SUPPORT — QUICK HELP ICON NAMES
+################################################################################
+
+  GET /boutique/support/quick-help returns an `icon` per article, and two of
+  them rendered on the Support page as words rather than pictures:
+
+      "icon": "menu_book"       showed as   _BOOK
+      "icon": "track_changes"   showed as   TRACK_CHANGES
+
+  the second in display type across the whole sidebar.
+
+  Not your bug — the cause is on our side. The portal ships a subset of the
+  Material Symbols font (275 icons, 32 KB) rather than the full one, which is
+  3.9 MB and never finished downloading. A Material Symbols icon is drawn by
+  writing its name as the element's text and letting the font replace it with
+  a picture; when the font has no such glyph, nothing replaces the text, so the
+  merchant reads the name.
+
+  Both are now in the font, and any name we do not have falls back to a real
+  icon instead of printing itself, so this cannot recur visibly.
+
+    USEFUL, NOT BLOCKING: if there is a fixed set of icon names these articles
+    can use, send us the list and we will bake all of them in, so a new help
+    article always gets its intended icon rather than the fallback. Equally, if
+    you would rather not think about it, adding articles freely is fine now —
+    an unknown icon simply shows a generic one.
+
+
+################################################################################
+AI MODEL STUDIO
+################################################################################
+
+--- 1. The house model images time out, so generation fails -------------------
+
+  On screen, in the portal:
+
+      Failed to load model image: Failed to load image from URL:
+      https://apidev.revoltution.com/uploads/ai_studio/models/
+      model-default-bella-30f1913e.png
+      Error: HTTPSConnectionPool(host='apidev.revoltution.com', port=443):
+      Read timed out.
+
+  That is your worker's own message (HTTPSConnectionPool is Python requests),
+  not ours — the portal never fetches this file. We measured the URL from
+  outside, six times:
+
+      Content-Length:  2,443,261 bytes  (2.4 MB)
+
+      attempt 1   stalled at 179,860 bytes, killed at 60s
+      attempt 2   stalled at 179,860 bytes, killed at 20s
+      attempt 3   completed 2,443,261 bytes in 14.9s
+      attempt 4   completed 2,443,261 bytes in 18.0s
+      attempt 5   stalled at 179,860 bytes, killed at 45s
+      attempt 6   stalled at 179,860 bytes, killed at 45s
+
+  Headers come back immediately (200, first byte at 1.2s) and nginx declares
+  the full 2.4 MB. The transfer then stalls at exactly 179,860 bytes in four
+  of six attempts — the same byte count every time, which reads like one
+  buffer going out and nothing after it. The two that finished ran at about
+  136 KB/s, so even a success takes 15–18 seconds. Any ordinary client
+  timeout loses this more often than it wins.
+
+  Three separate things, smallest first:
+
+    1. THE FILE IS 2.4 MB. It is a default house model reference photo. At a
+       sane size — a 1024px-wide JPEG or WebP is well under 300 KB — this
+       problem mostly disappears on its own, without touching the server.
+       Worth checking the other model-default-* files too; if they were all
+       uploaded at camera resolution they will all behave this way.
+
+    2. THE STALL ITSELF. Consistently 179,860 bytes suggests nginx sends its
+       first buffer and then the upstream or the connection dries up. Worth a
+       look at sendfile / proxy_buffering / output_buffers, and at whether
+       anything is rate-limiting /uploads/.
+
+    3. THE WORKER FETCHES OVER THE PUBLIC INTERNET. If the Python worker runs
+       on the same host as nginx, it is going out to apidev.revoltution.com
+       over HTTPS and back in again to read a file that is already on local
+       disk. Reading the path directly would make this instant and immune to
+       all of the above. If it genuinely runs elsewhere, ignore this one.
+
+  NEEDED: at minimum 1. Ideally 3 as well, which removes the whole class of
+  failure rather than making it less likely.
+
+  We have nothing to fix on our side — the portal only displays the message
+  your worker returns. If you would rather it did not print the raw Python
+  traceback to a boutique, send a short message and we will show that instead.
+
+
+--- 2. No way to delete a generation --------------------------------------------
+
+  There is no DELETE for a generation. We have:
+
+      GET   /boutique/ai-studio/generations           (list)
+      GET   /boutique/ai-studio/generations/:id       (poll)
+      POST  /boutique/ai-studio/generations/:id/cancel
+      POST  /boutique/ai-studio/generations/:id/regenerate
+      POST  /boutique/ai-studio/generations/:id/save-to-gallery
+      POST  /boutique/ai-studio/generations/:id/retouch
+
+  cancel only applies to one still running. Nothing removes a finished record,
+  so every failed shoot stays on the Hub forever. With issue 1 above failing
+  most shoots, the boutique's Recent generations is now mostly failures it has
+  no way to clear — and that is the first screen of the feature.
+
+    NEEDED: DELETE /boutique/ai-studio/generations/:id.
+
+  RELATED QUESTION: does a failed shoot cost the boutique a generation from its
+  quota? Cancel says it does not ("Cancelled — quota was not charged"), but we
+  do not know what a failure does. If failures are charged, the model-image
+  timeouts above have been quietly eating a paid allowance, and that needs
+  refunding as well as fixing.
+
+
+################################################################################
 ALL TABS — TRANSLATIONS
 ################################################################################
 
-  Please load the new primo5.json (4,796 keys) and BUMP translationsVersion.
+  Please load the new primo5.json (5,002 keys) and BUMP translationsVersion.
   The portal caches the bundle keyed on that version string, so browsers keep
   serving the old bundle until it changes.
 
   Changes since the last file: 125 keys added, 17 removed, 0 existing values
   modified — nothing already translated is affected.
 
+  FIVE MORE were added after this document was first sent, so please take the
+  current primo5.json rather than the copy you may already have:
+
+    ais.common.quota_resets                              (1)
+    ais_legacy.all_models_pre / all_models_em            (2)
+    ais.hub.show_less / load_more                        (2)
+
+  PLEASE DO NOT TRANSLATE clm.* (103 keys). An earlier version of this note
+  listed 16 new clm.* keys — ignore that. The only screen that used them was a
+  customer-lookup modal that nothing rendered; it has since been deleted, and
+  POS has its own lookup built into it. The whole clm.* section is dead and
+  will go in the key cleanup described below.
+
+  All four groups are text that was previously hardcoded in English in our
+  code and never reached you at all.
+
   Also: around 760 keys in the bundle are no longer used by the portal,
   including the entire "marketing.*" section (44 keys) — that screen was
   replaced by Engagement. Not worth translating. We will send an exact removal
   list once every tab has been reviewed.
 
+  Four of yours joined that list this week. The portal had thirteen different
+  loading indicators, each with its own wording; they are now one shared
+  component that uses common.loading, so these are no longer rendered
+  anywhere. Left in the bundle for you to decide on rather than removed by us:
+
+      orders.loading              "Loading orders..."
+      customers.loading           "Loading customers..."
+      discounts.promo.loading     "Loading…"
+      promotions.items.loading    "Loading products…"
+
 
 ################################################################################
 ALREADY FIXED — THANK YOU
 ################################################################################
+
+  Shopify catalogue import — product images
+    Issues 4 above: imported products arrived with main_photo null and no
+    product_photos rows. Images now come across. The enum error QA threw on the
+    way (invalid input value for enum photo_source: "shopify") is also gone.
+
+  Shopify mapping/apply — 500
+    Now returns cleanly.
 
   POST /boutique/markdowns/approvals/:id/approve
     Postgres "FOR UPDATE cannot be applied to the nullable side of an outer
@@ -417,6 +1160,21 @@ ALREADY FIXED — THANK YOU
   returns_policy_override_id
     Now accepts the policy id and resolves correctly; returns_resolved confirms
     source: "product".
+
+  POST /boutique/orders/pos — payment_method "external"
+    Accepted now (the validator lists cash, external_terminal, card, split,
+    external). POS has the External tab: the cashier takes the payment on the
+    boutique's own machine and confirms, and the sale is filed as external
+    instead of being counted as cash it never was.
+
+  PUT /boutique/profile — payment_terminal_type
+    "stripe" and "none" are accepted now. Tech Stack saves again — before this
+    the card could not be saved at all out of the box, since it loads with "No
+    card payments in-store" selected.
+
+    This also switched on the cash-only till: with "none" saved, POS shows only
+    the Cash tab and hides Card and Split, so a shop with no card machine can
+    no longer be sent into a Stripe flow it cannot finish. Confirmed working.
 
   size_chart
     Now round-trips on PUT/GET /boutique/products/:id.

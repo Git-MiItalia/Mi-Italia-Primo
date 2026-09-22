@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { statusLabel } from '../lib/statusLabel'
+import { webshopProductUrl } from '../lib/webshop'
 import { getAgeInfo, bracketName, bracketRangeShort, DEAD_STOCK_FROM_DAYS } from '../lib/ageBracket'
 import Toast, { useToast } from '../components/ui/Toast'
+import Loading from '../components/ui/Loading'
 import useLangStore from '../store/langStore'
 import PrintTagModal from '../components/product/PrintTagModal'
 
@@ -12,7 +14,6 @@ import PrintTagModal from '../components/product/PrintTagModal'
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
-const WEBSHOP_BASE = import.meta.env.VITE_WEBSHOP_URL 
 
 function imgSrc(url) {
   if (!url) return null
@@ -231,7 +232,13 @@ export default function Products() {
 
   function openAsCustomer(product) {
     setMenuOpen(null)
-    window.open(`${WEBSHOP_BASE}/${product.id}`, '_blank')
+    const url = webshopProductUrl(product.id)
+    if (!url) {
+      showToast(t('products.webshop_not_configured',
+        'This build has no storefront URL — set VITE_WEBSHOP_BASE_URL and rebuild.'), 'error')
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const ageFilteredProducts = filterAge === 'all'
@@ -341,6 +348,16 @@ export default function Products() {
       else showToast(res.message || t('products.edit_error', 'Could not save the changes. Please try again.'), 'error')
     }).catch(() => showToast(t('common.error_network'), 'error'))
   }
+
+  /* The whole tab waits, rather than drawing the chrome around a spinning
+     table body. The tab counts, the dead-stock banner and the "Add Product"
+     limit are all derived from the catalogue, so until it lands those read
+     "All (0)", no warning, and a button that may be wrong — a half-built page
+     asserting things that are about to change. Same treatment as Subscription.
+
+     Safe as an early return because every hook in this component is declared
+     above the fetch effect, so none is skipped on the loading pass. */
+  if (loading) return <Loading page />
 
   return (
     <>
@@ -478,13 +495,10 @@ export default function Products() {
 
           
           <tbody>
-            {/* `loading` was declared and never used, so the body rendered as
-                nothing at all: no "Loading…" while fetching, and no message
-                when a filter or search matched zero products — just an empty
-                table under a full set of headers. */}
-            {loading && (
-              <tr><td colSpan={11} className="empty">{t('common.loading')}</td></tr>
-            )}
+            {/* No loading row here: the page-level spinner above means this
+                body is never rendered while fetching. `loading` is still in
+                the condition below because it reads as the honest guard — an
+                empty catalogue and an unfetched one are different things. */}
             {!loading && searchedProducts.length === 0 && (
               <tr>
                 <td colSpan={11} className="empty">

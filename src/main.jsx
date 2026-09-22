@@ -1,5 +1,8 @@
 
-import 'material-symbols/outlined.css'
+// The `material-symbols` package's stylesheet used to be imported here. It
+// pulls in the complete 3.9 MB icon font — every icon Google publishes — of
+// which this app renders 211. The subset and the class rules it provided now
+// live in styles/fonts.css alongside Jost and Bodoni.
 //import './lib/i18n.js'
 import './app-additions.css'
 import './App.css'

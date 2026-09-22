@@ -7,6 +7,46 @@
 .state-loading{padding:30px;text-align:center;color:var(--stone);}
 .state-empty-sm{padding:14px 18px;color:var(--stone);font-size:11px;font-style:italic;}
 
+/* ── Loading indicator — components/ui/Loading.jsx ───────────────────────
+ * The single source of truth for "waiting for data". Change the look here and
+ * every tab changes with it. Keyframe is named rather than reusing the global
+ * `spin` further down this file, so moving either cannot silently break this. */
+.ld-icon {
+  font-size: 28px;
+  color: var(--stone);
+  animation: ld-spin 1.2s linear infinite;
+}
+@keyframes ld-spin { to { transform: rotate(360deg); } }
+
+/* Page: the tab has nothing else on it yet, so the spinner is centred in a
+   block tall enough that the header does not sit on top of it. */
+.ld-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+/* Inline: spinner beside the word, for a table row or a single card. Smaller,
+   because here it sits among content that is already drawn. */
+.ld-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--stone);
+}
+.ld-inline .ld-icon { font-size: 15px; }
+
+.ld-cell  { padding: 26px 18px; text-align: center; }
+.ld-block { padding: 18px 2px; }
+
+/* Honour a reduced-motion preference: the icon still marks the spot, it just
+   stops turning. */
+@media (prefers-reduced-motion: reduce) {
+  .ld-icon { animation: none; }
+}
+
 /* Section labels */
 .lbl-eyebrow{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--stone);margin-bottom:8px;}
 .lbl-section{font-size:10px;font-weight:600;color:var(--stone);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
@@ -70,6 +110,18 @@
 
 /* ═══ SIDEBAR LOGO ═══ */
 .sb-logo{width:120px;display:block;}
+
+/* ═══ FIRST-PAINT HOLD (no cached translations yet) ═══
+   Shown only on a browser that has never loaded the bundle, for as long as
+   that one fetch takes. Deliberately plain — no spinner, no wording: any
+   wording here would itself be an untranslated string, which is the very
+   thing this screen exists to avoid. */
+.i18n-boot{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--cream);}
+.i18n-boot-logo{width:180px;max-width:60vw;opacity:0;animation:i18n-boot-fade 1.4s ease-in-out infinite;}
+@keyframes i18n-boot-fade{0%,100%{opacity:0.35;}50%{opacity:0.85;}}
+@media (prefers-reduced-motion: reduce){
+  .i18n-boot-logo{opacity:0.6;animation:none;}
+}
 
 /* ═══ SIDEBAR USER MORE ═══ */
 .sb-user-more{font-size:18px;color:var(--stone);margin-left:auto;}
@@ -3437,18 +3489,10 @@
 .sub-bi-tag{background:rgba(184,149,90,0.10);border:1px solid rgba(184,149,90,0.25);padding:5px 11px;border-radius:0;font-size:10px;font-weight:600;color:rgba(253,250,245,0.85);letter-spacing:0.3px;display:inline-flex;align-items:center;gap:5px;}
 .sub-bi-tag .material-symbols-outlined{font-size:12px;color:var(--gold);}
 
-/* ── Loading state ─────────────────────────────────────────────────── */
-.sub-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-.sub-loading-icon {
-  font-size: 28px;
-  color: var(--stone);
-  animation: spin 1.2s linear infinite;
-}
+/* .sub-loading / .sub-loading-icon lived here. They were the portal's best
+   loading state and are now the shared one — .ld-page in the shared utilities
+   block at the top of this file, via components/ui/Loading.jsx. The keyframe
+   stays: .sub-plan-spin below still uses it. */
 @keyframes spin { to { transform: rotate(360deg); } }
  
 /* ── Plan hero right column ────────────────────────────────────────── */
@@ -4018,7 +4062,10 @@
 
 .gen-card       { background: var(--white); border-radius:0; overflow: hidden; border: 1px solid var(--mist); cursor: pointer; transition: all 0.2s; }
 .gen-card:hover { transform: translateY(-2px); box-shadow: 0 2px 16px rgba(26,18,9,0.06); }
-.gen-card-img   { width: 100%; height: 200px; background: var(--cream) center/cover; position: relative; }
+/* Anchored to the top, not the centre: these are 3:4 on-model shots in a wide
+   200px band, so centring cropped straight through the middle of the frame and
+   cut the model's head off on every card. */
+.gen-card-img   { width: 100%; height: 200px; background: var(--cream) center top/cover; position: relative; }
 .gen-card-status { position: absolute; top: 8px; left: 8px; background: rgba(255,255,255,0.95); font-size: 8.5px; font-weight: 700; letter-spacing: 0.8px; color: var(--green); padding: 3px 7px; border-radius:0; display: flex; align-items: center; gap: 3px; }
 .gen-card-status.processing { color: var(--gold); }
 .gen-card-status .material-symbols-outlined { font-size: 11px; }
@@ -4051,6 +4098,20 @@
 .btn-text .material-symbols-outlined { font-size: 13px; }
 .spotlight-right { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .spotlight-thumb { aspect-ratio: 3/4; border-radius:0; background: var(--cream) center/cover; }
+
+/* A trending-look tile with no photograph behind it — see the note in
+   AIModelStudio's HubScreen. The caption sits on the gradient rather than in a
+   bar beneath it, so the tile keeps its 3/4 frame whether or not a share is
+   printed, and the two treatments line up while both are on screen. */
+.spotlight-thumb-empty {
+  background: linear-gradient(135deg, #2a2018, #4a4038);
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+}
+.spotlight-thumb-cap  { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.spotlight-thumb-name { font-size: 10px; font-weight: 700; color: var(--cream); }
+.spotlight-thumb-pct  { font-size: 9.5px; color: var(--gold); letter-spacing: .02em; }
 
 /* ═══════════════════════════════════════
    SINGLE GENERATION — Screen 2
@@ -4493,6 +4554,14 @@
 .network-card { background:var(--white); border-radius:0; overflow:hidden; border:1px solid var(--mist); cursor:pointer; transition:all 0.15s; }
 .network-card:hover { border-color:rgba(184,149,90,0.4); box-shadow:0 4px 18px rgba(26,18,9,0.08); }
 .network-card-img { aspect-ratio:3/4; background:var(--cream) center/cover; }
+/* Trending-look frame with no photograph behind it — see the note in the Brand
+   network spotlight. The fill is a child rather than a background gradient stop
+   so its height can be driven per card from the look's share. */
+.network-card-img-empty { position:relative; overflow:hidden; background:var(--cream); }
+.network-card-fill {
+  position:absolute; left:0; right:0; bottom:0;
+  background:linear-gradient(135deg, #2a2018, #4a4038);
+}
 .network-card-body { padding:11px 13px; }
 .network-card-name { font-size:11.5px; font-weight:700; }
 .network-card-loc { font-size:9.5px; color:var(--stone); margin-top:2px; display:flex; align-items:center; gap:4px; }
@@ -6461,6 +6530,67 @@
 .rpt-pending-tag    { font-size: 8px; color: var(--stone); margin-left: 6px; font-style: italic; }
  
 .rpt-recipients     { font-size: 10.5px; color: var(--stone); }
+
+/* ── Export menu + preview button ── */
+/* The card owning an open menu is raised above the cards below it. Needed
+   because .report-card:hover sets a transform, and a transform creates a
+   stacking context — the card the pointer crosses on the way to the menu would
+   otherwise paint straight over it. The lift is dropped again on close, and the
+   hover nudge is suppressed meanwhile so the menu does not shift underfoot. */
+.report-card.rpt-menu-open        { position: relative; z-index: 60; }
+.report-card.rpt-menu-open:hover  { transform: none; }
+.rpt-eye                { padding-left: 8px; padding-right: 8px; }
+.rpt-eye .material-symbols-outlined { font-size: 16px; margin: 0; }
+.rpt-export-wrap        { position: relative; display: inline-block; }
+.rpt-export-chev        { font-size: 15px !important; margin-left: 1px; }
+/* Right-aligned: the cards sit at the right edge of their column, so a menu
+   growing rightwards would be cut off. */
+.rpt-export-menu        { position: absolute; top: calc(100% + 4px); right: 0; z-index: 40;
+                          min-width: 168px; background: var(--white);
+                          border: 1px solid var(--line); box-shadow: var(--shadow-md); }
+.rpt-export-opt         { display: flex; align-items: center; gap: 9px; width: 100%;
+                          padding: 9px 11px; background: none; border: none; text-align: left;
+                          cursor: pointer; border-bottom: 1px solid var(--mist); }
+.rpt-export-opt:last-child { border-bottom: none; }
+.rpt-export-opt:hover   { background: var(--cream); }
+.rpt-export-opt-sub     { font-size: 10px; color: var(--stone); }
+
+/* ── Report preview ──
+   Wider than the schedule dialog and scrolls internally, so the header stays
+   put and the footer buttons never drift off the bottom of a long report. */
+.rpt-preview            { width: 780px; display: flex; flex-direction: column; max-height: 88vh; }
+.rpt-preview-body       { overflow-y: auto; flex: 1; min-height: 0; padding-right: 4px; }
+.rpt-preview-section    { margin-bottom: 20px; }
+.rpt-preview-section:last-child { margin-bottom: 0; }
+.rpt-preview-heading    { font-size: 8.5px; font-weight: 600; letter-spacing: 2px;
+                          text-transform: uppercase; color: var(--stone); margin-bottom: 7px; }
+.rpt-preview-tbl        { width: 100%; }
+.rpt-preview-tbl td,
+.rpt-preview-tbl th     { font-size: 11px; }
+/* Label column of a label/value block — muted, so the figures read first. */
+.rpt-preview-k          { color: var(--stone); width: 38%; }
+
+/* ── Schedule dialog ──
+   .modal already carries the padding, so this only handles the stack. The
+   label/field rhythm matches the other forms: label tight to its field, a
+   clear gap before the next label. */
+.rpt-sched-form .form-lbl      { margin-top: 14px; margin-bottom: 5px; display: block; }
+.rpt-sched-form .form-lbl:first-child { margin-top: 0; }
+.rpt-sched-form .form-hint     { margin-top: 5px; }
+.rpt-sched-form .form-select,
+.rpt-sched-form .form-input    { width: 100%; }
+/* Report and format when editing: shown, not editable — PATCH cannot change
+   them, and a greyed-out dropdown invites a click that would do nothing. */
+.rpt-sched-fixed   { font-size: 12px; font-weight: 600; color: var(--deep); padding: 7px 0; }
+.rpt-sched-recipients { resize: vertical; min-height: 58px; font-family: inherit; }
+.rpt-sched-active  { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 11.5px; color: var(--deep); cursor: pointer; }
+.rpt-sched-active input { cursor: pointer; }
+/* Indented to sit under the label text rather than under the checkbox. */
+.rpt-sched-active-hint { margin-top: 5px; padding-left: 21px; }
+.rpt-sched-error   { margin-top: 14px; padding: 9px 11px; font-size: 11px; line-height: 1.5;
+                     color: var(--red); background: rgba(197,0,26,0.06); border: 1px solid rgba(197,0,26,0.35); }
+.rpt-sched-paused  { margin-left: 7px; font-size: 8.5px; font-weight: 600; letter-spacing: 1px;
+                     text-transform: uppercase; color: var(--stone); border: 1px solid var(--line); padding: 1px 5px; }
  
 .rpt-toast          { position: fixed; bottom: 20px; right: 20px; z-index: 1000;
                       padding: 10px 14px; background: var(--white); border-radius: 0;
@@ -7209,6 +7339,14 @@
 .sp-phone-hint-invalid {
   color: var(--red);
   margin-top: 4px;
+}
+
+/* The "Use <domain>" shortcut under Website URL. Sits under the field as an
+ * offer, so it is spaced away from the input and never full width — it should
+ * read as something you may take, not as the form's next step. */
+.sp-url-suggest {
+  margin-top: 8px;
+  align-self: flex-start;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

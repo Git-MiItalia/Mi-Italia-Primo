@@ -1,4 +1,3 @@
-import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useLangStore from '../../store/langStore'
@@ -56,7 +55,6 @@ function Header() {
 
   const lang       = useLangStore(state => state.lang)
   const setLang    = useLangStore(state => state.setLang)
-  const activeLang = LANGUAGES.find(l => l.code === lang) ?? LANGUAGES[0]
   const unreadCount = useNotifStore(s => s.unreadCount)
 
   const titleKey = titleKeys[pathname] ?? 'Primo'

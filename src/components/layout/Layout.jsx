@@ -10,14 +10,26 @@ import { openNotificationStream, closeNotificationStream, subscribeToNotificatio
 import useNotifStore from '../../store/notifStore'
 import NotifToast from '../ui/NotifToast'
 import useSidebarStore from '../../store/sidebarStore'
+import PrimoLogo from '../../assets/PrimoLogo.svg'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 const PLAN_EXEMPT = ['/subscription/return']
+
+/* How long the first paint may wait for the translation bundle.
+ *
+ * Only ever reached on a browser with no cached bundle AND a request that
+ * neither returns nor fails — a dev server left running against an API that
+ * has gone away, typically. Past this the app renders with the English
+ * defaults built into every t() call, which is a working portal in the wrong
+ * language rather than a logo that never goes away. */
+const I18N_WAIT_MS = 4000
 
 function Layout() {
   const navigate          = useNavigate()
   const location          = useLocation()
   const fetchTranslations = useLangStore(state => state.fetchTranslations)
+  const i18nReady         = useLangStore(state => state.ready)
+  const [waitedOut, setWaitedOut] = useState(false)
   const [stripeConnected, setStripeConnected] = useState(true)
   const addNotification   = useNotifStore(s => s.addNotification)
   const setNotifications  = useNotifStore(s => s.setNotifications)
@@ -74,6 +86,26 @@ function Layout() {
       closeNotificationStream()
     }
   }, [])
+
+  // Only armed while genuinely waiting, so the usual cached boot sets no timer.
+  useEffect(() => {
+    if (i18nReady) return
+    const id = setTimeout(() => setWaitedOut(true), I18N_WAIT_MS)
+    return () => clearTimeout(id)
+  }, [i18nReady])
+
+  /* First visit on this browser: the bundle has not arrived and there is
+     nothing to render but key names. A quiet logo for the half-second the
+     fetch takes reads as loading; "sidebar.dashboard" and "header.search"
+     across a live screen reads as broken. Repeat visits never see this —
+     the cached bundle makes `ready` true before the first render. */
+  if (!i18nReady && !waitedOut) {
+    return (
+      <div className="i18n-boot">
+        <img src={PrimoLogo} alt="Primo" className="i18n-boot-logo" />
+      </div>
+    )
+  }
 
   return (
     <>

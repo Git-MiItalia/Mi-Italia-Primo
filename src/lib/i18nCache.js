@@ -16,10 +16,21 @@
 const CACHE_KEY = 'primo_i18n_cache'
 const LANG_KEY  = 'primo_lang'
 
-/** Locale to start i18n in — the one whose bundle we cached, if any. */
+/** Locale to start i18n in — the one whose bundle we cached, if any.
+ *
+ * The cached bundle's own locale wins over primo_lang, because the two drift.
+ * fetchLoginTranslations writes primo_lang but caches nothing (its bundle is
+ * the login screens only), so booting on primo_lang could start i18n in a
+ * language we hold no words for. fallbackLng only rescues that when the cached
+ * bundle happens to be the English one — cache Italian while primo_lang says
+ * English and the first paint is raw keys until the fetch lands. Starting in
+ * the locale we actually have guarantees real text immediately; if the
+ * boutique's real preference differs, fetchTranslations switches a moment
+ * later, which is a language change rather than a screen of key names.
+ */
 export function cachedLocale() {
   try {
-    return localStorage.getItem(LANG_KEY) || 'en'
+    return readCache()?.locale || localStorage.getItem(LANG_KEY) || 'en'
   } catch {
     return 'en'
   }

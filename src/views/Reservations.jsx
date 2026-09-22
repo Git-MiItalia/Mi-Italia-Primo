@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/api'
 import { isWhatsappEnabled } from '../lib/auth'
 import useNotifStore from '../store/notifStore'
 import i18n from '../lib/i18n'
+import Loading from '../components/ui/Loading'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -611,6 +612,11 @@ export default function Reservations() {
     }
   }
 
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
+
   return (
     <>
       {/* Tabs with counts */}
@@ -691,7 +697,6 @@ export default function Reservations() {
               </tbody>
             </table>
 
-            {loading && <div className="state-loading">{t('reservations.loading')}</div>}
             {/* A failed load used to be indistinguishable from an empty tab. */}
             {!loading && loadFailed && (
               <div className="state-empty">

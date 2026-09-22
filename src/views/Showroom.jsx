@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { activeLocale } from '../lib/dateHelpers'
+import Loading from '../components/ui/Loading'
 
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
@@ -163,6 +164,11 @@ export default function Showroom() {
     return '—'
   }
 
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
+
   return (
     <>
       {settingsFailed && (
@@ -284,7 +290,6 @@ export default function Showroom() {
           </label>
           ── end commented out ── */}
 
-          {loading && <div className="state-loading">{t('showroom.products.loading', 'Loading products…')}</div>}
 
           {!loading && (
             <table className="tbl">

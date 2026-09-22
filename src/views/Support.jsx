@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
+import Loading from '../components/ui/Loading'
+import { safeIcon } from '../lib/safeIcon'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -417,7 +419,7 @@ export default function Support() {
         </div>
 
         <div className="card sup-tickets-card">
-          {loadingTickets && <div className="state-empty">Loading tickets…</div>}
+          {loadingTickets && <Loading />}
 
           {!loadingTickets && ticketsError && (
             <div className="alert alert-red sup-inline-alert">
@@ -457,7 +459,7 @@ export default function Support() {
                     </div>
 
                     {loadingThread && (
-                      <div className="state-empty sup-thread-loading">Loading thread…</div>
+                      <Loading className="sup-thread-loading" />
                     )}
 
                     {threadError && (
@@ -584,12 +586,15 @@ export default function Support() {
           <div className="sup-sidebar-title">
             {t('sup.help.title')} <em className="sup-form-title-em">{t('sup.help.title_em')}</em>
           </div>
-          {loadingHelp && <div className="state-empty">Loading…</div>}
+          {loadingHelp && <Loading />}
           {!loadingHelp && quickHelp && (
             <div className="sup-quick-links">
               {(quickHelp.articles ?? []).map(l => (
                 <div key={l.key} className="sup-quick-link" onClick={() => l.url && navigate(l.url)}>
-                  <span className="material-symbols-outlined sup-quick-link-icon">{l.icon}</span>
+                  {/* l.icon is whatever the backend sends. An icon the subset
+                      font lacks renders as its own name, which is how "_BOOK"
+                      and "TRACK_CHANGES" came to sit in this sidebar. */}
+                  <span className="material-symbols-outlined sup-quick-link-icon">{safeIcon(l.icon, 'article')}</span>
                   <div className="sup-quick-link-body">
                     <div className="sup-quick-link-title">{l.title}</div>
                     <div className="sup-quick-link-sub">{l.subtitle}</div>

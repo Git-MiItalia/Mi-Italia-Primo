@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { timeAgo } from '../lib/timeAgo'
+import { fmtDateShortLocalized } from '../lib/dateHelpers'
 import useLangStore from '../store/langStore'
 import Toast, { useToast } from '../components/ui/Toast'
 
@@ -12,12 +13,18 @@ const STUDIO = `${API}/boutique/ai-studio`
 // Bodyless POSTs must still send `{}`: apiFetch always sets Content-Type:
 // application/json on non-DELETE requests, and the API rejects that header
 // with an empty body ("Body cannot be empty when content-type is set…").
+// Callers all render errors as `show(res.message || t('key', 'Default'))`, which
+// prefers whatever message arrives over their own translated fallback. A
+// hand-written English 'Network error' here therefore won every toast and
+// printed English in an Italian portal. With no message there is nothing to
+// prefer, so the caller's translated fallback shows instead. Same reasoning as
+// toData() in lib/shopifyIntegration.js.
 async function apiJson(url, method = 'GET', body) {
   const init = { method }
   if (method !== 'GET' && method !== 'DELETE') init.body = JSON.stringify(body || {})
   return apiFetch(url, init)
     .then(r => r.json())
-    .catch(() => ({ success:false, message:'Network error' }))
+    .catch(() => ({ success:false }))
 }
 
 // Short labels for the three aspect ratios. Detailed spells these out in its own
@@ -91,11 +98,16 @@ function generationBriefLine(g) {
 }
 
 // ── Formatting ────────────────────────────────────────────
-function resetLabel(iso) {
+// Both halves used to be English: the word "resets" was a literal and the month
+// was pinned to 'en', so an Italian boutique read "resets 4 Oct" beside quota
+// text that was already translated. Takes an optional trailing `t` like the
+// other module-level helpers here, so it still works if called without one.
+function resetLabel(iso, t) {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return `resets ${d.getDate()} ${d.toLocaleString('en', { month:'short' })}`
+  const date = fmtDateShortLocalized(d)
+  return t ? t('ais.common.quota_resets', 'resets {{date}}', { date }) : `resets ${date}`
 }
 
 // Was a local copy returning English literals, so generation history read
@@ -344,7 +356,6 @@ function LookEditorSheet({ t, open, onClose, editingLook, createLook, updateLook
 
   // The preview card shows whatever is picked right now, not just what's saved.
   const heroRefImage = refPreview || toDisplayUrl(refUrl.trim())
-  const hasRef       = !!(refFile || refUrl.trim())
   const pickerOpen   = !isEdit || !refUrl.trim() || changingRef || !!refFile
   const previewLook  = { name, lighting, setting, mood, color_grade:colorGrade, palette, intensity, ref_image_url: heroRefImage || null }
 
@@ -824,9 +835,15 @@ function ResultsModal({ t, open, onClose, generation, productName, quota, retouc
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(26,18,9,0.7)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:24,overflowY:'auto'}}>
-      <div style={{background:'var(--white)',borderRadius: 0,width:'100%',maxWidth:900,boxShadow:'0 20px 60px rgba(26,18,9,0.3)'}}>
-        {/* Head */}
-        <div style={{padding:'24px 28px',borderBottom:'1px solid var(--mist)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:14}}>
+      {/* The panel scrolls inside itself and never grows past the viewport. It
+          used to have no height limit, and the overlay centres it: a panel
+          taller than the screen then hung off BOTH edges, putting the close
+          button above the top where no amount of scrolling could reach it.
+          A one-variant shoot hit that every time — see the card grid below. */}
+      <div style={{background:'var(--white)',borderRadius: 0,width:'100%',maxWidth:900,boxShadow:'0 20px 60px rgba(26,18,9,0.3)',maxHeight:'calc(100vh - 48px)',overflowY:'auto'}}>
+        {/* Head — sticky, so the close button stays put however far down the
+            results run. */}
+        <div style={{padding:'24px 28px',borderBottom:'1px solid var(--mist)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:14,position:'sticky',top:0,background:'var(--white)',zIndex:1}}>
           <div>
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:500}}>
               {results.length ? `${t('ais.results.head_takes', '{{count}} take(s) of your', { count: results.length })} ` : `${t('ais.results.head_shoot_of', 'Your shoot of')} `}
@@ -849,9 +866,14 @@ function ResultsModal({ t, open, onClose, generation, productName, quota, retouc
             </div>
           )}
 
-          {/* Result cards */}
+          {/* Result cards. Columns are capped rather than fractional: at 1fr a
+              single variant took the whole 900px panel and stood ~1200px tall,
+              which pushed the modal past the viewport. 280px is what three
+              across already worked out to, so the usual three-variant shoot
+              looks unchanged — and one or two now sit centred at that same
+              size instead of being stretched to fill the row. */}
           {results.length > 0 && (
-            <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(3, results.length)},1fr)`,gap:16,marginBottom:28}}>
+            <div style={{display:'grid',gridTemplateColumns:`repeat(${Math.min(3, results.length)},minmax(0,280px))`,justifyContent:'center',gap:16,marginBottom:28}}>
               {results.map((r,i) => (
                 <div key={i} onClick={() => toggleCard(i)}
                   style={{borderRadius: 0,border:`2px solid ${selectedCards.includes(i)?'var(--gold)':'var(--mist)'}`,overflow:'hidden',cursor:'pointer',background:'var(--white)',transition:'all 0.15s'}}>
@@ -1163,16 +1185,60 @@ function genStatusLabel(status, t) {
   return t ? t(`ais.gen_status.${status}`, ui.label) : ui.label
 }
 
-function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenerations, getNetworkTrends }) {
+function HubScreen({ t, onNavigate, onQuickGenerate, onOpenGeneration, quota, products, listGenerations, getNetworkTrends }) {
   const [recent,        setRecent]        = useState([])
   const [recentLoading, setRecentLoading] = useState(true)
   const [trends,        setTrends]        = useState(null)
 
+  // "View all" used to navigate to a blank new-shoot screen, throwing away the
+  // list it was labelled for. It now grows this grid in place instead.
+  //
+  // Deliberately a page at a time rather than "fetch everything": a boutique
+  // with hundreds of shoots would otherwise pull the whole history in one
+  // response and put a card — each with its own image — on screen for every
+  // row of it. The API only takes a limit, no offset, so a page is a refetch
+  // with a bigger limit; that re-sends rows we already have, which is cheap
+  // next to the images and keeps the call simple.
+  const RECENT_N = 8
+  const PAGE     = 24
+  const [limit,       setLimit]       = useState(RECENT_N)
+  const [moreLoading, setMoreLoading] = useState(false)
+  // A full page back means there may be another; a short one means that was
+  // the end. Without a total in the response this is the best signal there is.
+  const [maybeMore,   setMaybeMore]   = useState(false)
+
+  function loadMore() {
+    const next = limit + PAGE
+    setMoreLoading(true)
+    listGenerations(next).then(res => {
+      if (res.success) {
+        const rows = res.data || []
+        setRecent(rows)
+        setLimit(next)
+        setMaybeMore(rows.length >= next)
+      }
+      setMoreLoading(false)
+    })
+  }
+
+  function collapse() {
+    setRecent(rows => rows.slice(0, RECENT_N))
+    setLimit(RECENT_N)
+    setMaybeMore(true)
+  }
+
+  const expanded = limit > RECENT_N
+  const shown    = recent
+
   useEffect(() => {
     let alive = true
-    listGenerations(8).then(res => {
+    listGenerations(RECENT_N).then(res => {
       if (!alive) return
-      if (res.success) setRecent(res.data || [])
+      if (res.success) {
+        const rows = res.data || []
+        setRecent(rows)
+        setMaybeMore(rows.length >= RECENT_N)
+      }
       setRecentLoading(false)
     })
     getNetworkTrends().then(res => { if (alive && res.success) setTrends(res.data || null) })
@@ -1200,7 +1266,7 @@ function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenera
               {quota ? (
                 <>
                   <span><strong>{quota.used ?? 0}</strong> {t('ais.hub.quota_used', '{{used}} of {{limit}} generations used', { used: quota.used ?? 0, limit: quota.limit ?? 0 })}</span>
-                  <span><strong>{t('ais.hub.quota_left', '{{n}} left', { n: quotaLeft })}</strong> · {resetLabel(quota.resetsAt)}</span>
+                  <span><strong>{t('ais.hub.quota_left', '{{n}} left', { n: quotaLeft })}</strong> · {resetLabel(quota.resetsAt, t)}</span>
                 </>
               ) : <span>{t('ais.hub.loading_quota', 'Loading quota…')}</span>}
             </div>
@@ -1229,11 +1295,28 @@ function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenera
 
       <div className="hub-section-head">
         <div className="hub-section-title">{t('ais.hub.recent_pre', 'Recent')} <em>{t('ais.hub.recent_em', 'generations')}</em></div>
-        <div className="hub-section-link" onClick={() => onNavigate('generate')}>{t('ais.common.view_all', 'View all')} <span className="material-symbols-outlined">arrow_forward</span></div>
+        {/* Icon names must exist in the subset in src/styles/fonts.css — one
+            that is not in it renders as its own name on screen. */}
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          {expanded && (
+            <div className="hub-section-link" onClick={collapse}>
+              {t('ais.hub.show_less', 'Show less')}
+              <span className="material-symbols-outlined">keyboard_arrow_up</span>
+            </div>
+          )}
+          {(maybeMore || !expanded) && (
+            <div className="hub-section-link" onClick={moreLoading ? undefined : loadMore}>
+              {moreLoading
+                ? t('ais.common.loading', 'Loading…')
+                : expanded ? t('ais.hub.load_more', 'Load more') : t('ais.common.view_all', 'View all')}
+              <span className="material-symbols-outlined">keyboard_arrow_down</span>
+            </div>
+          )}
+        </div>
       </div>
       {recentLoading ? (
         <div style={{padding:'28px 0',fontSize:11,color:'var(--stone)'}}>{t('ais.hub.loading_recent', 'Loading recent generations…')}</div>
-      ) : recent.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div style={{padding:'32px 24px',background:'var(--cream)',textAlign:'center'}}>
           <span className="material-symbols-outlined" style={{fontSize:28,color:'var(--gold)'}}>auto_awesome</span>
           <div style={{fontSize:12,fontWeight:700,marginTop:8}}>{t('ais.hub.no_generations', 'No generations yet')}</div>
@@ -1242,13 +1325,13 @@ function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenera
         </div>
       ) : (
         <div className="hub-gallery">
-          {recent.map(g => {
+          {shown.map(g => {
             const product = productById(g.product_id)
             const ui      = GEN_STATUS_UI[g.status] || GEN_STATUS_UI.processing
             const img     = generationOutputs(g)[0] || product?.main_photo || g.source_image_url
             const failure = generationError(g)
             return (
-              <div key={g.id} className="gen-card" onClick={() => onNavigate('generate')}>
+              <div key={g.id} className="gen-card" onClick={() => onOpenGeneration(g)}>
                 <div className="gen-card-img" style={img ? {backgroundImage:`url('${img}')`} : {background:'var(--cream)'}}>
                   <div className={`gen-card-status${ui.cls}`}>
                     <span className="material-symbols-outlined">{ui.icon}</span>{genStatusLabel(g.status, t)}
@@ -1298,10 +1381,22 @@ function HubScreen({ t, onNavigate, onQuickGenerate, quota, products, listGenera
             {t('ais.hub.see_network_trends', 'See network trends')} <span className="material-symbols-outlined">arrow_forward</span>
           </span>
         </div>
+        {/* These tiles carry no photograph and never will: network-trends sends
+            a name and a share, and the line to their left promises that
+            individual generations are never shared, so another boutique's
+            imagery cannot go here. Three identical brown rectangles read as
+            three failed image loads, though, so the share is printed under the
+            name to make the tile look filled on purpose. The same treatment is
+            on the Brand setup tiles (.network-card-img). */}
         <div className="spotlight-right">
           {(trends?.trending_looks || []).slice(0,3).map((l,i) => (
-            <div key={l.name || i} className="spotlight-thumb" style={{background:'linear-gradient(135deg,#2a2018,#4a4038)',display:'flex',alignItems:'flex-end',padding:10}}>
-              <span style={{fontSize:10,fontWeight:700,color:'var(--cream)'}}>{l.name}</span>
+            <div key={l.name || i} className="spotlight-thumb spotlight-thumb-empty">
+              <div className="spotlight-thumb-cap">
+                <span className="spotlight-thumb-name">{l.name}</span>
+                <span className="spotlight-thumb-pct">
+                  {t('ais.brand.pct_of_shoots', '{{pct}}% of shoots', { pct: l.pct ?? 0 })}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -1426,14 +1521,16 @@ function QuickBriefPanel({ t, look, model, brief, aspect, variants, poses, loadi
 }
 
 function GenerateScreen({
-  t, onNavigate, mode, setMode,
+  t, onNavigate, mode, setMode, openShoot, onShootOpened,
   looks, looksLoading, createLook, createLookWithPhoto, updateLookWithPhoto,
   models, modelsLoading, createModel,
   products, productsLoading, getProduct, uploadProductPhoto, quota,
   startGeneration, pollGeneration, cancelGeneration, regenerateGeneration,
   saveToGallery, retouchGeneration, productGenerations, pushToProduct, show,
 }) {
-  const [productId,      setProductId]      = useState(null)
+  // Seeded from the Hub card that was clicked, so the right product is chosen
+  // before the "pick a default product" effect below gets a chance to run.
+  const [productId,      setProductId]      = useState(openShoot?.product_id ?? null)
   const [product,        setProduct]        = useState(null)
   const [productLoading, setProductLoading] = useState(false)
   const [sourcePhotoId,  setSourcePhotoId]  = useState(null)
@@ -1445,10 +1542,14 @@ function GenerateScreen({
   // `mode` is owned by the parent — the Hub's "Quick generate" sets it while
   // navigating, and this screen unmounts on every tab switch.
 
-  const [generation, setGeneration] = useState(null)
+  // Seeded from the Hub card that was clicked: clicking a past shoot should
+  // show what it produced — its images, the brief behind them, or why it
+  // failed — which is what ResultsModal renders. The brief is deliberately not
+  // reloaded into the form; that is what the History panel is for.
+  const [generation, setGeneration] = useState(openShoot ?? null)
   const [starting,   setStarting]   = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const [showResults,setShowResults]= useState(false)
+  const [showResults,setShowResults]= useState(!!openShoot)
 
   const [uploading,  setUploading]  = useState(false)
   const fileRef = useRef(null)
@@ -1503,6 +1604,11 @@ function GenerateScreen({
     const def = models.find(m => m.is_default) || models[0]
     setModelBrief({ id: def.id, skin: def.skin, age: def.age, body: def.body, hair: def.hair, pose: def.pose })
   }, [models, modelBrief])
+
+  // Clear the Hub's request once it has been taken up (the generation and the
+  // modal are seeded from it directly, above). Without this, leaving the tab
+  // and coming back would reopen the same shoot again.
+  useEffect(() => { if (openShoot) onShootOpened() }, [openShoot])
 
   // Poll until the shoot reaches a terminal status.
   useEffect(() => {
@@ -3595,7 +3701,17 @@ function BrandScreen({
           <div className="network-grid">
             {(trends.trending_looks || []).slice(0,3).map(l => (
               <div key={l.name} className="network-card">
-                <div className="network-card-img" style={{background:'linear-gradient(135deg,#2a2018,#4a4038)'}} />
+                {/* Same empty frame as the hub tiles, but the caption beneath
+                    already names the look and its share, so repeating the
+                    figure inside would say it twice. The frame fills from the
+                    bottom in proportion instead, which turns three identical
+                    rectangles into a readable comparison and needs no wording.
+                    Floored at 4% so the smallest share is still a visible mark
+                    rather than an empty box that looks broken again. */}
+                <div className="network-card-img network-card-img-empty">
+                  <div className="network-card-fill"
+                       style={{ height: `${Math.min(100, Math.max(4, Number(l.pct) || 0))}%` }} />
+                </div>
                 <div className="network-card-body">
                   <div className="network-card-name">{l.name}</div>
                   <div className="network-card-loc">
@@ -3672,6 +3788,11 @@ export default function AIModelStudio() {
   // "Quick generate" has to land straight in Quick, and GenerateScreen unmounts
   // on every tab switch so anything it owned would be lost.
   const [genMode, setGenMode] = useState('detailed')
+  // Which past shoot the Hub asked to reopen, for the same reason genMode lives
+  // here: GenerateScreen unmounts on every tab switch, so it cannot itself be
+  // what remembers the card that was clicked on the way in. Cleared once the
+  // brief has been applied, so switching tabs later doesn't reopen it again.
+  const [openShoot, setOpenShoot] = useState(null)
   const { toasts, show } = useToast()
 
   // ── Studio looks (7–11) ──
@@ -3696,7 +3817,7 @@ export default function AIModelStudio() {
     if (file) form.append('photo', file)
     const r = await apiFetch(url, { method, body: form })
       .then(res => res.json())
-      .catch(() => ({ success:false, message:'Upload failed' }))
+      .catch(() => ({ success:false }))   // see apiJson: no message, so the caller's translated fallback wins
     if (r.success) await refetchLooks()
     return r
   }
@@ -3733,7 +3854,7 @@ export default function AIModelStudio() {
   async function sendModelForm(url, method, body, file) {
     const r = await apiFetch(url, { method, body: modelForm(body, file) })
       .then(res => res.json())
-      .catch(() => ({ success:false, message:'Upload failed' }))
+      .catch(() => ({ success:false }))   // see apiJson: no message, so the caller's translated fallback wins
     if (r.success) await refetchModels()
     return r
   }
@@ -3768,7 +3889,7 @@ export default function AIModelStudio() {
     form.append('File', file)   // field name matches ProductPhotos.jsx
     return apiFetch(`${API}/boutique/products/${productId}/photos`, { method:'POST', body: form })
       .then(r => r.json())
-      .catch(() => ({ success:false, message:'Upload failed' }))
+      .catch(() => ({ success:false }))   // see apiJson: no message, so the caller's translated fallback wins
   }
 
   // Pushes finished generations onto the product gallery. Already used by
@@ -3833,7 +3954,7 @@ export default function AIModelStudio() {
         <div className="studio-sni-quota">
           <span className="material-symbols-outlined">data_usage</span>
           {quota
-            ? <>{t('ais.nav.quota_left', '{{left}} of {{limit}} generations left', { left: quotaLeft, limit: quota.limit })} · {resetLabel(quota.resetsAt)}</>
+            ? <>{t('ais.nav.quota_left', '{{left}} of {{limit}} generations left', { left: quotaLeft, limit: quota.limit })} · {resetLabel(quota.resetsAt, t)}</>
             : <>{t('ais.hub.loading_quota', 'Loading quota…')}</>}
         </div>
         <div className="studio-sni-reset" onClick={refetchQuota} title={t('ais.nav.refresh_quota', 'Refresh quota')}>
@@ -3846,6 +3967,7 @@ export default function AIModelStudio() {
             t={t}
             onNavigate={setScreen}
             onQuickGenerate={() => { setGenMode('quick'); setScreen('generate') }}
+            onOpenGeneration={g => { setOpenShoot(g); setScreen('generate') }}
             quota={quota}
             products={products}
             listGenerations={listGenerations}
@@ -3857,6 +3979,7 @@ export default function AIModelStudio() {
             t={t}
             onNavigate={setScreen}
             mode={genMode} setMode={setGenMode}
+            openShoot={openShoot} onShootOpened={() => setOpenShoot(null)}
             looks={looks} looksLoading={looksLoading} createLook={createLook}
             createLookWithPhoto={createLookWithPhoto} updateLookWithPhoto={updateLookWithPhoto}
             models={models} modelsLoading={modelsLoading} createModel={createModel}

@@ -7,14 +7,23 @@ import { apiFetch } from '../lib/api'
 
 const API = import.meta.env.VITE_API_URL
 
+const LOC_TYPE_KEY = 'locations.type.'
+const COUNTRY_KEY  = 'locations.country.'
+const ROLE_KEY     = 'locations.role.'
+
 const STEP_KEYS = ['basic', 'catalogue', 'channels', 'terminals', 'team', 'policies', 'review']
 const MAX_STEP = STEP_KEYS.length
 
+/* Country and type names were fixed English strings in these dropdowns, so an
+   Italian boutique picked "Italy" from a list that should read "Italia". The
+   `label` is now only the fallback used until the bundle carries the key.
+   The type keys are the same `locations.type.*` the Locations screen uses, so
+   a type reads identically wherever it appears. */
 const COUNTRIES = [
-  { code: 'IT', label: 'Italy' },
-  { code: 'FR', label: 'France' },
-  { code: 'UK', label: 'UK' },
-  { code: 'AE', label: 'UAE' },
+  { code: 'IT', key: 'it', label: 'Italy' },
+  { code: 'FR', key: 'fr', label: 'France' },
+  { code: 'UK', key: 'uk', label: 'UK' },
+  { code: 'AE', key: 'ae', label: 'UAE' },
 ]
 
 const LOCATION_TYPES = [
@@ -133,14 +142,14 @@ export default function AddLocation() {
         method: 'POST',
         body: JSON.stringify({ email, name: fullName, role: inviteDraft.role }),
       }).then(r => r.json())
-      if (!res?.success) { setInviteError(res?.message ?? 'Failed to invite'); return }
+      if (!res?.success) { setInviteError(res?.message ?? t('locations.err.invite', 'Could not send the invitation.')); return }
       const newStaff = { id: res.data?.id, name: fullName, role: inviteDraft.role, email, locations: [], pending: true }
       setStaffList(list => [...list, newStaff])
       if (newStaff.id) setAssigned(a => ({ ...a, [newStaff.id]: true }))
       setInviteOpen(false)
       setInviteDraft({ first: '', last: '', email: '', role: 'staff' })
     } catch (err) {
-      console.error('[AddLocation] sendInvite failed', err); setInviteError('Network error')
+      console.error('[AddLocation] sendInvite failed', err); setInviteError(t('common.error_network'))
     } finally { setInviting(false) }
   }
 
@@ -159,7 +168,7 @@ export default function AddLocation() {
         }),
       }).then(r => r.json())
 
-      if (!res?.success) { setActivateError(res?.message ?? 'Failed to create location'); return }
+      if (!res?.success) { setActivateError(res?.message ?? t('locations.err.create', 'Could not create this location.')); return }
 
       const newId = res.data?.id ?? res.data?.location?.id
       const assignedIds = Object.entries(assigned).filter(([, on]) => on).map(([id]) => id)
@@ -292,9 +301,9 @@ function StepBasic({ form, setField, t, error }) {
         title={t('locations.wizard.basic_title', 'Basic details')}
         lead={t('locations.wizard.basic_lead', 'Where is this location and how should it appear on receipts and the store switcher.')} />
       <div className="form-group"><label className="form-lbl">{t('locations.wizard.loc_name', 'Location name')}</label>
-        <input className="form-input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder="e.g. Sartoria Belloni Firenze" /></div>
+        <input className="form-input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder={t('locations.wizard.ph_loc_name', 'e.g. Sartoria Belloni Firenze')} /></div>
       <div className="form-group"><label className="form-lbl">{t('locations.wizard.sign', 'Shop sign / display name')}</label>
-        <input className="form-input" value={form.sign} onChange={e => setField('sign', e.target.value)} placeholder="e.g. Sartoria Belloni" /></div>
+        <input className="form-input" value={form.sign} onChange={e => setField('sign', e.target.value)} placeholder={t('locations.wizard.ph_listing', 'e.g. Sartoria Belloni')} /></div>
       <div className="form-group"><label className="form-lbl">{t('locations.wizard.address', 'Street address')}</label>
         <input className="form-input" value={form.address} onChange={e => setField('address', e.target.value)} placeholder="Via Tornabuoni 5" /></div>
       <div className="grid3">
@@ -304,13 +313,13 @@ function StepBasic({ form, setField, t, error }) {
           <input className="form-input" value={form.postcode} onChange={e => setField('postcode', e.target.value)} placeholder="50123" /></div>
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.type', 'Location type')}</label>
           <select className="form-select" value={form.type} onChange={e => setField('type', e.target.value)}>
-            {LOCATION_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {LOCATION_TYPES.map(o => <option key={o.value} value={o.value}>{t(LOC_TYPE_KEY + o.value, { defaultValue: o.label })}</option>)}
           </select></div>
       </div>
       <div className="grid2">
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.country', 'Country')}</label>
           <select className="form-select" value={form.country} onChange={e => setField('country', e.target.value)}>
-            {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+            {COUNTRIES.map(c => <option key={c.code} value={c.code}>{t(COUNTRY_KEY + c.key, { defaultValue: c.label })}</option>)}
           </select></div>
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.phone', 'Phone')}</label>
           <PhoneInput
@@ -333,7 +342,7 @@ function StepBasic({ form, setField, t, error }) {
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.mon_sat', 'Mon–Sat hours')}</label>
           <input className="form-input" value={form.monSat} onChange={e => setField('monSat', e.target.value)} placeholder="10:00-19:30" /></div>
         <div className="form-group"><label className="form-lbl">{t('locations.wizard.sun', 'Sunday hours')}</label>
-          <input className="form-input" value={form.sun} onChange={e => setField('sun', e.target.value)} placeholder="11:00-18:00 or Closed" /></div>
+          <input className="form-input" value={form.sun} onChange={e => setField('sun', e.target.value)} placeholder={t('locations.hours.sun_ph', '11:00-18:00 or Closed')} /></div>
       </div>
       <div className="form-group"><label className="form-lbl">{t('locations.wizard.timezone', 'Time zone')}</label>
         <input className="form-input" value="Europe/Rome" readOnly /></div>
@@ -439,16 +448,16 @@ function StepTeam({ t, staffList, assigned, toggleAssign, manager, setManager, i
           <div className="locwiz-eyebrow" style={{ marginBottom: 12 }}>{t('locations.wizard.new_invite', 'New invitation')}</div>
           <div className="grid2">
             <div className="form-group"><label className="form-lbl">{t('locations.wizard.first_name', 'First name')}</label>
-              <input className="form-input" value={inviteDraft.first} onChange={e => setInviteDraft(d => ({ ...d, first: e.target.value }))} placeholder="e.g. Elena" /></div>
+              <input className="form-input" value={inviteDraft.first} onChange={e => setInviteDraft(d => ({ ...d, first: e.target.value }))} placeholder={t('locations.wizard.ph_first', 'e.g. Elena')} /></div>
             <div className="form-group"><label className="form-lbl">{t('locations.wizard.last_name', 'Last name')}</label>
-              <input className="form-input" value={inviteDraft.last} onChange={e => setInviteDraft(d => ({ ...d, last: e.target.value }))} placeholder="e.g. Conti" /></div>
+              <input className="form-input" value={inviteDraft.last} onChange={e => setInviteDraft(d => ({ ...d, last: e.target.value }))} placeholder={t('locations.wizard.ph_last', 'e.g. Conti')} /></div>
           </div>
           <div className="grid2">
             <div className="form-group"><label className="form-lbl">{t('locations.wizard.email', 'Email')}</label>
               <input className="form-input" type="email" value={inviteDraft.email} onChange={e => setInviteDraft(d => ({ ...d, email: e.target.value }))} placeholder="nome@sartoriabelloni.it" /></div>
             <div className="form-group"><label className="form-lbl">{t('locations.wizard.role', 'Role')}</label>
               <select className="form-select" value={inviteDraft.role} onChange={e => setInviteDraft(d => ({ ...d, role: e.target.value }))}>
-                <option value="staff">Staff</option><option value="manager">Manager</option>
+                <option value="staff">{t(ROLE_KEY + 'staff', { defaultValue: 'Staff' })}</option><option value="manager">{t(ROLE_KEY + 'manager', { defaultValue: 'Manager' })}</option>
               </select></div>
           </div>
           {inviteError && <div className="alert locwiz-error">{inviteError}</div>}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
 import StripeCheckout from '../components/ui/StripeCheckout'
 import PrimoLogo from '../assets/PrimoLogo.svg'
 
@@ -51,7 +52,11 @@ function StarterCard({ t, selecting, onSelect }) {
         <Feat>{t('sub.setup.feat_2_campaigns')}</Feat>
         <Feat>{t('sub.setup.feat_10_renders')}</Feat>
         <Feat>{t('sub.setup.feat_1_lang')}</Feat>
-        <Feat icon="close" locked>{t('sub.setup.feat_no_whatsapp')}</Feat>
+        {/* WhatsApp entitlement is account-level, not a plan tier, so for a
+            boutique without it this is not "something Starter lacks" — it is
+            something no plan would give them. Listing it as a missing feature
+            would read as an upsell they cannot act on. */}
+        {isWhatsappEnabled() && <Feat icon="close" locked>{t('sub.setup.feat_no_whatsapp')}</Feat>}
         <Feat icon="close" locked>{t('sub.setup.feat_no_tiers')}</Feat>
         <AiSection title={t('sub.setup.ai_title')}>
           <Feat>{t('sub.setup.ai_italian_vocab')}</Feat>
@@ -83,7 +88,12 @@ function ConnectCard({ t, selecting, onSelect }) {
       <div className="sub-plan-feats ssu-feats-grow">
         <Feat><span dangerouslySetInnerHTML={{ __html: t('sub.setup.feat_1500_contacts') }} /></Feat>
         <Feat>{t('sub.setup.feat_unlimited_email')}</Feat>
-        <Feat>{t('sub.setup.feat_wa_print')}</Feat>
+        {/* Print campaigns are on Connect either way — only the WhatsApp half
+            of this line is conditional, so it swaps to a print-only wording
+            rather than being dropped. */}
+        <Feat>{isWhatsappEnabled()
+          ? t('sub.setup.feat_wa_print')
+          : t('sub.setup.feat_print_only', 'Print campaigns')}</Feat>
         <Feat>{t('sub.setup.feat_25_renders')}</Feat>
         <Feat>{t('sub.setup.feat_8_langs')}</Feat>
         <Feat>{t('sub.setup.feat_tier_discounts')}</Feat>
@@ -198,7 +208,6 @@ export default function SubscriptionSetup() {
         <StripeCheckout
           plan="pro"
           onClose={() => setCheckoutOpen(false)}
-          onSuccess={() => navigate('/subscription')}
         />
       )}
     </div>

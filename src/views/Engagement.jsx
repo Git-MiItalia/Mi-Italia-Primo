@@ -5,6 +5,7 @@ import { isWhatsappEnabled } from '../lib/auth'
 import { statusLabel as statusLabelShared } from '../lib/statusLabel'
 import { dayAgo } from '../lib/timeAgo'
 import RangeBar from '../components/ui/RangeBar'
+import Loading from '../components/ui/Loading'
 import { PR_TODAY, fmtDateLocalized, activeLocale } from '../lib/dateHelpers'
 
 const API = import.meta.env.VITE_API_URL
@@ -420,22 +421,6 @@ function SegBadge({ seg }) {
   return <span className={`seg ${s.cls}`}>{s.icon} {s.label}</span>
 }
 
-function ChTag({ ch }) {
-  const { t } = useTranslation()
-  const map = {
-    email: ['ch-email', 'mail',         t('eng.channels.email', 'Email')],
-    wa:    ['ch-wa',    'chat',         t('eng.channels.wa', 'WhatsApp')],
-    print: ['ch-print', 'description',  t('eng.channels.print', 'Print')],
-    insta: ['ch-insta', 'photo_camera', t('eng.channels.insta', 'Instagram')],
-  }
-  const [cls, icon, label] = map[ch] || ['ch-email', 'mail', ch]
-  return (
-    <span className={`ch-tag ${cls}`}>
-      <span className="ch-tag-icon material-symbols-outlined">{icon}</span>{label}
-    </span>
-  )
-}
-
 function LangBar({ languages }) {
   const colors  = ['var(--gold)', '#1A4FBF', '#DD2A7B', 'var(--stone)', 'var(--green)']
   const entries = Object.entries(languages ?? {})
@@ -483,7 +468,7 @@ function ChBar({ icon, iconColor, label, val, pct, barColor, soon }) {
 }
 
 // ── OVERVIEW ─────────────────────────────────────────────
-function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageContacts, onManageAutomations, onViewAllCampaigns}) {
+function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, onManageContacts, onManageAutomations, onViewAllCampaigns}) {
   const { t } = useTranslation()
   const waOn = isWhatsappEnabled()
   const [automations, setAutomations] = useState([])
@@ -540,6 +525,18 @@ function OverviewView({ segments, dashboard, campaigns, onNewCampaign, onManageC
     langs:         [],
     extra:         null,
   }))
+
+  /* The tab landed on this screen with every list empty, so while the data was
+     in flight it read "No campaigns yet.", "No recent activity." and "No
+     automations yet" — an empty boutique, stated confidently, a moment before
+     the real figures appeared. Those lines are the genuine empty states and
+     stay as they are; they just must not be shown before we know.
+
+     The flag is passed in rather than derived here because the fetches belong
+     to the parent, and it goes false on failure too, so a dead endpoint shows
+     the partial-load banner below instead of spinning forever. */
+  if (loading) return <Loading page />
+
   return (
     <div>
       <div className="alert alert-gdpr mkt-gdpr-alert">
@@ -1095,6 +1092,10 @@ function ContactsView({ onContactsChanged, segments }) {
             {listError && (
               <tr><td colSpan={10} className="eng-error">{listError}</td></tr>
             )}
+            {/* loadingList already suppressed the "no contacts" line below, but
+                nothing took its place — so the wait was an empty table under a
+                full set of headers, then rows appearing from nowhere. */}
+            {!listError && loadingList && <Loading row cols={10} />}
             {!listError && filteredContacts.length === 0 && !loadingList && (
               <tr><td colSpan={10} className="eng-loading">{t('eng.ct.no_match_filters', 'No contacts match your filters.')}</td></tr>
             )}
@@ -1388,7 +1389,7 @@ function ContactsView({ onContactsChanged, segments }) {
               {/* Saved Items */}
               <div className="ct-panel-section-lbl">{t('eng.ct.saved_items_section', 'Saved Items')}</div>
               {panelFavoritesLoading ? (
-                <div className="eng-loading-sm">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
+                <Loading className="eng-loading-sm" />
               ) : panelFavoritesError ? (
                 <div className="eng-error">{panelFavoritesError}</div>
               ) : panelFavorites.length === 0 ? (
@@ -1476,7 +1477,7 @@ function ContactsView({ onContactsChanged, segments }) {
               {/* Activity Timeline */}
               <div className="ct-panel-section-lbl">{t('eng.ct.activity_section', 'Activity Timeline')}</div>
               {panelLoading ? (
-                <div className="eng-loading-sm">{t('eng.ct.loading_activity', 'Loading activity…')}</div>
+                <Loading className="eng-loading-sm" />
               ) : (() => {
                 const orders  = panelDetail?.recent_orders       ?? []
                 const reservs = panelDetail?.recent_reservations ?? []
@@ -1668,7 +1669,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
 
       {/* Campaign cards */}
       {loadingList ? (
-        <div className="eng-loading">{t('eng.camp.loading_list', 'Loading campaigns…')}</div>
+        <Loading />
       ) : filtered.length === 0 ? (
         <div className="eng-loading">
           {t('eng.camp.empty_hint', { newCampaignLabel: t('eng.camp.new_campaign', 'New Campaign'), defaultValue: 'No campaigns yet — click "{{newCampaignLabel}}" to start.' })}
@@ -1844,7 +1845,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
       const savedId = res.data?.id || campaignId
       if (!campaignId && savedId) setCampaignId(savedId)
       return savedId
-    } catch (e) {
+    } catch {
       setErrorMsg(t('eng.camp.err_save_network', 'Save failed — check your connection and try again.'))
       return null
     } finally {
@@ -1906,7 +1907,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
   return (
     <div className="camp-sub-wrap">
       {loadingCampaign && (
-        <div className="eng-loading-sm">{t('eng.camp.loading', 'Loading campaign…')}</div>
+        <Loading className="eng-loading-sm" />
       )}
       {errorMsg && (
         <div className="eng-error">{errorMsg}</div>
@@ -1992,7 +1993,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             <div className="form-lbl">{t('eng.camp.step3_label', 'Step 3 — Template')}</div>
             <div className="tmpl-grid">
               {templatesLoading ? (
-                <div className="eng-loading-grid">{t('eng.camp.loading_tpl', 'Loading templates…')}</div>
+                <Loading className="eng-loading-grid" />
               ) : templatesFailed ? (
                 <div className="eng-error">{t('eng.camp.err_templates', 'Could not load your templates. You can still write the message below, or reload to try again.')}</div>
               ) : apiTemplates.length === 0 ? (
@@ -2235,7 +2236,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
       } else {
         setErrorMsg(res?.message || t('eng.rev.err_save_translation', 'Failed to save this translation.'))
       }
-    } catch (e) {
+    } catch {
       setErrorMsg(t('eng.rev.err_save_translation_network', 'Failed to save — check your connection.'))
     } finally {
       setSavingLang(null)
@@ -2293,7 +2294,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
       } else {
         setErrorMsg(res?.message || t('eng.rev.err_send', 'Send failed.'))
       }
-    } catch (e) {
+    } catch {
       setErrorMsg(t('eng.rev.err_send_network', 'Send failed — check your connection and try again.'))
     } finally {
       setSending(false)
@@ -2348,7 +2349,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
       )}
 
       {loadingTpl ? (
-        <div className="eng-loading">{t('eng.rev.loading', 'Loading campaign') + '…'}</div>
+        <Loading />
       ) : (
         <>
           {/* Source banner */}
@@ -2568,7 +2569,7 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
 
         <div className="cam-modal-body">
           {loading && (
-            <div className="eng-loading">{t('eng.an.loading', 'Loading analytics…')}</div>
+            <Loading />
           )}
           {errorMsg && (
             <div className="eng-error">{errorMsg}</div>
@@ -2731,118 +2732,6 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
 }
 
 
-function LangBadge({ code }) {
-  const m = LANG_META[code]
-  if (!m) return <span>{code}</span>
-  if (m.flag) return (
-    <span className="lang-badge">
-      <span className="lang-badge-flag">{m.flag}</span><span>{m.name}</span>
-    </span>
-  )
-  return (
-    <span className="lang-badge">
-      <span className="lang-badge-code">{m.code}</span>
-      <span>{m.name}</span>
-    </span>
-  )
-}
-
-function MiniTrend({ data, endLabel }) {
-  const W = 580, H = 110, padL = 32, padR = 10, padT = 10, padB = 24
-  const cW = W - padL - padR, cH = H - padT - padB
-  const max = Math.max(...data) * 1.15
-  const stepX = cW / (data.length - 1)
-  const pts = data.map((v, i) => ({ x: padL + i * stepX, y: padT + cH - (v / max) * cH }))
-  const lineStr = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
-  const fillStr = `M ${padL},${padT + cH} ${pts.map(p => `L ${p.x},${p.y}`).join(' ')} L ${padL + (data.length - 1) * stepX},${padT + cH} Z`
-
-  return (
-    <div className="cdp-mini-chart">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width:'100%', height:H }}>
-        <defs>
-          <linearGradient id="cdpMiniGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="var(--gold)" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="var(--gold)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <line x1={padL} y1={padT}          x2={W - padR} y2={padT}          stroke="var(--mist)" strokeWidth="1" strokeDasharray="2,3" />
-        <line x1={padL} y1={padT + cH/2}   x2={W - padR} y2={padT + cH/2}   stroke="var(--mist)" strokeWidth="1" strokeDasharray="2,3" />
-        <line x1={padL} y1={padT + cH}     x2={W - padR} y2={padT + cH}     stroke="var(--mist)" strokeWidth="1" />
-        <text x={padL - 5} y={padT + 4}          fontSize="9" fill="var(--stone)" textAnchor="end" fontFamily="Jost">{Math.round(max)}</text>
-        <text x={padL - 5} y={padT + cH/2 + 3}   fontSize="9" fill="var(--stone)" textAnchor="end" fontFamily="Jost">{Math.round(max/2)}</text>
-        <text x={padL - 5} y={padT + cH + 3}     fontSize="9" fill="var(--stone)" textAnchor="end" fontFamily="Jost">0</text>
-        <path d={fillStr} fill="url(#cdpMiniGrad)" />
-        <path d={lineStr} fill="none" stroke="var(--gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--white)" stroke="var(--gold)" strokeWidth="1.5" />
-        ))}
-        <text x={padL}       y={H - 6} fontSize="9" fill="var(--stone)"                  fontFamily="Jost">0h</text>
-        <text x={W - padR}   y={H - 6} fontSize="9" fill="var(--stone)" textAnchor="end" fontFamily="Jost">{endLabel || '15h'}</text>
-      </svg>
-    </div>
-  )
-}
-
-function LinkHeatmap({ linkClicks }) {
-  const totalClicks  = linkClicks.reduce((a, b) => a + b.clicks, 0)
-  const topBubble    = linkClicks[0]
-  const footerBubble = linkClicks.find(l => l.label.toLowerCase().includes('unsub')) || linkClicks[linkClicks.length - 1]
-  const bubbleSize   = (n) => Math.max(20, Math.min(42, 18 + n * 0.5))
-
-  return (
-    <>
-      <div className="cdp-sec-title">Link click distribution</div>
-      <div className="cdp-heat">
-        <div className="cdp-heat-email">
-          <div className="cdp-heat-hdr">
-            <div className="cdp-heat-logo">MI</div>
-            <div className="cdp-heat-brand">Mi Italia · Where Fashion Begins</div>
-          </div>
-          <div className="cdp-heat-hero">Hero image</div>
-          <div className="cdp-heat-body">
-            <div className="cdp-heat-txt">Ciao {'{{name}}'}, discover our latest arrivals — hand-selected for you.</div>
-            <div className="cdp-heat-cta-wrap">
-              <button className="cdp-heat-cta">{topBubble.label.toUpperCase()} →</button>
-              <div className="cdp-click-bubble" style={{
-                width: bubbleSize(topBubble.clicks), height: bubbleSize(topBubble.clicks),
-                background:'rgba(184,149,90,0.92)', top:-10, right:-14, fontSize:9,
-              }}>{topBubble.clicks}</div>
-            </div>
-          </div>
-          <div className="cdp-heat-footer">
-            <a>Unsubscribe</a> · <a>Privacy</a>
-            <div className="cdp-click-bubble" style={{
-              width: bubbleSize(footerBubble.clicks), height: bubbleSize(footerBubble.clicks),
-              background:'rgba(140,123,107,0.78)', top:-8, right:24, fontSize:8,
-            }}>{footerBubble.clicks}</div>
-          </div>
-        </div>
-        <div>
-          <div className="cdp-click-breakdown-hdr">Click breakdown</div>
-          <div className="cdp-click-list">
-            {linkClicks.map((l, i) => (
-              <div key={i} className="cdp-click-row">
-                <div className="cdp-click-row-hdr">
-                  <span>{l.label}</span>
-                  <span className="cdp-click-val">
-                    {l.clicks} <span className="cdp-click-pct">({l.pct}%)</span>
-                  </span>
-                </div>
-                <div className="cdp-click-row-track">
-                  <div className="cdp-click-row-fill" style={{ width:`${l.pct}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="cdp-click-foot">
-            {totalClicks} clicks across {linkClicks.length} tracked links.
-          </div>
-        </div>
-      </div>
-    </>
-  )
-}
-
 // ── CAMPAIGN DETAIL PANEL (slide-out from analytics ROI table) ──
 function CampaignDetailPanel({ campaignId, onClose }) {
   const { t, i18n } = useTranslation()
@@ -2872,7 +2761,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
     <>
       <div className="cdpanel-overlay" onClick={onClose} />
       <div className="cdpanel open">
-        <div className="cdpanel-scroll"><div className="eng-loading">{t('eng.an.loading', 'Loading analytics…')}</div></div>
+        <div className="cdpanel-scroll"><Loading /></div>
       </div>
     </>
   )
@@ -3156,7 +3045,7 @@ function AnalyticsView() {
       {range === 'custom' ? (
         <div className="eng-loading eng-mb18">{t('eng.an.custom_not_supported', 'Custom ranges aren\'t supported yet — pick a preset above')}</div>
       ) : loading ? (
-        <div className="eng-loading eng-mb18">{t('eng.an.loading', 'Loading analytics…')}</div>
+        <Loading className="eng-mb18" />
       ) : (
         <>
           {/* ── KPI hero strip ── */}
@@ -3541,7 +3430,7 @@ function AutomationsView() {
       {loadFailed && <div className="eng-error">{t('eng.auto.err_load', 'Could not load automations.')}</div>}
 
       {loading ? (
-        <div className="eng-loading">{t('eng.auto.loading', 'Loading automations') + '…'}</div>
+        <Loading />
       ) : automations.length === 0 ? (
         <div className="eng-loading">{t('eng.auto.empty', 'No automations yet — create one to get started.')}</div>
       ) : (
@@ -3911,7 +3800,7 @@ function FavoritesView() {
       {errorMsg && <div className="eng-error">{errorMsg}</div>}
 
       {loading ? (
-        <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
+        <Loading />
       ) : products.length === 0 ? (
         <div className="eng-loading">{t('eng.fav.empty', 'No products have been saved yet.')}</div>
       ) : (
@@ -3988,7 +3877,7 @@ function FavoritesView() {
           {favCustomersError && <div className="eng-error">{favCustomersError}</div>}
 
           {favCustomersLoading ? (
-            <div className="eng-loading">{t('eng.fav.loading', 'Loading favorites') + '…'}</div>
+            <Loading />
           ) : favCustomers.length === 0 ? (
             <div className="eng-loading">{t('eng.fav.no_customers', 'No customers have saved anything yet.')}</div>
           ) : (
@@ -4034,7 +3923,7 @@ function FavoritesView() {
               <div className="modal-close" onClick={() => setSaversFor(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             {saversLoading ? (
-              <div className="eng-loading">{t('eng.fav.loading_savers', 'Loading savers') + '…'}</div>
+              <Loading />
             ) : saversError ? (
               <div className="eng-error">{saversError}</div>
             ) : savers.length === 0 ? (
@@ -4520,7 +4409,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
             <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real', 'Create Template')}
           </button>
           {loadingList ? (
-            <div className="eng-loading">{t('eng.tpl.loading_real', 'Loading templates') + '…'}</div>
+            <Loading />
           ) : listFailed ? (
             <div className="eng-error">{t('eng.tpl.err_load', 'Could not load templates.')}</div>
           ) : filteredTemplates.length === 0 ? (
@@ -4553,7 +4442,11 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       <div className="tpl-detail">
         <div className="tpl-detail-inner">
           {!tplDetail ? (
-            <div className="eng-loading">{detailLoading ? t('eng.tpl.loading_real', 'Loading') + '…' : t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
+            /* Two different states shared one line: fetching a template, and
+               no template picked. Only the first is a wait. */
+            detailLoading
+              ? <Loading />
+              : <div className="eng-loading">{t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
           ) : (
             <>
               <div className="tpl-det-hdr">
@@ -4707,7 +4600,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                 <div>
                   <div className="cdp-sec-title">{t('eng.tpl.perf_title', { name: templateDisplayName(tplDetail.template_key, t), defaultValue: 'Campaign Performance — {{name}}' })}</div>
                   {perfLoading ? (
-                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                    <Loading />
                   ) : !perf || (perf.usage_count ?? 0) === 0 ? (
                     <div className="eng-loading">{t('eng.tpl.no_perf_data', 'No performance data yet — this template has not been used in a campaign.')}</div>
                   ) : (
@@ -4740,7 +4633,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                 <div>
                   <div className="cdp-sec-title">{t('eng.tpl.version_history_title', { name: templateDisplayName(tplDetail.template_key, t), defaultValue: 'Version History — {{name}}' })}</div>
                   {versionsLoading ? (
-                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                    <Loading />
                   ) : versions.length === 0 ? (
                     <div className="eng-loading">{t('eng.tpl.no_version_history', 'No version history yet.')}</div>
                   ) : (
@@ -4793,7 +4686,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                     <div>{t('eng.tpl.variables_hint', 'Variables are pulled automatically from your Mi Italia data at send time.')}</div>
                   </div>
                   {variablesLoading ? (
-                    <div className="eng-loading">{t('common.loading', 'Loading...')}</div>
+                    <Loading />
                   ) : (
                     <div className="tpl-var-grid">
                       {variables.map(v => (
@@ -5222,6 +5115,10 @@ export default function Engagement() {
             segments={segments}
             dashboard={dashboard}
             campaigns={campaigns}
+            /* dashboard stays null until its fetch lands — but also if that
+               fetch fails, which is why failedLoads is consulted rather than
+               waiting on the value alone. */
+            loading={campaignsLoading || (dashboard === null && !failedLoads.includes('dashboard'))}
             onNewCampaign={(presetSegment) => { setCampaignsPresetSegment(presetSegment ?? null); setCampaignsStart('builder'); setActiveView('campaigns') }}
             onViewAllCampaigns={() => { setCampaignsPresetSegment(null); setCampaignsStart('hub'); setActiveView('campaigns') }}
             onManageContacts={() => setActiveView('contacts')}

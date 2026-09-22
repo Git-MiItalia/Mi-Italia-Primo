@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/api'
 import { statusLabel } from '../lib/statusLabel'
 import { isWhatsappEnabled } from '../lib/auth'
 import Toast, { useToast } from '../components/ui/Toast'
+import Loading from '../components/ui/Loading'
 import useNotifStore from '../store/notifStore'
 import useLangStore from '../store/langStore'
 import { generatePackingSlip } from '../lib/packingSlip'
@@ -12,6 +13,16 @@ import i18n from '../lib/i18n'
 
 const API = import.meta.env.VITE_API_URL
 const STATUS_TABS = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
+
+/* DHL service ("product") code sent when booking a shipment.
+ *
+ * Four values have been seen for the same idea: orders carry shipping_method
+ * "7" and "N", the packing slip maps "I"/"D" to International/Domestic, and
+ * the backend's own example posts "I". The order's own value is preferred —
+ * it is what the shopper picked at checkout — and this is the fallback for
+ * orders that carry none. Confirm the real list with the backend before this
+ * books real parcels; the wrong code buys the wrong service. */
+const DEFAULT_SERVICE_CODE = 'I'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -94,7 +105,11 @@ function OrderTimeline({ order }) {
         ? t('orders.timeline.dhl_status', 'Status: {{status}}', {
             status: order.dhl_status ?? t('orders.timeline.in_transit', 'In transit'),
           })
-        : t('orders.timeline.dhl_generate', 'Generate label to continue'),
+        // Was "Generate label to continue", which sent people looking for a
+        // Generate button that never existed. A new key rather than a changed
+        // default: the old one is already in the bundle and may be translated,
+        // and a default is only used when the key is absent.
+        : t('orders.timeline.dhl_no_label', 'No label yet — add a tracking number below'),
       icon:  'local_shipping',
       time:  tracked ? t('orders.timeline.generated', 'Generated') : t('orders.timeline.now', 'Now'),
       done:  tracked,
@@ -170,6 +185,7 @@ export default function Orders() {
   const [loading,       setLoading]       = useState(true)
   const [loadFailed,    setLoadFailed]    = useState(false)
   const [trackingInput, setTrackingInput] = useState('')
+  const [labelLoading,  setLabelLoading]  = useState(false)
   const { toasts, show: showToast }       = useToast()
 
   const [confirmOpen,   setConfirmOpen]   = useState(false)
@@ -324,31 +340,103 @@ export default function Orders() {
     setConfirmOpen(true)
   }
 
+  /* Marking a parcel "Shipped" used to do nothing but flip a label in the
+     database — PATCH /status with { status:'shipped' }. Nothing ever reached
+     DHL, which is why every order came back with dhl_shipment_id,
+     dhl_tracking_number, dhl_status and dhl_label_url all null, why the label
+     button had nothing to open, and why a tracking number could only get in
+     by being typed by hand off DHL's own website.
+
+     POST /boutique/orders/:id/ship books the parcel with DHL and returns the
+     label. Rather than guess what that response names its fields, the order
+     is re-read straight after: the order record's own column names are the
+     ones this screen already renders, and those are known to be right.
+     Whatever the POST does return is folded in first, so the label still
+     appears immediately and the re-read only fills the gaps.
+
+     A failed booking deliberately leaves the status alone. Showing "Shipped"
+     over a parcel DHL never accepted is precisely the lie this screen used to
+     tell, and it is worse than an error the merchant can act on. */
   async function confirmStatusChange() {
     if (!selected || !pendingStatus) return
     setSubmitting(true)
     const fromStatus = selected.status
+    const id         = selected.id
+    // Only parcels, and only once: pickup orders never go near DHL, and an
+    // order that already has tracking has been booked — re-booking it would
+    // buy a second shipment.
+    const booking = pendingStatus === 'shipped'
+      && selected.channel === 'ship'
+      && !selected.dhl_tracking_number
     try {
-      const res  = await apiFetch(`${API}/boutique/orders/${selected.id}/status`, {
+      if (booking) {
+        const res  = await apiFetch(`${API}/boutique/orders/${id}/ship`, {
+          method: 'POST',
+          body:   JSON.stringify({ service_code: selected.shipping_method || DEFAULT_SERVICE_CODE }),
+        })
+        const data = await res.json()
+        if (!data?.success) {
+          // DHL's own words come back through here — a rejected address or an
+          // unknown service code reads as a DHL error, which is more use to
+          // the merchant than anything this screen could invent.
+          showToast(data?.message || t('orders.toast.ship_failed', 'Could not book this shipment with DHL. The order has not been marked as shipped.'), 'error')
+          return
+        }
+        const d     = data.data ?? data ?? {}
+        const patch = { status: 'shipped' }
+        const lbl   = d.label_url ?? d.dhl_label_url ?? d.url ?? null
+        const trk   = d.tracking_number ?? d.dhl_tracking_number ?? null
+        if (lbl) patch.dhl_label_url       = lbl
+        if (trk) patch.dhl_tracking_number = trk
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
+        setSelected(prev => prev?.id === id ? { ...prev, ...patch } : prev)
+        if (trk) setTrackingInput(trk)
+        showToast(lbl ? t('orders.toast.ship_label_ready', 'Shipped — the DHL label is ready') : t('orders.toast.ship_booked', 'Shipped — booked with DHL, fetching the label'), 'success')
+        fetchDetail(id)
+        return
+      }
+      const res  = await apiFetch(`${API}/boutique/orders/${id}/status`, {
         method: 'PATCH',
         body:   JSON.stringify({ status: pendingStatus }),
       })
       const data = await res.json()
       if (!data.success) {
         showToast(data.message || t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
-        setConfirmOpen(false); setSubmitting(false); return
+        return
       }
-      setOrders(prev => prev.map(o => o.id === selected.id ? { ...o, status: pendingStatus } : o))
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status: pendingStatus } : o))
       setSelected(prev => prev ? { ...prev, status: pendingStatus } : prev)
       showToast(t('orders.toast.status_updated', 'Status updated to {{status}}', { status: statusLabel(t, pendingStatus) }), 'success')
     } catch {
-      showToast(t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
+      showToast(booking
+        ? t('orders.toast.ship_failed', 'Could not book this shipment with DHL. The order has not been marked as shipped.')
+        : t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
     } finally {
       setSubmitting(false); setConfirmOpen(false); setPendingStatus(null)
     }
   }
 
+  /* DHL Express tracking numbers are 10–11 characters — DHL's own API enforces
+     it (minLength=10, maxLength=11) and rejects anything else. Nothing checked
+     here before, so a mistyped number saved happily and only failed later, deep
+     inside a DHL error, on a different button. Caught at the point of entry
+     instead, where the merchant can still see what they typed. */
+  const TRACKING_MIN = 10, TRACKING_MAX = 11
+  const trackingLooksValid = (v) => {
+    const s = (v ?? '').trim()
+    return s.length >= TRACKING_MIN && s.length <= TRACKING_MAX
+  }
+
   function updateShipping(id) {
+    const value = trackingInput.trim()
+    // An empty box is allowed — that is how a wrongly-entered number is cleared.
+    if (value && !trackingLooksValid(value)) {
+      showToast(t('orders.toast.tracking_invalid', {
+        min: TRACKING_MIN, max: TRACKING_MAX, len: value.length,
+        defaultValue: 'A DHL tracking number is {{min}}–{{max}} characters. This one is {{len}}.',
+      }), 'error')
+      return
+    }
     apiFetch(`${API}/boutique/orders/${id}/shipping`, {
       method: 'PATCH',
       body:   JSON.stringify({ dhl_tracking_number: trackingInput }),
@@ -367,6 +455,98 @@ export default function Orders() {
         showToast(res.message || t('orders.toast.tracking_error', 'Could not save the tracking number. Please try again.'), 'error')
       })
       .catch(() => showToast(t('common.error_network'), 'error'))
+  }
+
+  /* DHL label + tracking.
+   *
+   * The button this drives had no onClick at all — it was a picture of a
+   * button, and the timeline beside it said "Generate label to continue",
+   * telling the merchant to press something that could never work.
+   *
+   * GET /boutique/orders/:id/tracking RETRIEVES an existing label and its
+   * tracking; it does not create one. So a missing label_url is a normal
+   * answer, not a failure, and is reported as such rather than as an error.
+   * Whatever the response does carry (tracking number, dhl_status) is folded
+   * back into the row so the panel stops disagreeing with DHL.
+   */
+  function fetchDhlLabel(id) {
+    // The order record carries dhl_label_url itself. When it is already there
+    // the PDF can be opened straight away — no round trip, and it keeps
+    // working even if /tracking is unavailable.
+    const known = orders.find(o => o.id === id)?.dhl_label_url ?? selected?.dhl_label_url
+    if (known) {
+      window.open(known, '_blank', 'noopener,noreferrer')
+      showToast(t('orders.toast.label_opened', 'DHL label opened in a new tab'), 'success')
+      return
+    }
+    setLabelLoading(true)
+    apiFetch(`${API}/boutique/orders/${id}/tracking`)
+      .then(r => r.json())
+      .then(res => {
+        if (!res?.success || !res.data) {
+          // This endpoint proxies DHL, so a failure can arrive as DHL's own
+          // words — e.g. "DHL GET /shipments/123.../tracking -> 400:
+          // Parameters not having correct format:shipmentTrackingNumber
+          // (minLength=10, maxLength=11)". That is a stack trace pointed at a
+          // shopkeeper. The two cases worth recognising are said plainly; the
+          // rest falls back to a generic line rather than leaking an API path.
+          const raw = String(res?.message ?? '')
+          const friendly =
+            /minLength|maxLength|correct format/i.test(raw)
+              ? t('orders.toast.tracking_rejected', { min: TRACKING_MIN, max: TRACKING_MAX,
+                  defaultValue: 'DHL did not recognise that tracking number. It should be {{min}}–{{max}} characters — check it against the label.' })
+            : /no tracking number/i.test(raw)
+              ? t('orders.toast.label_not_ready', 'No DHL label has been created for this order yet.')
+            : /^DHL /.test(raw) || /-> \d{3}:/.test(raw)
+              ? t('orders.toast.label_failed', 'Could not fetch the DHL label.')
+            : (raw || t('orders.toast.label_failed', 'Could not fetch the DHL label.'))
+          showToast(friendly, 'error')
+          return
+        }
+        const d = res.data
+        /* `dhl_status` is the status of DHL's API CALL, not of the parcel — a
+           successful lookup comes back as the literal string "Success", which
+           we were showing the merchant as "Status: Success". Meaningless.
+           The parcel's real state is the description on the most recent event.
+
+           Events arrive unsorted and spread across several shipment objects
+           (a test number returned three), and some carry only a typeCode with
+           no description — those are skipped rather than shown as a bare code. */
+        const events = (d.tracking?.shipments ?? [])
+          .flatMap(s => s.events ?? [])
+          .filter(e => e.description)
+          .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+        const latest = events[0]
+
+        const patch = {}
+        if (d.tracking_number) patch.dhl_tracking_number = d.tracking_number
+        if (d.label_url)       patch.dhl_label_url       = d.label_url
+        // Prefer the parcel's own words; fall back to DHL's status only when
+        // there are no described events at all.
+        if (latest?.description) patch.dhl_status = latest.description
+        else if (d.dhl_status && !/^success$/i.test(d.dhl_status)) patch.dhl_status = d.dhl_status
+        if (Object.keys(patch).length) {
+          setOrders(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
+          setSelected(prev => prev?.id === id ? { ...prev, ...patch } : prev)
+          if (d.tracking_number) setTrackingInput(d.tracking_number)
+        }
+        if (d.label_url) {
+          // Opened rather than downloaded: it is a PDF, and the browser's own
+          // viewer lets the merchant check the address before printing.
+          window.open(d.label_url, '_blank', 'noopener,noreferrer')
+          showToast(t('orders.toast.label_opened', 'DHL label opened in a new tab'), 'success')
+        } else if (!(d.tracking?.shipments ?? []).length) {
+          // A valid-format number DHL has never heard of comes back as
+          // success:true with an empty shipments array. Saying only "no label
+          // yet" would hide the likelier cause — a mistyped number, or one
+          // DHL has not registered yet. The two are worth telling apart.
+          showToast(t('orders.toast.tracking_unknown', 'DHL has no record of this tracking number. Check it against the label — a new shipment can also take a few hours to appear.'), 'error')
+        } else {
+          showToast(t('orders.toast.label_not_ready', 'No DHL label has been created for this order yet.'), 'info')
+        }
+      })
+      .catch(() => showToast(t('common.error_network'), 'error'))
+      .finally(() => setLabelLoading(false))
   }
 
   function dhlCell(o) {
@@ -393,6 +573,11 @@ export default function Orders() {
   ]
 
   const snap = selected?.shipping_address_snapshot ?? {}
+
+  /* Page-level wait, like Subscription: this tab is driven by one fetch, so
+     until it lands there is nothing truthful to draw. Safe as an early return
+     because every hook in this component is declared above it. */
+  if (loading) return <Loading page />
 
   return (
     <>
@@ -427,6 +612,7 @@ export default function Orders() {
                 </tr>
               </thead>
               <tbody>
+                {loading && <Loading row cols={7} />}
                 {!loading && visibleOrders.map(o => (
                   <tr key={o.id} className={selected?.id === o.id ? 'ord-row-selected' : ''}>
                     <td>
@@ -445,12 +631,10 @@ export default function Orders() {
               </tbody>
             </table>
 
-            {loading && (
-              <div className="empty">
-                <span className="material-symbols-outlined">hourglass_empty</span>
-                {t('orders.loading')}
-              </div>
-            )}
+            {/* The wait used to be drawn here, in a block below the table
+                rather than inside it, so the spinner sat under an empty tbody
+                instead of where the rows were about to appear. It is now a
+                <Loading row /> in the tbody above. */}
             {/* A failed load used to render as an empty tab. */}
             {!loading && loadFailed && (
               <div className="empty">
@@ -575,9 +759,26 @@ export default function Orders() {
                 <>
                   <div className="ord-section-hdr">{t('orders.detail.shipping_section')}</div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                    <button className="btn btn-dhl" style={{ flex: 1, justifyContent: 'center' }}>
+                    {/* The endpoint fetches an existing label rather than
+                        creating one, so the wording says "DHL Label" instead
+                        of the old "Generate DHL Label" — which promised
+                        something neither this nor any other endpoint does. */}
+                    {/* Disabled until a tracking number is saved. The endpoint
+                        refuses without one — "Order has no tracking number —
+                        not shipped yet" — which is confusing on an order that
+                        IS shipped, so the button simply does not offer itself
+                        until the prerequisite is met. The hint below says what
+                        to do about it. */}
+                    <button className="btn btn-dhl" style={{ flex: 1, justifyContent: 'center' }}
+                      onClick={() => fetchDhlLabel(selected.id)}
+                      disabled={labelLoading || !(selected.dhl_tracking_number || selected.dhl_label_url)}
+                      title={!(selected.dhl_tracking_number || selected.dhl_label_url)
+                        ? t('orders.detail.label_needs_tracking', 'Save a DHL tracking number first — the label is looked up by it.')
+                        : undefined}>
                       <span className="material-symbols-outlined">local_shipping</span>
-                      {t('orders.detail.generate_dhl')}
+                      {labelLoading
+                        ? t('orders.detail.label_loading', 'Fetching…')
+                        : t('orders.detail.dhl_label', 'DHL Label')}
                     </button>
                     <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}
                       onClick={() => generatePackingSlip(selected.id)}>
@@ -585,6 +786,14 @@ export default function Orders() {
                       {t('orders.detail.packing_slip')}
                     </button>
                   </div>
+                  {!(selected.dhl_tracking_number || selected.dhl_label_url) && (
+                    <div className="form-hint" style={{ marginBottom: 8 }}>
+                      {t('orders.detail.label_needs_tracking', 'Save a DHL tracking number first — the label is looked up by it.')}
+                      {' '}
+                      {t('orders.detail.tracking_format', { min: TRACKING_MIN, max: TRACKING_MAX,
+                        defaultValue: 'DHL numbers are {{min}}–{{max}} characters.' })}
+                    </div>
+                  )}
                   <div className="ord-tracking-row" style={{ marginBottom: 8 }}>
                     <input
                       className="form-input ord-tracking-input"
@@ -640,7 +849,16 @@ export default function Orders() {
                 {['pending', 'processing', 'shipped', 'delivered', 'cancelled'].map(s => {
                   const current    = selected.status
                   const ORDER      = ['pending', 'processing', 'shipped', 'delivered']
-                  const isFinal    = current === 'delivered' || current === 'cancelled'
+                  /* A status that is not a step in the flow ends the order:
+                     'refunded' is the one the backend sends today, and anything
+                     new it sends later lands here too.
+
+                     This used to be a two-name check, so a refunded order fell
+                     through to the index comparison below — and indexOf returns
+                     -1 for a status that is not in ORDER, which reads as "before
+                     pending". Pending was therefore the one enabled button, and
+                     a refunded order could be pushed back into the flow. */
+                  const isFinal    = current === 'delivered' || ORDER.indexOf(current) === -1
                   const isCurrent  = current === s
                   let disabled     = false
                   let tooltip      = ''

@@ -12,7 +12,9 @@ import ClassMappingModal from '../components/settings/ClassMappingModal'
 import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, PROTECTED_POLICY_IDS, findById } from '../lib/returnsPolicy/model'
 import { isLawfulOnline } from '../lib/returnsPolicy/engine'
 import { fetchPolicies, savePolicies, fetchClasses, saveClassMap } from '../lib/returnsPolicy/api'
+import * as shopify from '../lib/shopifyIntegration'
 import { useCategoryTree } from '../lib/categoryTree'
+import Loading from '../components/ui/Loading'
 
 const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
@@ -28,6 +30,80 @@ const isImageType = (t) => typeof t === 'string' && t.startsWith('image/')
 const isVideoType = (t) => typeof t === 'string' && t.startsWith('video/')
 
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
+
+/* Website URL handling.
+ *
+ * The field took anything at all and saved it, and it is not decoration — it is
+ * printed on the packing slip that goes in the customer's parcel. "wwwshop.it"
+ * or a bare "shop" reached the printer.
+ *
+ * normalizeWebsiteUrl adds the scheme people leave off, so "shop.it" becomes
+ * "https://shop.it" rather than being rejected for a mistake nobody considers a
+ * mistake. isValidWebsiteUrl then insists on a host with a dot in it, which is
+ * what separates a real address from a typo; the URL constructor alone accepts
+ * "https://shop" quite happily.
+ *
+ * Deliberately not a strict pattern. New TLDs appear constantly and a regex
+ * that is clever about them ends up rejecting somebody's real domain, which is
+ * a worse failure than letting an odd-looking one through.
+ */
+/* The connection record stores the store handle alone — "sartoria-belloni",
+ * not "sartoria-belloni.myshopify.com". Integrations.jsx prints the suffix
+ * beside it wherever it shows the domain, and this card has to do the same:
+ * without it the text reads like a truncated address, and the "use this"
+ * shortcut would fill in a host with no dot, which the validator below
+ * correctly rejects. The strip-first step is in case the backend ever starts
+ * storing the full domain, so this does not produce
+ * "shop.myshopify.com.myshopify.com" the day that changes.
+ */
+/* Which "Default POS Payment Method" answers make sense, given the terminal.
+ *
+ * The two selects used to be independent, so a boutique could say its machine
+ * is Stripe and then ask POS to open on External Terminal. POS filters its tabs
+ * by the terminal answer, so that default pointed at a tab that is not drawn
+ * and the till quietly opened on Cash — the setting looked ignored, with
+ * nothing on either screen explaining why.
+ *
+ * Offering only the reachable answers stops the contradiction being expressible
+ * instead of resolving it afterwards. Mirrors allowedMethods in POS.jsx; the
+ * two lists have to agree, so change them together.
+ *
+ * An unanswered terminal keeps all three, matching POS, which also leaves every
+ * tab up until it knows better.
+ */
+function allowedPosDefaults(terminal) {
+  if (!terminal)             return ['external_terminal', 'stripe', 'cash']
+  if (terminal === 'none')   return ['cash']
+  if (terminal === 'stripe') return ['stripe', 'cash']
+  return ['external_terminal', 'cash']
+}
+
+function shopifyHost(handle) {
+  const h = (handle ?? '').trim().replace(/\.myshopify\.com$/i, '')
+  return h ? `${h}.myshopify.com` : ''
+}
+
+function normalizeWebsiteUrl(raw) {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  return /^https?:\/\//i.test(s) ? s : `https://${s}`
+}
+
+function isValidWebsiteUrl(raw) {
+  const s = (raw ?? '').trim()
+  if (!s) return true   // empty is allowed; the field is optional
+  const full = normalizeWebsiteUrl(s)
+  // Check the host as typed, before the URL parser gets to reinterpret it: it
+  // reads a bare number as an IPv4 address, so "123" arrives as "0.0.0.123",
+  // dots and all, and would otherwise sail through the test below.
+  const typedHost = full.replace(/^https?:\/\//i, '').split(/[/?#]/)[0]
+  if (!typedHost.includes('.') || typedHost.endsWith('.')) return false
+  try {
+    return !!new URL(full).hostname
+  } catch {
+    return false
+  }
+}
 
 const MAX_SLOTS_PER_DAY = 2
 
@@ -73,7 +149,6 @@ export default function StoreProfile() {
   const { tree: categoryTree } = useCategoryTree()
   const activeCategories = categoryTree.filter(c => (c.product_count ?? 0) > 0)
 
-  const [profile, setProfile]         = useState(null)
   const [loading, setLoading]         = useState(true)
   const [saving, setSaving]           = useState(false)
   const [saved, setSaved]             = useState(false)
@@ -164,7 +239,18 @@ export default function StoreProfile() {
   }
 
   const [terminal, setTerminal]       = useState('none')
-  const [posPayment, setPosPayment]   = useState('external')
+  // 'external_terminal', not 'external': the <select> below has no option with
+  // that value, and a controlled select whose value matches no option renders
+  // blank — so a boutique that had never saved this setting opened the card on
+  // an empty dropdown.
+  const [posPayment, setPosPayment]   = useState('external_terminal')
+  // Derived rather than corrected in state, so switching the terminal away and
+  // back restores what the boutique originally chose instead of losing it. It
+  // also covers a contradictory pair arriving from the server: the select shows
+  // a real option instead of going blank, which is what a value matching no
+  // <option> does.
+  const posDefaults   = allowedPosDefaults(terminal)
+  const posPaymentVal = posDefaults.includes(posPayment) ? posPayment : posDefaults[0]
   const [website, setWebsite]         = useState('none')
   const [websiteUrl, setWebsiteUrl]   = useState('')
   const [posSystem, setPosSystem]     = useState('primo')
@@ -216,13 +302,52 @@ export default function StoreProfile() {
   // Store Profile became permanently unusable with nothing explaining why.
   // Cleared in .finally now, with the failure said out loud.
   const [profileFailed, setProfileFailed] = useState(false)
+
+  /* Whether Shopify is actually connected, for the card further down.
+   *
+   * Answering "Yes — Shopify" only ever drew a card telling the boutique to go
+   * and set the integration up. It said exactly that to a boutique that had
+   * been synced for months, because the dropdown and the real connection never
+   * knew about each other — the answer is a free-text field on the profile, the
+   * connection lives per location under Integrations.
+   *
+   * There is no boutique-level "is Shopify connected" endpoint, so this asks
+   * each location. Only when the Shopify card is on screen: a boutique that
+   * answered anything else never pays for these requests. A location that
+   * errors or is disconnected comes back null from getConnection and is simply
+   * left out, so a single bad location degrades to "not connected" for that one
+   * rather than failing the card.
+   */
+  const [shopDomains, setShopDomains] = useState([])
+  useEffect(() => {
+    if (website !== 'shopify') return
+    let cancelled = false
+    apiFetch(`${API}/boutique/locations`)
+      .then(r => r.json())
+      .then(res => {
+        // data.locations, not data — the list is nested. Matches the loader in
+        // Integrations.jsx, which is the other caller of this endpoint.
+        const locs = res?.data?.locations ?? []
+        return Promise.all(locs.map(l => shopify.getConnection(l.id).catch(() => null)))
+      })
+      .then(conns => {
+        if (cancelled) return
+        // Distinct domains: the same store can legitimately be connected for
+        // several locations, and naming it three times reads like a fault.
+        setShopDomains([...new Set((conns ?? []).filter(Boolean).map(c => c.domain).filter(Boolean))])
+      })
+      .catch(() => { if (!cancelled) setShopDomains([]) })
+    return () => { cancelled = true }
+  }, [website])
+
   useEffect(() => {
     apiFetch(`${API}/boutique/profile`)
       .then(r => r.json())
       .then(res => {
         if (!res.success) { setProfileFailed(true); return }
+        // The whole record is not kept in state — every field it carries is
+        // spread into its own piece of state just below, and nothing read it.
         const d = res.data
-        setProfile(d)
         setName(d.name ?? '')
         setAddress(d.address_line1 ?? '')
         setCity(d.city ?? '')
@@ -238,7 +363,7 @@ export default function StoreProfile() {
         setFounderPhotoUrl(d.founder_photo_url ? `${IMG_BASE}${d.founder_photo_url}` : null)
         setCoverPhotoUrl(d.cover_photo_url ? `${IMG_BASE}${d.cover_photo_url}` : null)
         setTerminal(d.payment_terminal_type ?? 'none')
-        setPosPayment(d.default_pos_payment_method ?? 'external')
+        setPosPayment(d.default_pos_payment_method ?? 'external_terminal')
         setWebsite(d.website_platform ?? 'none')
         setWebsiteUrl(d.website_url ?? '')
         setPosSystem(d.existing_pos_system ?? 'primo')
@@ -316,11 +441,17 @@ export default function StoreProfile() {
 
   function saveTechStack() {
     setTechSaving(true)
+    // Save the normalised form, and put it back in the box so the merchant sees
+    // what was stored rather than discovering the added scheme on a later load.
+    const url = normalizeWebsiteUrl(websiteUrl)
+    if (url !== websiteUrl) setWebsiteUrl(url)
     apiFetch(`${API}/boutique/profile`, {
       method: 'PUT',
       body: JSON.stringify({
-        payment_terminal_type: terminal, default_pos_payment_method: posPayment,
-        website_platform: website, website_url: websiteUrl, existing_pos_system: posSystem,
+        // posPaymentVal, not posPayment: save what the form is showing, never a
+        // stale choice the terminal answer has since ruled out.
+        payment_terminal_type: terminal, default_pos_payment_method: posPaymentVal,
+        website_platform: website, website_url: url, existing_pos_system: posSystem,
       }),
     }).then(r => r.json()).then(res => {
       setTechSaving(false)
@@ -658,12 +789,9 @@ export default function StoreProfile() {
     )
   }
 
-  if (loading) return (
-    <div className="sp-page-loading">
-      <span className="material-symbols-outlined">hourglass_empty</span>
-      <div className="sp-page-loading-text">{t('store_profile.loading', 'Loading profile…')}</div>
-    </div>
-  )
+  /* Was its own hourglass block with its own wording — this tab already waited
+     for the whole page, it just did not look like the others. */
+  if (loading) return <Loading page />
 
   return (
     <>
@@ -1187,12 +1315,25 @@ export default function StoreProfile() {
 
           <div className="form-group">
             <label className="form-lbl">{t('store_profile.tech.pos_method_label', 'Default POS Payment Method')}</label>
-            <select className="form-select" value={posPayment} onChange={e => setPosPayment(e.target.value)}>
-              <option value="external_terminal">{t('store_profile.tech.opt_pos_external', 'External Terminal (show external panel first)')}</option>
-              <option value="stripe">{t('store_profile.tech.opt_pos_stripe', 'Stripe Terminal')}</option>
-              <option value="cash">{t('store_profile.tech.opt_pos_cash', 'Cash')}</option>
+            <select className="form-select" value={posPaymentVal} onChange={e => setPosPayment(e.target.value)}>
+              {[
+                { k: 'external_terminal', label: t('store_profile.tech.opt_pos_external', 'External Terminal (show external panel first)') },
+                { k: 'stripe',            label: t('store_profile.tech.opt_pos_stripe', 'Stripe Terminal') },
+                { k: 'cash',              label: t('store_profile.tech.opt_pos_cash', 'Cash') },
+              ].filter(o => posDefaults.includes(o.k)).map(o => (
+                <option key={o.k} value={o.k}>{o.label}</option>
+              ))}
             </select>
             <div className="form-hint">{t('store_profile.tech.pos_method_hint', 'This pre-selects the payment tab when you open POS. You can always switch during a sale.')}</div>
+            {/* A note used to sit here saying POS had no external-terminal tab
+                and would open on Cash instead. It does have one now, so the
+                note went with it — and `store_profile.tech.pos_method_external_note`
+                is orphaned in the bundle, for the next prune.
+
+                The list above narrows to the terminal answer, so a cash-only
+                boutique sees Cash alone and there is nothing left to warn
+                about. A single option reads oddly, but it is the truth: there
+                is one tab in their till. */}
           </div>
 
           <div className="sp-divider" />
@@ -1214,16 +1355,67 @@ export default function StoreProfile() {
             <div className="form-group">
               <label className="form-lbl">{t('store_profile.tech.website_url_label', 'Website URL')}</label>
               <input className="form-input" value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder={t('store_profile.tech.website_url_placeholder', 'https://yourstore.com')} />
+              {!isValidWebsiteUrl(websiteUrl) && (
+                <div className="form-hint sp-phone-hint-invalid">
+                  {t('store_profile.tech.invalid_website_url', 'That does not look like a website address')}
+                </div>
+              )}
+              {/* Offered, not forced. The connected .myshopify.com domain always
+                  works, but a boutique that has put a custom domain in front of
+                  its Shopify store wants that one on the packing slip instead,
+                  and overwriting what they typed would take it away from them.
+                  Only shown while the box is empty or holds something invalid —
+                  once there is a real address, this stops nagging. */}
+              {website === 'shopify' && shopDomains.length === 1 &&
+               normalizeWebsiteUrl(websiteUrl) !== `https://${shopifyHost(shopDomains[0])}` &&
+               (!websiteUrl.trim() || !isValidWebsiteUrl(websiteUrl)) && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline sp-url-suggest"
+                  onClick={() => setWebsiteUrl(`https://${shopifyHost(shopDomains[0])}`)}>
+                  {t('store_profile.tech.use_shopify_domain', 'Use {{domain}}', { domain: shopifyHost(shopDomains[0]) })}
+                </button>
+              )}
             </div>
           )}
           {website === 'shopify' && (
             <div className="sp-integration-box sp-integration-shopify">
               <div className="sp-integration-hdr">
                 <span className="material-symbols-outlined">store</span>
-                <div className="sp-integration-title">{t('store_profile.tech.shopify_title', 'Shopify Integration')}</div>
+                {/* _live keys, not the original shopify_title / shopify_body.
+                    Those were written before the integration shipped and read
+                    "Shopify Integration — Coming Soon"; every translation of
+                    them says the same in its own language. Correcting the text
+                    under the old key would leave five languages advertising a
+                    feature that has been live for months, until each one is
+                    retranslated. A new key falls back to the English below
+                    instead — right meaning in the wrong language beats the
+                    wrong meaning in the right one. Retire the old pair in the
+                    next prune. */}
+                <div className="sp-integration-title">{t('store_profile.tech.shopify_live_title', 'Shopify Integration')}</div>
               </div>
-              <div className="sp-integration-body">{t('store_profile.tech.shopify_body', 'Mirror your Shopify catalogue, orders, and customers, and write POS sales back to Shopify. Set it up under Settings › Integrations.')}</div>
-              <button className="btn btn-sm btn-outline sp-integration-btn" onClick={() => navigate('/integrations')}><span className="material-symbols-outlined">cable</span>{t('store_profile.tech.go_to_integrations_btn', 'Go to Integrations')}</button>
+              {/* While the check is in flight the card keeps the setup wording
+                  rather than showing a spinner. It is a one-line aside on a
+                  page of forms, and a spinner here would pull the eye to the
+                  least important thing on the screen. */}
+              <div className="sp-integration-body">
+                {shopDomains.length === 1
+                  ? t('store_profile.tech.shopify_connected', 'Connected to {{domain}} — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.', { domain: shopifyHost(shopDomains[0]) })
+                  : shopDomains.length > 1
+                    /* `n`, not `count`: i18next treats `count` as the plural
+                       selector and resolves `key_one` / `key_other` before the
+                       key itself, which does not play well with relying on the
+                       default string above while the key is not yet in the
+                       bundle. This branch is only reached for two or more. */
+                    ? t('store_profile.tech.shopify_connected_multi', 'Connected for {{n}} locations — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.', { n: shopDomains.length })
+                    : t('store_profile.tech.shopify_live_body', 'Mirror your Shopify catalogue, orders, and customers, and write POS sales back to Shopify. Set it up under Settings › Integrations.')}
+              </div>
+              <button className="btn btn-sm btn-outline sp-integration-btn" onClick={() => navigate('/integrations')}>
+                <span className="material-symbols-outlined">cable</span>
+                {shopDomains.length > 0
+                  ? t('store_profile.tech.manage_integration_btn', 'Manage integration')
+                  : t('store_profile.tech.go_to_integrations_btn', 'Go to Integrations')}
+              </button>
             </div>
           )}
           {website === 'woocommerce' && (
@@ -1233,7 +1425,13 @@ export default function StoreProfile() {
                 <div className="sp-integration-title">{t('store_profile.tech.woo_title', 'WooCommerce Integration — Coming Soon')}</div>
               </div>
               <div className="sp-integration-body">{t('store_profile.tech.woo_body', 'A Mi Italia WooCommerce plugin will allow automatic product and inventory sync between your WordPress store and Primo.')}</div>
-              <button className="btn btn-sm btn-outline sp-integration-btn"><span className="material-symbols-outlined">notifications</span>{t('store_profile.tech.notify_btn', 'Notify Me When Available')}</button>
+              {/* "Notify Me When Available" used to sit here with no onClick at
+                  all — it looked like a working button, registered nothing, and
+                  gave no feedback, so a boutique would believe it had asked to
+                  be told. There is no endpoint behind it to call. The card
+                  already says "Coming Soon"; that is the honest version of the
+                  same message. Restore the button when something can record the
+                  request. */}
             </div>
           )}
           {website === 'none' && (

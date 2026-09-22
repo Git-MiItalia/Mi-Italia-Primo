@@ -118,8 +118,6 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
   const items       = { l1: tree.map(c => c.name), l2: getTypes(), l3: getStyles() }[panel] || []
   const attrs       = getAttrs()
   const canGoBack   = panel !== 'l1'
-  const resultPath  = [state.l1, state.l2, state.l3].filter(Boolean).join(' → ')
-  const resultFinal = state.l3 ? (state.l3 + (state.l4.length ? ' · ' + state.l4.join(', ') : '')) : ''
 
   return (
     <div>

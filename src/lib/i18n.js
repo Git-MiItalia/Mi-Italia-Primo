@@ -26,12 +26,24 @@ i18n.use(initReactI18next).init({
 // addResourceBundle call the runtime fetch makes (deep merge, overwrite) so a
 // cached and a freshly-fetched bundle are applied identically.
 const cached = readCache()
+let booted = false
 if (cached) {
   try {
     i18n.addResourceBundle(cached.locale, 'translation', cached.bundle, true, true)
+    booted = true
   } catch {
     // Bad cache entry — ignore it; the runtime fetch will populate as before.
   }
 }
+
+/* Whether the first paint already has real words.
+ *
+ * False on a browser that has never loaded the bundle — a first login, a
+ * cleared profile, a private window. There is nothing to show but key names
+ * until the fetch returns, so Layout holds the first paint rather than
+ * rendering "sidebar.dashboard" across the screen for a second or two. True
+ * on every repeat visit, where the cached bundle makes that wait unnecessary
+ * and the app renders immediately as before. */
+export const hasBootBundle = booted
 
 export default i18n

@@ -19,6 +19,63 @@ const API      = import.meta.env.VITE_API_URL
 const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 // ══ Helpers ═══════════════════════════════════════════════════════════
+
+/* Which payment tab the modal opens on, from the boutique's saved preference.
+ *
+ * Store Profile › Tech Stack has always offered a "Default POS Payment Method"
+ * and told the merchant it "pre-selects the payment tab when you open POS".
+ * Nothing read it — POS opened on Cash for everyone — so the setting was a
+ * promise the till never kept.
+ *
+ * The two screens name these differently and a straight lookup would not work:
+ * the profile stores external_terminal / stripe / cash, the tabs here are
+ * cash / card / external / split. 'stripe' is this modal's simulated Stripe
+ * Terminal, which is the 'card' tab.
+ *
+ * 'external' was the missing one for a long time: a boutique on SumUp or
+ * Verifone takes the payment on its own machine and only needs Primo to record
+ * the sale, and there was no tab for that, so the till fell back to Cash and
+ * filed the sale as cash — money in the Z-report that never reached the
+ * drawer. The backend now accepts payment_method "external" and the tab
+ * exists, so the sale is recorded as what it was.
+ */
+const POS_METHOD_BY_PREFERENCE = { cash: 'cash', stripe: 'card', external_terminal: 'external' }
+
+/* Which payment tabs this boutique can actually complete.
+ *
+ * Tech Stack asks "How do you take card payments in-store?", and the answer
+ * decides what the counter is physically able to do. The modal used to draw
+ * Cash, Card and Split for everyone, so a cash-only shop was offered a Stripe
+ * screen it could never finish, and a shop on a SumUp machine was offered the
+ * same — both halfway through a real sale in front of a real customer.
+ *
+ *   none                              cash only, nothing else completes
+ *   stripe                            the integrated terminal — Card is its tab
+ *   sumup/square/verifone/bank/other  their own machine — External
+ *
+ * Split stays wherever a second method exists, since it is cash plus that.
+ *
+ * An absent profile — still loading, or never answered — keeps the old three
+ * tabs. Showing a tab that turns out to be unusable is recoverable; hiding one
+ * the shop needs, mid-sale, is not.
+ */
+function allowedMethods(profile) {
+  const terminal = profile?.payment_terminal_type
+  if (!terminal)           return ['cash', 'card', 'split']
+  if (terminal === 'none') return ['cash']
+  if (terminal === 'stripe') return ['cash', 'card', 'split']
+  return ['cash', 'external', 'split']
+}
+
+function defaultPayMethod(profile) {
+  // The two settings are saved independently, so a merchant can leave the
+  // default on Stripe after changing the terminal answer to "none" — the
+  // default is therefore filtered through what is actually on offer rather
+  // than trusted, or the till would open on a tab that is not rendered.
+  const wanted = POS_METHOD_BY_PREFERENCE[profile?.default_pos_payment_method] ?? 'cash'
+  return allowedMethods(profile).includes(wanted) ? wanted : 'cash'
+}
+
 function fmt(n) { return '€' + Number(n).toFixed(2) }
 function imgSrc(url) { return !url ? null : url.startsWith('http') ? url : `${IMG_BASE}${url}` }
 
@@ -1505,9 +1562,12 @@ function ZReportModal({ t, onClose }) {
 // ══ Payment Modal ═════════════════════════════════════════════════════
 // Handles method selection (Cash / Card / Split), doc type (DC / Fattura),
 // simulated card flow (P10=D), and POST /boutique/orders/pos.
-function PaymentModal({ t, cart, customer, discount, discountAmount, total, onClose, onSuccess, onNewSale, onReceipt }) {
+function PaymentModal({ t, cart, customer, discount, discountAmount, total, initialPayMethod, methods = ['cash', 'card', 'split'], onClose, onSuccess, onNewSale, onReceipt }) {
   const [phase, setPhase] = useState('form')   // 'form' | 'processing' | 'success' | 'error'
-  const [payMethod, setPayMethod] = useState('cash')   // 'cash' | 'card' | 'split'
+  // Opens on the boutique's saved default (see defaultPayMethod above), and
+  // falls back to Cash when the profile has not loaded or names a method with
+  // no tab. The cashier can still switch on any sale.
+  const [payMethod, setPayMethod] = useState(initialPayMethod ?? 'cash')   // 'cash' | 'card' | 'split'
   const [cashTendered, setCashTendered] = useState('')
   const [cashPortion, setCashPortion] = useState('')   // for split
   const [docType, setDocType] = useState('dc')         // 'dc' | 'fattura'
@@ -1549,9 +1609,12 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, onCl
 
   // Can we submit?
   const canSubmit = fiscalValid && (
-    payMethod === 'cash'  ? cashNum >= total :
-    payMethod === 'card'  ? true :
-    payMethod === 'split' ? cashPortionN > 0 && cashPortionN < total :
+    payMethod === 'cash'     ? cashNum >= total :
+    payMethod === 'card'     ? true :
+    // Nothing to validate: the money was taken on the boutique's own terminal
+    // before the cashier got here, and Primo is only recording that it happened.
+    payMethod === 'external' ? true :
+    payMethod === 'split'    ? cashPortionN > 0 && cashPortionN < total :
     false
   )
 
@@ -1572,7 +1635,7 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, onCl
     setPhase('processing'); setError(null)
     try {
       const body = {
-        payment_method: payMethod,   // 'cash' | 'card' | 'split'
+        payment_method: payMethod,   // 'cash' | 'card' | 'external' | 'split'
         vat_rate:       0.22,
         promo_code:     discount?.type === 'code' ? discount.code : null,
         promo_discount: discountAmount || 0,
@@ -1637,8 +1700,9 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, onCl
 
   // ── SUCCESS PHASE ────────────────────────────────────────────────────
   if (phase === 'success') {
-    const methodLabel = order?.payment_method === 'card'  ? t('pos.pay.method_card') :
-                        order?.payment_method === 'split' ? t('pos.pay.method_split') :
+    const methodLabel = order?.payment_method === 'card'     ? t('pos.pay.method_card') :
+                        order?.payment_method === 'split'    ? t('pos.pay.method_split') :
+                        order?.payment_method === 'external' ? t('pos.pay.method_external', 'External') :
                         t('pos.pay.method_cash')
     return (
       <div className="modal-backdrop" onClick={onClose}>
@@ -1713,13 +1777,19 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, onCl
           </button>
         </div>
 
-        {/* Method tabs */}
+        {/* Method tabs. A method the boutique cannot complete (see
+            allowedMethods) is dropped entirely rather than disabled: a
+            greyed-out tab still invites a tap and needs explaining at the
+            counter, and there is nothing the cashier could do to enable it
+            mid-sale anyway. For a cash-only shop one tab is left and the row
+            reads as a label, which is accurate. */}
         <div className="pos-pay-tabs">
           {[
-            { k: 'cash',  label: t('pos.pay.method_cash'),  ic: 'payments' },
-            { k: 'card',  label: t('pos.pay.tab_card'),  ic: 'credit_card' },
-            { k: 'split', label: t('pos.pay.tab_split'), ic: 'call_split' },
-          ].map(t => (
+            { k: 'cash',     label: t('pos.pay.method_cash'),  ic: 'payments' },
+            { k: 'card',     label: t('pos.pay.tab_card'),     ic: 'credit_card' },
+            { k: 'external', label: t('pos.pay.method_external', 'External'), ic: 'point_of_sale' },
+            { k: 'split',    label: t('pos.pay.tab_split'),    ic: 'call_split' },
+          ].filter(m => methods.includes(m.k)).map(t => (
             <button
               key={t.k}
               className={`pos-pay-tab${payMethod === t.k ? ' on' : ''}`}
@@ -1798,6 +1868,30 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, onCl
             <div className="pos-pay-note">
               <span className="material-symbols-outlined">info</span>
               <span>{t('pos.pay.terminal_note')}</span>
+            </div>
+          </div>
+        )}
+
+        {/* EXTERNAL TERMINAL PANEL
+            No simulate button and no keypad. The payment has already happened
+            on the boutique's own machine; the only thing left is for Primo to
+            record it, which the footer's Confirm does. The amount is shown
+            large so the cashier can check it against what they keyed into that
+            machine before committing. */}
+        {payMethod === 'external' && (
+          <div className="pos-pay-panel pos-pay-ext-panel">
+            <div className="pos-pay-card-visual">
+              <span className="material-symbols-outlined pos-pay-card-ic">point_of_sale</span>
+              <div className="pos-pay-card-msg">
+                {t('pos.pay.ext_take', 'Take the payment on your card terminal')}
+              </div>
+              <div className="pos-pay-card-sub">
+                {t('pos.pay.amount_charge')}: <strong>{fmt(total)}</strong>
+              </div>
+            </div>
+            <div className="pos-pay-note">
+              <span className="material-symbols-outlined">info</span>
+              <span>{t('pos.pay.ext_note', 'Confirm once the terminal approves it. Primo records the sale — it does not charge the card.')}</span>
             </div>
           </div>
         )}
@@ -2518,6 +2612,8 @@ export default function POS() {
           discount={discount}
           discountAmount={discountAmount}
           total={total}
+          initialPayMethod={defaultPayMethod(boutique)}
+          methods={allowedMethods(boutique)}
           onClose={() => setShowPayment(false)}
           onSuccess={handlePaymentSuccess}
           onNewSale={handleNewSale}

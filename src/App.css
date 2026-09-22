@@ -1816,7 +1816,11 @@
 .pos-pay-key .material-symbols-outlined { font-size: 20px; }
 
 /* ── Card panel ── */
-.pos-pay-card-panel {
+.pos-pay-card-panel,
+/* The external-terminal panel borrows the card panel's layout — same centred
+   icon, message and amount — because it is the same moment in the sale, just
+   on the boutique's own machine instead of Stripe's. */
+.pos-pay-ext-panel {
   text-align: center;
 }
 .pos-pay-card-visual {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
 import { sortSizeLabels } from '../common/sizechart'
+import Loading from '../components/ui/Loading'
 import {
   TAG_DIMS,
   STYLE_PALETTES,
@@ -504,10 +505,13 @@ export default function PriceTags() {
             </div>
           </div>
 
+          {/* The empty arm below used to carry pt-loading, the loading class, so
+              a finished search that matched nothing looked like one still
+              running. state-empty is the portal's empty-state style. */}
           {loading ? (
-            <div className="pt-loading">{t('common.loading', 'Loading...')}</div>
+            <Loading className="ld-cell" />
           ) : filtered.length === 0 ? (
-            <div className="pt-loading">{t('pt.select.no_products', 'No products found')}{search ? ` "${search}"` : ''}</div>
+            <div className="state-empty">{t('pt.select.no_products', 'No products found')}{search ? ` "${search}"` : ''}</div>
           ) : (
             <div className="card pt-product-table">
               <div className="pt-table-hdr">

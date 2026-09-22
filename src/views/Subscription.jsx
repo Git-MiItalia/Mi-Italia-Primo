@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../lib/api'
+import { isWhatsappEnabled } from '../lib/auth'
+import { csvRow, triggerDownload } from '../lib/csv'
 import { activeLocale } from '../lib/dateHelpers'
 import StripeCheckout from '../components/ui/StripeCheckout'
 import RangeBar from '../components/ui/RangeBar'
+import Loading from '../components/ui/Loading'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -18,6 +21,14 @@ const num  = (v) => (v == null ? '—' : Number(v).toLocaleString(activeLocale()
 const num0 = (v) => (v == null ? '—' : Number(v).toLocaleString(activeLocale(), { maximumFractionDigits: 0, useGrouping: true }))
 const amt2 = (v) => Number(v ?? 0).toLocaleString(activeLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })
 const monthShort = (d) => new Date(d).toLocaleDateString(activeLocale(), { month: 'short' })
+
+// The "Your AI Assistant" capability list and the "Your AI Stack" layer diagram
+// are hidden on every plan card at the moment — they name the model and the
+// internals (Apertus 70B, LoRA adapter, RAG index), which is more than a
+// boutique needs to choose a plan and more than we want to commit to publicly.
+// The backend still sends plan.ai_capabilities and plan.arch, and the rendering
+// is untouched below, so putting them back is this one flag.
+const SHOW_AI_DETAIL = false
 
 // Ranking used to decide upgrade/downgrade direction for the action button
 const PLAN_RANK = { starter: 0, connect: 1, pro: 2 }
@@ -113,6 +124,32 @@ function meter(entry, t) {
   }
 }
 
+/* Builds the small grey line under a meter, and returns null whenever it
+ * cannot be stated truthfully.
+ *
+ * Every hint on this card used to be a fixed sentence in the translation
+ * bundle, numbers and all: "56% of plan capacity" printed under a meter
+ * reading 18 / 500, "€0.10/msg · €38.90 this month" under one reading "Not
+ * included", "IT · EN · FR active" whatever the boutique actually had, and
+ * "Plenty of headroom" under a value of "—". Only the AI-renders hint was
+ * computed. The hint is the one part of the row a boutique cannot check
+ * against anything, so a wrong one is worse than none at all.
+ *
+ * Silent in the three cases where a percentage means nothing: `used` null is
+ * not measured yet, `limit` null is unlimited (the faded full bar already says
+ * so), and `limit` 0 is not included on this plan.
+ */
+function pctHint(entry, t) {
+  const used = entry?.used
+  if (used === null || used === undefined) return null
+  const limit = entry?.limit
+  if (limit === null || limit === undefined) return null
+  const cap = Number(limit)
+  if (!Number.isFinite(cap) || cap <= 0) return null
+  const pct = Math.min(100, Math.round((Number(used) / cap) * 100))
+  return t('sub.page.pct_of_capacity', { pct, defaultValue: '{{pct}}% of plan capacity' })
+}
+
 function UsageMeter({ label, display, hint, pct, unlimited, level = 'ok' }) {
   return (
     <div className="sub-um">
@@ -179,7 +216,7 @@ function PlanCard({ t, plan, currentPlan, imagesLeft, onUpgrade, onUpgradeConnec
           )
         })}
 
-        {(plan.ai_capabilities ?? []).length > 0 && (
+        {SHOW_AI_DETAIL && (plan.ai_capabilities ?? []).length > 0 && (
           <AiSection t={t}>
             {plan.ai_capabilities.map((c, i) => (
               <Feat
@@ -193,7 +230,7 @@ function PlanCard({ t, plan, currentPlan, imagesLeft, onUpgrade, onUpgradeConnec
           </AiSection>
         )}
 
-        <MiniArch t={t} arch={plan.arch} />
+        {SHOW_AI_DETAIL && <MiniArch t={t} arch={plan.arch} />}
       </div>
 
       {isUpgradeTo && plan.code === 'connect' && (
@@ -453,26 +490,42 @@ function AttributionTab({ t }) {
     : null
   const simFee = simTier ? ((Number(simRevenue) || 0) * simTier.rate_pct) / 100 : 0
 
+  // The date is written as a plain ISO calendar day rather than a localised one:
+  // spreadsheets sort YYYY-MM-DD correctly in every locale, whereas 16/09/2026
+  // and 09/16/2026 are the same string to Excel and it guesses. Built from the
+  // local parts, not toISOString(), which converts to UTC first and would move a
+  // sale made just after midnight in Rome back to the previous day.
+  const isoDay = (v) => {
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return ''
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+
   function exportCsv() {
-    const rows = [
-      ['Date', 'Customer', 'Item', 'Sale', 'Source', 'Rate %', 'Fee'],
-      ...txs.map(x => [
-        new Date(x.date).toISOString().slice(0, 10),
-        x.customer_name ?? '',
-        x.item ?? '',
-        x.sale_amount ?? '',
-        x.attribution_source ?? '',
-        x.commission_rate_pct ?? '',
-        x.fee_charged ?? '',
-      ]),
+    const header = [
+      t('sub.attr.csv.date',     'Date'),
+      t('sub.attr.csv.customer', 'Customer'),
+      t('sub.attr.csv.item',     'Item'),
+      t('sub.attr.csv.sale',     'Sale'),
+      t('sub.attr.csv.source',   'Source'),
+      t('sub.attr.csv.rate_pct', 'Rate %'),
+      t('sub.attr.csv.fee',      'Fee'),
     ]
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `attribution-${range}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    const body = txs.map(x => [
+      isoDay(x.date),
+      x.customer_name ?? t('sub.attr.unidentified', 'Unidentified walk-in'),
+      x.item ?? '',
+      x.sale_amount ?? '',
+      // Same label the table shows — the raw enum ("walkin", "unidentified")
+      // used to reach the file, so the export read differently from the screen.
+      SOURCE_LABEL[x.attribution_source] ?? x.attribution_source ?? '',
+      x.commission_rate_pct ?? '',
+      x.fee_charged ?? '',
+    ])
+    // triggerDownload writes the UTF-8 BOM Excel needs to read accented
+    // Italian labels, which the hand-rolled Blob here did not.
+    triggerDownload([csvRow(header), ...body.map(csvRow)].join('\n'), `attribution-${range}.csv`)
   }
 
   return (
@@ -485,10 +538,18 @@ function AttributionTab({ t }) {
         onRangeChange={setRange}
         onCompareChange={setCompare}
         onCustomApply={r => { setCustomRange(r); setRange('custom') }}
-        onExport={() => {}}
+        /* This was `() => {}` — the Export button in the bar rendered and
+           clicked, but did nothing at all, while the identical button over the
+           transactions table below did the real work. Both now run the same
+           export. Passing undefined rather than a disabled handler is how
+           RangeBar hides the button, so with nothing to export there is no
+           button to click instead of one that silently fails. */
+        onExport={txs.length ? exportCsv : undefined}
       />
 
-      {attrLoading && <div className="dc-loading">{t('common.loading', 'Loading') + '…'}</div>}
+      {/* was className="dc-loading" — a class with no CSS anywhere, so this
+          rendered as unstyled text while the page spinner above was styled. */}
+      {attrLoading && <Loading />}
       {attrError && <div className="alert alert-urgent">{attrError}</div>}
 
       {!attrLoading && !attrError && attr && (
@@ -1038,11 +1099,7 @@ export default function Subscription() {
     { key: 'billing',     icon: 'receipt_long', label: t('sub.page.tab_billing')     },
   ]
 
-  if (loading) return (
-    <div className="sub-loading">
-      <span className="material-symbols-outlined sub-loading-icon">sync</span>
-    </div>
-  )
+  if (loading) return <Loading page />
 
   return (
     <div className="sub-wrap">
@@ -1114,13 +1171,27 @@ export default function Subscription() {
             <div className="sub-usage-grid">
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_contacts')}</div>
-                <UsageMeter label={t('sub.page.total_contacts')} {...meter(usage.contacts, t)}    hint={t('sub.page.contacts_hint')} />
+                <UsageMeter label={t('sub.page.total_contacts')} {...meter(usage.contacts, t)}    hint={pctHint(usage.contacts, t)} />
                 <UsageMeter label={t('sub.page.item_savers')}    {...meter(usage.item_savers, t)} hint={t('sub.page.savers_hint')} />
               </div>
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_campaigns')}</div>
                 <UsageMeter label={t('sub.page.email_campaigns')} {...meter(usage.email_campaigns, t)} hint={t('sub.page.email_hint')} />
-                <UsageMeter label={t('sub.page.wa_sends')}        {...meter(usage.whatsapp_sends, t)}  hint={t('sub.page.wa_hint')} />
+                {/* A boutique with no WhatsApp entitlement cannot send on it at
+                    all, so reporting its usage of the channel is noise — and
+                    the hint quotes a per-message price it can never be
+                    charged. Entitlement is account-level, not a plan tier, so
+                    this is not an upsell we are hiding.
+
+                    The rate itself is a standing fact and stays. The
+                    "· €38.90 this month" that used to follow it was a fixed
+                    string in the bundle, so every boutique on WhatsApp saw the
+                    same invented charge. A money figure is not something to
+                    derive from a rate held client-side — the real one belongs
+                    in the payload, or on Billing where the invoices are. */}
+                {isWhatsappEnabled() && (
+                  <UsageMeter label={t('sub.page.wa_sends')} {...meter(usage.whatsapp_sends, t)} hint={t('sub.page.wa_rate', '€0.10/msg')} />
+                )}
               </div>
               <div>
                 <div className="sub-sec-lbl sub-sec-lbl-first">{t('sub.page.sec_ai')}</div>
@@ -1145,8 +1216,12 @@ export default function Subscription() {
                     </div>
                   )
                 })()}
-                <UsageMeter label={t('sub.page.ai_messages')}      {...meter(usage.ai_messages, t)}           hint={t('sub.page.ai_msg_hint')} />
-                <UsageMeter label={t('sub.page.translation_langs')} {...meter(usage.translation_languages, t)} hint={t('sub.page.langs_hint')} />
+                <UsageMeter label={t('sub.page.ai_messages')}      {...meter(usage.ai_messages, t)}           hint={pctHint(usage.ai_messages, t)} />
+                {/* No hint: the old one named three specific languages, and
+                    nothing in the portal or in /subscription knows which ones
+                    a boutique actually has — the payload carries a count and
+                    a limit, nothing more. The meter already shows both. */}
+                <UsageMeter label={t('sub.page.translation_langs')} {...meter(usage.translation_languages, t)} />
               </div>
             </div>
           </div>
@@ -1234,7 +1309,6 @@ export default function Subscription() {
         <StripeCheckout
           plan="pro"
           onClose={() => setCheckoutOpen(false)}
-          onSuccess={() => window.location.reload()}
         />
       )}
 
