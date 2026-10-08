@@ -7,6 +7,8 @@ import { dayAgo } from '../lib/timeAgo'
 import RangeBar from '../components/ui/RangeBar'
 import Loading from '../components/ui/Loading'
 import { PR_TODAY, fmtDateLocalized, activeLocale } from '../lib/dateHelpers'
+import Toggle from '../components/ui/Toggle'
+import { imgUrl as favImgSrc } from '../lib/imageUrl'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -39,10 +41,10 @@ const SEG_AVATAR = {
 
 function langDisplayName(code, t) {
   const names = {
-    it: t('eng.lang_name.it', 'Italian'), en: t('eng.lang_name.en', 'English'), fr: t('eng.lang_name.fr', 'French'),
-    de: t('eng.lang_name.de', 'German'), es: t('eng.lang_name.es', 'Spanish'), ar: t('eng.lang_name.ar', 'Arabic'),
-    zh: t('eng.lang_name.zh', 'Mandarin'), ja: t('eng.lang_name.ja', 'Japanese'),
-    hi: t('eng.lang_name.hi', 'Hindi'), pt: t('eng.lang_name.pt', 'Portuguese'),
+    it: t('eng.lang_name.it'), en: t('eng.lang_name.en'), fr: t('eng.lang_name.fr'),
+    de: t('eng.lang_name.de'), es: t('eng.lang_name.es'), ar: t('eng.lang_name.ar'),
+    zh: t('eng.lang_name.zh'), ja: t('eng.lang_name.ja'),
+    hi: t('eng.lang_name.hi'), pt: t('eng.lang_name.pt'),
   }
   return names[code] || code
 }
@@ -77,15 +79,15 @@ const LANG_META = {
 
 
 function langSrcLabel(src, t) {
-  return src === 'user_set'  ? t('eng.ct.lang_src_user_set', 'User-set')
-       : src === 'staff_set' ? t('eng.ct.lang_src_staff_set', 'Staff-set')
-       : src === 'detected'  ? t('eng.ct.lang_src_detected', 'Detected')
-       : src === 'unknown' || !src ? t('eng.ct.lang_src_fallback', 'Fallback · EN')
+  return src === 'user_set'  ? t('eng.ct.lang_src_user_set')
+       : src === 'staff_set' ? t('eng.ct.lang_src_staff_set')
+       : src === 'detected'  ? t('eng.ct.lang_src_detected')
+       : src === 'unknown' || !src ? t('eng.ct.lang_src_fallback')
        : src
 }
 
 function mapCustomer(c, t) {
-  const name = (c.name || '').trim() || t('eng.ct.unnamed', 'Unnamed')
+  const name = (c.name || '').trim() || t('eng.ct.unnamed')
   const code = c.language?.code
   const langInfo = code ? { flag: LANG_MAP[code]?.flag ?? code.toUpperCase(), name: langDisplayName(code, t) } : null
   const src = c.language?.source
@@ -95,8 +97,8 @@ function mapCustomer(c, t) {
   const yn = (b) => b ? 'yes' : 'no'
   const spend = Number(c.total_spend || 0)
   const sourceLabels = {
-    walkin: t('eng.ct.source_walkin', 'In-store'), csv: t('eng.ct.source_csv', 'CSV Import'),
-    mi_italia: t('eng.ct.source_mi', 'Mi Italia'), online: t('eng.ct.source_online', 'Online'),
+    walkin: t('eng.ct.source_walkin'), csv: t('eng.ct.source_csv'),
+    mi_italia: t('eng.ct.source_mi'), online: t('eng.ct.source_online'),
   }
   return {
     id:           c.id,
@@ -107,7 +109,7 @@ function mapCustomer(c, t) {
     seg:          c.segment || 'new',
     langCode:     code || 'unknown',
     lang:         langInfo ? langInfo.flag : '?',
-    langName:     langInfo ? langInfo.name : t('eng.ct.unknown', 'Unknown'),
+    langName:     langInfo ? langInfo.name : t('eng.ct.unknown'),
     langSrc,
     purchases:    c.purchase_count || 0,
     favorites:    c.favorite_count || 0,
@@ -116,7 +118,7 @@ function mapCustomer(c, t) {
     email:        yn(cn.email),
     wa:           yn(cn.whatsapp),
     print:        yn(cn.print),
-    src:          sourceLabels[c.source] || c.source || t('eng.ct.unknown', 'Unknown'),
+    src:          sourceLabels[c.source] || c.source || t('eng.ct.unknown'),
     last:         timeAgo(c.last_visit_at || c.created_at, t),
   }
 }
@@ -249,15 +251,10 @@ const favoritesApi = {
                                       }).then(r => r.json()),
 }
 
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL ?? ''
-function favImgSrc(url) {
-  if (!url) return null
-  return url.startsWith('http') ? url : `${IMG_BASE}${url}`
-}
 
 // Convert "aw25_new_arrivals" → "AW25 New Arrivals"
 const templateDisplayName = (key, t) => {
-  if (!key) return t('eng.tpl.untitled', 'Untitled template')
+  if (!key) return t('eng.tpl.untitled')
   return key.split('_')
     .map(w => /^(aw|ss|fw|sp)\d*$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ')
@@ -325,14 +322,14 @@ const realCampaignStats = (c, t) => {
   const channel = channelKey(c.channel)
 
   if (channel === 'wa') return [
-    { val:fmtPct(c.open_rate),  lbl:t('eng.camp.stat_read', 'read') },
-    { val:fmtPct(c.click_rate), lbl:t('eng.camp.stat_replied', 'replied') },
-    { val:fmtNum(c.recipients), lbl:t('eng.camp.stat_recipients', 'recipients') },
+    { val:fmtPct(c.open_rate),  lbl:t('eng.camp.stat_read') },
+    { val:fmtPct(c.click_rate), lbl:t('eng.camp.stat_replied') },
+    { val:fmtNum(c.recipients), lbl:t('eng.camp.stat_recipients') },
   ]
   return [
-    { val:fmtPct(c.open_rate),  lbl:t('eng.camp.stat_opened', 'opened') },
-    { val:fmtPct(c.click_rate), lbl:t('eng.camp.stat_clicked', 'clicked') },
-    { val:fmtNum(c.recipients), lbl:t('eng.camp.stat_recipients', 'recipients') },
+    { val:fmtPct(c.open_rate),  lbl:t('eng.camp.stat_opened') },
+    { val:fmtPct(c.click_rate), lbl:t('eng.camp.stat_clicked') },
+    { val:fmtNum(c.recipients), lbl:t('eng.camp.stat_recipients') },
   ]
 }
 
@@ -340,12 +337,15 @@ const realCampaignStats = (c, t) => {
 // One mapper for campaign status so the Overview card and the Campaigns list
 // can't disagree — Overview used to print the raw enum ("scheduled") next to a
 // Campaigns tab showing "Scheduled" for the very same campaign.
+// The backend validator gives the full set: draft, scheduled, sending, sent,
+// failed. 'in_review' and 'recurring' were mapped here but are not values the
+// API can produce, so those branches were dead. 'failed' is handled by the
+// shared map below; 'sending' had no key and printed as English "Sending".
 function campaignStatusLabel(status, t) {
-  return status === 'sent'      ? t('eng.camp.status_sent', 'Sent')
-       : status === 'draft'     ? t('eng.camp.status_draft', 'Draft')
-       : status === 'scheduled' ? t('eng.camp.status_scheduled', 'Scheduled')
-       : status === 'in_review' ? t('eng.camp.status_in_review', 'In Review')
-       : status === 'recurring' ? t('eng.camp.status_recurring', 'Recurring')
+  return status === 'sent'      ? t('eng.camp.status_sent')
+       : status === 'draft'     ? t('eng.camp.status_draft')
+       : status === 'scheduled' ? t('eng.camp.status_scheduled')
+       : status === 'sending'   ? t('eng.camp.status_sending')
        : statusLabelShared(t, status)
 }
 
@@ -361,11 +361,11 @@ function mapApiCampaignCard(c, t) {
 
   const seg = c.target_segment
   const segLabels = {
-    vip: t('eng.camp.seg_vip', 'VIP'), loyal: t('eng.camp.seg_loyal', 'Loyal'), new: t('eng.camp.seg_new', 'New'),
-    warm: t('eng.camp.seg_warm', 'Warm'), lapsed: t('eng.camp.seg_lapsed', 'Lapsed'), all: t('eng.camp.seg_all', 'All contacts'),
+    vip: t('eng.camp.seg_vip'), loyal: t('eng.camp.seg_loyal'), new: t('eng.camp.seg_new'),
+    warm: t('eng.camp.seg_warm'), lapsed: t('eng.camp.seg_lapsed'), all: t('eng.camp.seg_all'),
   }
   const segs = !seg ? []
-             : seg === 'all' ? [{ key:'neutral', label:t('eng.camp.seg_all', 'All contacts') }]
+             : seg === 'all' ? [{ key:'neutral', label:t('eng.camp.seg_all') }]
              : [{ key: seg, label: segLabels[seg] || seg }]
 
   return {
@@ -382,20 +382,12 @@ function mapApiCampaignCard(c, t) {
     stats: c.status === 'sent' ? realCampaignStats(c, t) : null,
     actions: status === 'draft'
       ? [
-          { label:t('common.edit', 'Edit'), cls:'btn-outline', action:'edit' },
-          { label:t('eng.camp.action_submit', 'Submit'), cls:'btn-primary', action:'submit' },
-          { label:t('common.delete', 'Delete'), cls:'btn-outline btn-red', action:'delete' },
+          { label:t('common.edit'), cls:'btn-outline', action:'edit' },
+          { label:t('eng.camp.action_submit'), cls:'btn-primary', action:'submit' },
+          { label:t('common.delete'), cls:'btn-outline btn-red', action:'delete' },
         ]
       : null,
   }
-}
-
-function Toggle({ on, onToggle }) {
-  return (
-    <div className={`toggle${on ? ' on' : ''}`} onClick={onToggle}>
-      <div className="toggle-knob" />
-    </div>
-  )
 }
 
 function ConsentDot({ channel, state }) {
@@ -411,11 +403,11 @@ function ConsentDot({ channel, state }) {
 function SegBadge({ seg }) {
   const { t } = useTranslation()
   const map = {
-    vip:    { cls:'seg-vip',    icon:'★', label:t('eng.camp.seg_vip', 'VIP') },
-    loyal:  { cls:'seg-loyal',  icon:'♻', label:t('eng.camp.seg_loyal', 'Loyal') },
-    new:    { cls:'seg-new',    icon:'✦', label:t('eng.camp.seg_new', 'New') },
-    warm:   { cls:'seg-warm',   icon:'🔥', label:t('eng.camp.seg_warm', 'Warm') },
-    lapsed: { cls:'seg-lapsed', icon:'⏱', label:t('eng.camp.seg_lapsed', 'Lapsed') },
+    vip:    { cls:'seg-vip',    icon:'★', label:t('eng.camp.seg_vip') },
+    loyal:  { cls:'seg-loyal',  icon:'♻', label:t('eng.camp.seg_loyal') },
+    new:    { cls:'seg-new',    icon:'✦', label:t('eng.camp.seg_new') },
+    warm:   { cls:'seg-warm',   icon:'🔥', label:t('eng.camp.seg_warm') },
+    lapsed: { cls:'seg-lapsed', icon:'⏱', label:t('eng.camp.seg_lapsed') },
   }
   const s = map[seg] || { cls:'seg-new', icon:'', label:seg }
   return <span className={`seg ${s.cls}`}>{s.icon} {s.label}</span>
@@ -456,7 +448,7 @@ function ChBar({ icon, iconColor, label, val, pct, barColor, soon }) {
         <span className="eng-ch-label">
           <span className="material-symbols-outlined eng-ch-icon" style={{color:iconColor}}>{icon}</span>
           {label}
-          {soon && <span className="eng-soon-tag">{t('eng.camp.soon_tag', 'SOON')}</span>}
+          {soon && <span className="eng-soon-tag">{t('eng.camp.soon_tag')}</span>}
         </span>
         <span className={`eng-ch-val${soon ? ' eng-ch-val-muted' : ''}`}>{val}</span>
       </div>
@@ -494,15 +486,20 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
   const printR  = dashboard?.print_reach  ?? '—'
   const revenue = dashboard?.revenue ?? '—'
 
-  const chPerf = (ch) => (dashboard?.channel_performance ?? []).find(c => c.channel === ch)
+  // The API's channel enum is email | whatsapp | push, but this panel asks for
+  // 'wa'. Matching the raw values meant the WhatsApp bar never found its row
+  // and always read "—", however many WhatsApp campaigns had been sent.
+  // Normalise both sides through channelKey so the names cannot drift again.
+  const chPerf = (ch) => (dashboard?.channel_performance ?? [])
+    .find(c => channelKey(c.channel) === channelKey(ch))
   const chPct  = (ch, field) => { const c = chPerf(ch); return c ? Number(c[field]) : null }
   const chVal  = (ch, field, suffix = '%') => { const v = chPct(ch, field); return v == null ? '—' : `${v}${suffix}` }
 
   const activityDot = (kind) =>
     kind === 'campaign_sent' ? 'var(--gold)' : kind === 'contact_added' ? 'var(--green)' : 'var(--stone)'
   const activityAction = (kind) =>
-    kind === 'campaign_sent' ? t('eng.ov.activity_campaign_sent', 'campaign sent')
-    : kind === 'contact_added' ? t('eng.ov.activity_contact_added', 'added as a new contact')
+    kind === 'campaign_sent' ? t('eng.ov.activity_campaign_sent')
+    : kind === 'contact_added' ? t('eng.ov.activity_contact_added')
     : kind.replace(/_/g, ' ')
   const liveActivity = dashboard?.activity_feed ?? []
 
@@ -511,8 +508,8 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
     return { icon: ic.icon, iconColor: ic.color, name: a.name, sent: null, status: a.enabled ? 'on' : 'paused' }
   })
   const segLabels = {
-    vip: t('eng.camp.seg_vip', 'VIP'), loyal: t('eng.camp.seg_loyal', 'Loyal'), new: t('eng.camp.seg_new', 'New'),
-    warm: t('eng.camp.seg_warm', 'Warm'), lapsed: t('eng.camp.seg_lapsed', 'Lapsed'), all: t('eng.camp.seg_all', 'All contacts'),
+    vip: t('eng.camp.seg_vip'), loyal: t('eng.camp.seg_loyal'), new: t('eng.camp.seg_new'),
+    warm: t('eng.camp.seg_warm'), lapsed: t('eng.camp.seg_lapsed'), all: t('eng.camp.seg_all'),
   }
   const campList = (Array.isArray(campaigns) ? campaigns : []).slice(0, 3).map(c => ({
     campaign_name: c.campaign_name,
@@ -541,27 +538,27 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
     <div>
       <div className="alert alert-gdpr mkt-gdpr-alert">
         <span className="material-symbols-outlined">gpp_good</span>
-        <div><strong>{t('eng.ov.gdpr_title', 'GDPR Compliant.')}</strong> {t('eng.ov.gdpr_body', 'Mi Italia manages per-channel consent for every customer. You can only reach customers who have explicitly opted in for each channel. Consent records are stored and auditable.')}</div>
+        <div><strong>{t('eng.ov.gdpr_title')}</strong> {t('eng.ov.gdpr_body')}</div>
       </div>
 
       {/* KPI Row */}
-      {ovFailed && <div className="eng-error eng-mb18">{t('eng.ov.err_trends', 'Could not load the trend comparison — the figures below are current but have no “vs prior period” change.')}</div>}
+      {ovFailed && <div className="eng-error eng-mb18">{t('eng.ov.err_trends')}</div>}
 
       {/* Without the WhatsApp entitlement this row is one card shorter, so it
           drops to the default 4-column grid instead of leaving a gap. */}
       <div className={`stat-row${waOn ? ' col5' : ''}`}>
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.ov.total_contacts', 'Total Contacts')}</div>
+          <div className="stat-lbl">{t('eng.ov.total_contacts')}</div>
           <div className="stat-val">{total || '—'}</div>
           {ovDelta('new_contacts') != null && (
             <div className={`stat-change ${ovDelta('new_contacts') < 0 ? 'down' : 'up'}`}>
-              {ovDelta('new_contacts') >= 0 ? '↑ +' : '↓ '}{ovDelta('new_contacts')}% {t('eng.ov.vs_last_30d', 'vs prior 30 days')}
+              {ovDelta('new_contacts') >= 0 ? '↑ +' : '↓ '}{ovDelta('new_contacts')}% {t('eng.ov.vs_last_30d')}
             </div>
           )}
         </div>
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
-            <span className="material-symbols-outlined stat-icon-email">mail</span>{t('eng.ov.email_reach', 'Email Reach')}
+            <span className="material-symbols-outlined stat-icon-email">mail</span>{t('eng.ov.email_reach')}
           </div>
           <div className="stat-val">{emailR}</div>
           <div className="stat-sub">{t('eng.ov.email_sub_real', { rate: chVal('email', 'open_rate'), defaultValue: 'Avg open {{rate}}' })}</div>
@@ -569,7 +566,7 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
         {waOn && (
           <div className="stat-card">
             <div className="stat-lbl stat-lbl-icon">
-              <span className="material-symbols-outlined stat-icon-wa">chat</span>{t('eng.ov.wa_reach', 'WhatsApp Reach')}
+              <span className="material-symbols-outlined stat-icon-wa">chat</span>{t('eng.ov.wa_reach')}
             </div>
             <div className="stat-val">{waR}</div>
             <div className="stat-sub">{t('eng.ov.wa_sub_real', { rate: chVal('wa', 'open_rate'), defaultValue: 'Avg read {{rate}}' })}</div>
@@ -577,17 +574,17 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
         )}
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
-            <span className="material-symbols-outlined stat-icon-print">description</span>{t('eng.ov.print_insert', 'Printed insert')}
+            <span className="material-symbols-outlined stat-icon-print">description</span>{t('eng.ov.print_insert')}
           </div>
           <div className="stat-val">{printR}</div>
           <div className="stat-sub">{t('eng.ov.print_sub_real', { rate: chVal('print', 'click_rate'), defaultValue: 'QR scan rate {{rate}}' })}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.ov.revenue_attr', 'Revenue Attributed')}</div>
+          <div className="stat-lbl">{t('eng.ov.revenue_attr')}</div>
           <div className="stat-val">{revenue !== '—' ? `€${revenue}` : '—'}</div>
           {ovDelta('attributed_revenue') != null && (
             <div className={`stat-change ${ovDelta('attributed_revenue') < 0 ? 'down' : 'up'}`}>
-              {ovDelta('attributed_revenue') >= 0 ? '↑ +' : '↓ '}{ovDelta('attributed_revenue')}% {t('eng.ov.vs_last_30d', 'vs prior 30 days')}
+              {ovDelta('attributed_revenue') >= 0 ? '↑ +' : '↓ '}{ovDelta('attributed_revenue')}% {t('eng.ov.vs_last_30d')}
             </div>
           )}
         </div>
@@ -597,37 +594,37 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
       <div className="grid2 mkt-row2">
         <div className="card card-flush">
           <div className="card-hdr">
-            <div className="card-title">{t('eng.ov.ch_perf', 'Channel')} <em>{t('eng.ov.ch_perf_em', 'Performance')}</em></div>
+            <div className="card-title">{t('eng.ov.ch_perf')} <em>{t('eng.ov.ch_perf_em')}</em></div>
             {/* A "Last 30 / 90 days" picker used to sit here but could never
                 work: these bars come from /boutique/marketing/dashboard, which
                 takes no range parameter. Restore it once the endpoint does. */}
-            <div className="chart-hd-sub">{t('eng.ov.last_30d', 'Last 30 days')}</div>
+            <div className="chart-hd-sub">{t('eng.ov.last_30d')}</div>
           </div>
-          <div className="eng-section-lbl">{t('eng.ov.open_read', 'Open / Read Rate')}</div>
+          <div className="eng-section-lbl">{t('eng.ov.open_read')}</div>
           <div className="eng-ch-row mkt-ch-block">
-            <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email', 'Email')}          val={chVal('email', 'open_rate')}   pct={chPct('email', 'open_rate') ?? 0}  barColor="var(--gold)"  />
-            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp', 'WhatsApp')}       val={chVal('wa', 'open_rate')}      pct={chPct('wa', 'open_rate') ?? 0}     barColor="var(--wa)"    />}
-            <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_dm', 'Instagram DM')}   val="—"        pct={0}  barColor="transparent"  soon />
-            <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.print_insert', 'Printed insert')} val={chVal('print', 'open_rate')}   pct={chPct('print', 'open_rate') ?? 0}  barColor="var(--stone)" />
+            <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email')}          val={chVal('email', 'open_rate')}   pct={chPct('email', 'open_rate') ?? 0}  barColor="var(--gold)"  />
+            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp')}       val={chVal('wa', 'open_rate')}      pct={chPct('wa', 'open_rate') ?? 0}     barColor="var(--wa)"    />}
+            <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_dm')}   val="—"        pct={0}  barColor="transparent"  soon />
+            <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.print_insert')} val={chVal('print', 'open_rate')}   pct={chPct('print', 'open_rate') ?? 0}  barColor="var(--stone)" />
           </div>
-          <div className="eng-section-lbl">{t('eng.ov.click_reply', 'Click-through / Reply Rate')}</div>
+          <div className="eng-section-lbl">{t('eng.ov.click_reply')}</div>
           <div className="eng-ch-row">
-            <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email_click', 'Email click')}     val={chVal('email', 'click_rate')} pct={chPct('email', 'click_rate') ?? 0} barColor="var(--gold)"  />
-            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp_reply', 'WhatsApp reply')}  val={chVal('wa', 'click_rate')}    pct={chPct('wa', 'click_rate') ?? 0}    barColor="var(--wa)"    />}
-            <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_reply', 'Instagram reply')} val="—"   pct={0}  barColor="transparent"  soon />
-            <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.ch_print_qr', 'Print QR scan')}   val={chVal('print', 'click_rate')} pct={chPct('print', 'click_rate') ?? 0} barColor="var(--stone)" />
+            <ChBar icon="mail"         iconColor="var(--gold-dk)" label={t('eng.ov.ch_email_click')}     val={chVal('email', 'click_rate')} pct={chPct('email', 'click_rate') ?? 0} barColor="var(--gold)"  />
+            {waOn && <ChBar icon="chat" iconColor="#1a9e4d"        label={t('eng.ov.ch_whatsapp_reply')}  val={chVal('wa', 'click_rate')}    pct={chPct('wa', 'click_rate') ?? 0}    barColor="var(--wa)"    />}
+            <ChBar icon="photo_camera" iconColor="#DD2A7B"        label={t('eng.ov.ch_instagram_reply')} val="—"   pct={0}  barColor="transparent"  soon />
+            <ChBar icon="description"  iconColor="var(--stone)"   label={t('eng.ov.ch_print_qr')}   val={chVal('print', 'click_rate')} pct={chPct('print', 'click_rate') ?? 0} barColor="var(--stone)" />
           </div>
         </div>
 
         <div className="card card-flush">
           <div className="card-hdr">
-            <div className="card-title">{t('eng.ov.seg_health', 'Segment')} <em>{t('eng.ov.seg_health_em', 'Health')}</em></div>
-            <button className="card-action" onClick={onManageContacts}>{t('eng.ov.manage', '→ Manage')}</button>
+            <div className="card-title">{t('eng.ov.seg_health')} <em>{t('eng.ov.seg_health_em')}</em></div>
+            <button className="card-action" onClick={onManageContacts}>{t('eng.ov.manage')}</button>
           </div>
           <table className="tbl">
             <thead>
               <tr>
-                <th>{t('eng.ov.col_seg', 'Segment')}</th><th>{t('eng.ov.col_contacts', 'Contacts')}</th><th>{t('eng.ov.col_engaged', 'Engaged')}</th><th>{t('eng.ov.col_langs', 'Languages')}</th><th>{t('eng.ov.col_last_camp', 'Last Campaign')}</th><th></th>
+                <th>{t('eng.ov.col_seg')}</th><th>{t('eng.ov.col_contacts')}</th><th>{t('eng.ov.col_engaged')}</th><th>{t('eng.ov.col_langs')}</th><th>{t('eng.ov.col_last_camp')}</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -646,14 +643,14 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
                         className={`btn btn-xs ${s.key === 'lapsed' ? 'btn-red' : 'btn-outline'}`}
                         onClick={() => onNewCampaign(s.key)}
                       >
-                        {s.key === 'lapsed' ? t('eng.ov.reengage', 'Re-engage') : t('eng.ov.send', 'Send')}
+                        {s.key === 'lapsed' ? t('eng.ov.reengage') : t('eng.ov.send')}
                       </button>
                     </td>
                   </tr>
                 )
               })}
               {segsArr.length === 0 && (
-                <tr><td colSpan={6} className="empty">{t('eng.ov.no_segments', 'No segments yet')}</td></tr>
+                <tr><td colSpan={6} className="empty">{t('eng.ov.no_segments')}</td></tr>
               )}
             </tbody>
           </table>
@@ -664,10 +661,10 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
       <div className="grid2">
         <div className="card card-flush">
           <div className="card-hdr">
-            <div className="card-title">{t('eng.ov.recent_camp', 'Recent')} <em>{t('eng.ov.recent_camp_em', 'Campaigns')}</em></div>
-            <button className="card-action" onClick={onViewAllCampaigns}>{t('eng.ov.all_campaigns', '→ All campaigns')}</button>
+            <div className="card-title">{t('eng.ov.recent_camp')} <em>{t('eng.ov.recent_camp_em')}</em></div>
+            <button className="card-action" onClick={onViewAllCampaigns}>{t('eng.ov.all_campaigns')}</button>
           </div>
-          {campList.length === 0 && <div className="eng-loading">{t('eng.ov.no_campaigns', 'No campaigns yet.')}</div>}
+          {campList.length === 0 && <div className="eng-loading">{t('eng.ov.no_campaigns')}</div>}
           {campList.map((c, i) => (
             <div key={i} className="rc-item">
               <div className={`rc-icon ${c.channel}`}>
@@ -690,11 +687,11 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
                 <div className="rc-stats">
                   <div className="rc-stat">
                     <div className="rc-stat-val">{c.open}</div>
-                    <div className="rc-stat-lbl">{c.channel === 'wa' ? t('eng.ov.stat_read', 'READ') : t('eng.ov.stat_opened', 'OPENED')}</div>
+                    <div className="rc-stat-lbl">{c.channel === 'wa' ? t('eng.ov.stat_read') : t('eng.ov.stat_opened')}</div>
                   </div>
                   <div className="rc-stat">
                     <div className="rc-stat-val">{c.metric ?? c.clicked}</div>
-                    <div className="rc-stat-lbl">{c.metricLbl ?? t('eng.ov.stat_clicked', 'CLICKED')}</div>
+                    <div className="rc-stat-lbl">{c.metricLbl ?? t('eng.ov.stat_clicked')}</div>
                   </div>
                 </div>
               )}
@@ -705,9 +702,9 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
         <div className="overview-right-col">
           <div className="card card-flush">
             <div className="card-hdr">
-              <div className="card-title">{t('eng.ov.live_activity', 'Live')} <em>{t('eng.ov.live_activity_em', 'Activity')}</em></div>
+              <div className="card-title">{t('eng.ov.live_activity')} <em>{t('eng.ov.live_activity_em')}</em></div>
             </div>
-            {liveActivity.length === 0 && <div className="eng-loading">{t('eng.ov.no_activity', 'No recent activity.')}</div>}
+            {liveActivity.length === 0 && <div className="eng-loading">{t('eng.ov.no_activity')}</div>}
             {liveActivity.map((a, i) => (
               <div key={i} className="live-act-item">
                 <div className="live-act-dot" style={{background:activityDot(a.kind)}} />
@@ -724,16 +721,16 @@ function OverviewView({ segments, dashboard, campaigns, loading, onNewCampaign, 
 
           <div className="card card-flush">
             <div className="card-hdr">
-              <div className="card-title">{t('eng.ov.auto_running', 'Automations')} <em>{t('eng.ov.auto_running_em', 'Running')}</em></div>
+              <div className="card-title">{t('eng.ov.auto_running')} <em>{t('eng.ov.auto_running_em')}</em></div>
               <span className="material-symbols-outlined auto-running-fwd" onClick={onManageAutomations}>arrow_forward</span>
             </div>
-            {autoRunning.length === 0 && <div className="eng-loading">{t('eng.auto.empty', 'No automations yet — create one to get started.')}</div>}
+            {autoRunning.length === 0 && <div className="eng-loading">{t('eng.auto.empty')}</div>}
             {autoRunning.map((a, i) => (
               <div key={i} className="auto-running-row">
                 <span className="material-symbols-outlined auto-running-icon" style={{color:a.iconColor}}>{a.icon}</span>
                 <span className="auto-running-name">{a.name}</span>
                 {a.sent && <span className="auto-running-sent">{a.sent}</span>}
-                <span className={`auto-running-badge ${a.status}`}>{a.status === 'on' ? t('eng.auto.on', 'On') : t('eng.auto.paused_label', 'Paused')}</span>
+                <span className={`auto-running-badge ${a.status}`}>{a.status === 'on' ? t('eng.auto.on') : t('eng.auto.paused_label')}</span>
               </div>
             ))}
           </div>
@@ -775,6 +772,7 @@ function ContactsView({ onContactsChanged, segments }) {
   const [addSegment, setAddSegment] = useState('new')
   const [addNotes, setAddNotes]     = useState('')
   const [addError, setAddError]     = useState('')
+  const [addSaving, setAddSaving]   = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [segFilter,   setSegFilter]   = useState(null)
@@ -828,10 +826,10 @@ function ContactsView({ onContactsChanged, segments }) {
         } else {
           // Without this the list silently stayed on the previous page's rows,
           // so a failed search looked like "no results".
-          setListError(res?.message || t('eng.ct.err_load', 'Could not load contacts.'))
+          setListError(res?.message || t('eng.ct.err_load'))
         }
       })
-      .catch(() => setListError(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setListError(t('eng.ct.err_network')))
       .finally(() => setLoadingList(false))
   }
   const goToPage = (targetPage) => {
@@ -852,10 +850,10 @@ function ContactsView({ onContactsChanged, segments }) {
     setBulkBusy(true)
     bulkAction('add_to_segment', { segment })
       .then(res => {
-        setBulkNote(res?.message || (res?.success ? t('eng.ct.bulk_segment_done', 'Contacts updated.') : t('eng.ct.bulk_failed', 'Bulk action failed.')))
+        setBulkNote(res?.message || (res?.success ? t('eng.ct.bulk_segment_done') : t('eng.ct.bulk_failed')))
         if (res?.success)  { refetchContacts(); onContactsChanged?.() }
       })
-      .catch(() => setBulkNote(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setBulkNote(t('eng.ct.err_network')))
       .finally(() => { setBulkBusy(false); setBulkSegment(''); setTimeout(() => setBulkNote(''), 4000) })
   }
 
@@ -878,12 +876,12 @@ function ContactsView({ onContactsChanged, segments }) {
           a.click()
           a.remove()
           URL.revokeObjectURL(url)
-          setBulkNote(res.message || t('eng.ct.bulk_export_done', 'Export downloaded.'))
+          setBulkNote(res.message || t('eng.ct.bulk_export_done'))
         } else {
-          setBulkNote(res?.message || t('eng.ct.bulk_failed', 'Bulk action failed.'))
+          setBulkNote(res?.message || t('eng.ct.bulk_failed'))
         }
       })
-      .catch(() => setBulkNote(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setBulkNote(t('eng.ct.err_network')))
       .finally(() => { setBulkBusy(false); setTimeout(() => setBulkNote(''), 4000) })
   }
 
@@ -900,9 +898,9 @@ function ContactsView({ onContactsChanged, segments }) {
     sendMessage(messageContactIds, { subject: bulkMsgSubject, message: bulkMsgBody })
       .then(res => {
         if (res?.success) setBulkMsgResult(res.data)
-        else setBulkNote(res?.message || t('eng.ct.bulk_failed', 'Bulk action failed.'))
+        else setBulkNote(res?.message || t('eng.ct.bulk_failed'))
       })
-      .catch(() => setBulkNote(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setBulkNote(t('eng.ct.err_network')))
       .finally(() => setBulkBusy(false))
   }
 
@@ -912,7 +910,7 @@ function ContactsView({ onContactsChanged, segments }) {
 
   const pickImportFile = (file) => {
     if (!file) return
-    if (!file.name.toLowerCase().endsWith('.csv')) { setImportError(t('eng.ct.err_csv_only', 'Please choose a .csv file.')); return }
+    if (!file.name.toLowerCase().endsWith('.csv')) { setImportError(t('eng.ct.err_csv_only')); return }
     setImportError(''); setImportResult(null); setImportFile(file)
   }
 
@@ -925,15 +923,17 @@ function ContactsView({ onContactsChanged, segments }) {
       .then(r => r.json())
       .then(res => {
         if (res?.success) { setImportResult(res.data); refetchContacts(); onContactsChanged?.() }
-        else setImportError(res?.message || t('eng.ct.err_import_failed', 'Import failed.'))
+        else setImportError(res?.message || t('eng.ct.err_import_failed'))
       })
-      .catch(() => setImportError(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setImportError(t('eng.ct.err_network')))
       .finally(() => setImporting(false))
   }
 
   function handleAddContact() {
-    if (!addFirst.trim() || !addEmail.trim()) { setAddError(t('eng.ct.err_required', 'First name and email are required')); return }
+    if (addSaving) return
+    if (!addFirst.trim() || !addEmail.trim()) { setAddError(t('eng.ct.err_required')); return }
     setAddError('')
+    setAddSaving(true)
     apiFetch(`${API}/boutique/marketing/contacts`, {
       method: 'POST',
       body: JSON.stringify({ firstName: addFirst, lastName: addLast, email: addEmail, phone: addPhone || undefined, segment: addSegment, notes: addNotes || undefined })
@@ -941,8 +941,9 @@ function ContactsView({ onContactsChanged, segments }) {
       if (res.success) {
         setShowAddContact(false); setAddFirst(''); setAddLast(''); setAddEmail(''); setAddPhone(''); setAddSegment('new'); setAddNotes(''); setAddError('')
         refetchContacts(); onContactsChanged?.()
-      } else setAddError(res.message ?? t('eng.ct.err_add_failed', 'Failed to add contact'))
-    }).catch(() => setAddError(t('eng.ct.err_network', 'Network error')))
+      } else setAddError(res.message ?? t('eng.ct.err_add_failed'))
+    }).catch(() => setAddError(t('eng.ct.err_network')))
+      .finally(() => setAddSaving(false))
   }
 
   const openLangEditor = () => {
@@ -966,16 +967,16 @@ function ContactsView({ onContactsChanged, segments }) {
         setPanelContact(prev => prev && ({
           ...prev,
           lang:     langInfo ? langInfo.flag : '?',
-          langName: langInfo ? langInfo.name : t('eng.ct.unknown', 'Unknown'),
+          langName: langInfo ? langInfo.name : t('eng.ct.unknown'),
           langSrc:  langSrcLabel(lang.source, t),
         }))
         setPanelDetail(prev => prev && ({ ...prev, language: lang }))
         setLangEditing(false)
         refetchContacts()
       } else {
-        setLangSaveError(res?.message || t('eng.ct.err_lang_save', 'Failed to update language.'))
+        setLangSaveError(res?.message || t('eng.ct.err_lang_save'))
       }
-    }).catch(() => setLangSaveError(t('eng.ct.err_network', 'Network error')))
+    }).catch(() => setLangSaveError(t('eng.ct.err_network')))
       .finally(() => setLangSaving(false))
   }
 
@@ -1012,9 +1013,9 @@ function ContactsView({ onContactsChanged, segments }) {
     favoritesApi.customer(panelContact.id)
       .then(res => {
         if (res?.success) setPanelFavorites(res.data?.favorites ?? [])
-        else setPanelFavoritesError(res?.message || t('eng.ct.err_favorites', 'Failed to load saved items.'))
+        else setPanelFavoritesError(res?.message || t('eng.ct.err_favorites'))
       })
-      .catch(() => setPanelFavoritesError(t('eng.ct.err_network', 'Network error')))
+      .catch(() => setPanelFavoritesError(t('eng.ct.err_network')))
       .finally(() => setPanelFavoritesLoading(false))
   }, [showPanel, panelContact?.id])
 
@@ -1023,15 +1024,15 @@ function ContactsView({ onContactsChanged, segments }) {
       <div className="ct-toolbar">
         <div className="ct-search">
           <span className="material-symbols-outlined">search</span>
-          <input placeholder={t('eng.ct.search', 'Search contacts…')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+          <input placeholder={t('eng.ct.search')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
         </div>
         <div className="ct-seg-filters">
           {[
-            { key:'vip',    cls:'seg-vip',    icon:'⭐', label:t('eng.camp.seg_vip', 'VIP') },
-            { key:'loyal',  cls:'seg-loyal',  icon:'♻', label:t('eng.camp.seg_loyal', 'Loyal') },
-            { key:'new',    cls:'seg-new',    icon:'✦', label:t('eng.camp.seg_new', 'New') },
-            { key:'warm',   cls:'seg-warm',   icon:'🔥', label:t('eng.camp.seg_warm', 'Warm') },
-            { key:'lapsed', cls:'seg-lapsed', icon:'⏱', label:t('eng.camp.seg_lapsed', 'Lapsed') },
+            { key:'vip',    cls:'seg-vip',    icon:'⭐', label:t('eng.camp.seg_vip') },
+            { key:'loyal',  cls:'seg-loyal',  icon:'♻', label:t('eng.camp.seg_loyal') },
+            { key:'new',    cls:'seg-new',    icon:'✦', label:t('eng.camp.seg_new') },
+            { key:'warm',   cls:'seg-warm',   icon:'🔥', label:t('eng.camp.seg_warm') },
+            { key:'lapsed', cls:'seg-lapsed', icon:'⏱', label:t('eng.camp.seg_lapsed') },
           ].map(s => (
             <span key={s.key} className={`seg ${s.cls} ct-seg-btn`}
               style={{ cursor:'pointer', boxShadow: segFilter === s.key ? 'inset 0 0 0 1.5px var(--deep)' : 'none' }}
@@ -1041,9 +1042,9 @@ function ContactsView({ onContactsChanged, segments }) {
           ))}
           <span className="ct-lang-btn" style={{ display:'inline-flex', alignItems:'center' }}>
             <span className="material-symbols-outlined ct-lang-icon">translate</span>
-            <select value={langFilter || ''} onChange={e => setLangFilter(e.target.value || null)}
+            <select value={langFilter || ''} autoComplete="off" onChange={e => setLangFilter(e.target.value || null)}
               style={{ border:'none', background:'transparent', font:'inherit', color:'inherit', cursor:'pointer', outline:'none' }}>
-              <option value="">{t('eng.ct.language', 'Language')}</option>
+              <option value="">{t('eng.ct.language')}</option>
               {langOptions.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
             </select>
             <span className="material-symbols-outlined ct-lang-chevron">expand_more</span>
@@ -1051,10 +1052,10 @@ function ContactsView({ onContactsChanged, segments }) {
         </div>
         <div className="ct-toolbar-right">
           <button className="btn btn-outline btn-sm" onClick={() => setShowImport(true)}>
-            <span className="material-symbols-outlined">upload</span>{t('eng.ct.import_csv', 'Import CSV')}
+            <span className="material-symbols-outlined">upload</span>{t('eng.ct.import_csv')}
           </button>
           <button className="btn btn-outline btn-sm" onClick={() => setShowAddContact(true)}>
-            <span className="material-symbols-outlined">person_add</span>{t('eng.ct.add_contact', 'Add Contact')}
+            <span className="material-symbols-outlined">person_add</span>{t('eng.ct.add_contact')}
           </button>
         </div>
       </div>
@@ -1065,17 +1066,17 @@ function ContactsView({ onContactsChanged, segments }) {
           <div className="select-wrap" style={{ width:'auto' }}>
             <select className="form-select" value={bulkSegment} disabled={bulkBusy}
               onChange={e => { setBulkSegment(e.target.value); handleBulkAddToSegment(e.target.value) }}>
-              <option value="">{t('eng.ct.bulk_add_segment', 'Add to segment')}</option>
-              <option value="vip">⭐ {t('eng.camp.seg_vip', 'VIP')}</option>
-              <option value="loyal">♻ {t('eng.camp.seg_loyal', 'Loyal')}</option>
-              <option value="new">✦ {t('eng.camp.seg_new', 'New')}</option>
-              <option value="warm">🔥 {t('eng.camp.seg_warm', 'Warm')}</option>
-              <option value="lapsed">⏱ {t('eng.camp.seg_lapsed', 'Lapsed')}</option>
+              <option value="">{t('eng.ct.bulk_add_segment')}</option>
+              <option value="vip">⭐ {t('eng.camp.seg_vip')}</option>
+              <option value="loyal">♻ {t('eng.camp.seg_loyal')}</option>
+              <option value="new">✦ {t('eng.camp.seg_new')}</option>
+              <option value="warm">🔥 {t('eng.camp.seg_warm')}</option>
+              <option value="lapsed">⏱ {t('eng.camp.seg_lapsed')}</option>
             </select>
           </div>
-          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={handleBulkExport}>{t('common.export', 'Export')}</button>
-          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={() => { setMessageContactIds(Array.from(selectedIds)); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message', 'Message')}</button>
-          <button className="btn btn-outline btn-xs" onClick={() => setSelectedIds(new Set())}>{t('common.clear', 'Clear')}</button>
+          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={handleBulkExport}>{t('common.export')}</button>
+          <button className="btn btn-outline btn-xs" disabled={bulkBusy} onClick={() => { setMessageContactIds(Array.from(selectedIds)); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message')}</button>
+          <button className="btn btn-outline btn-xs" onClick={() => setSelectedIds(new Set())}>{t('common.clear')}</button>
         </div>
       )}
       {bulkNote && <div className="alert alert-warn" style={{ marginBottom:12 }}>{bulkNote}</div>}
@@ -1085,7 +1086,7 @@ function ContactsView({ onContactsChanged, segments }) {
           <thead>
             <tr>
               <th className="tbl-cb-col"><input type="checkbox" className="tbl-cb" checked={allFilteredSelected} onChange={toggleSelectAll} /></th>
-              <th>{t('eng.ct.col_contact', 'Contact')}</th><th>{t('eng.ov.col_seg', 'Segment')}</th><th>{t('eng.ct.language', 'Language')}</th><th>{t('eng.ct.col_interactions', 'Interactions')}</th><th>{t('eng.ct.col_ltv', 'LTV')}</th><th>{t('eng.ct.col_consent', 'Consent')}</th><th>{t('eng.ct.col_source', 'Source')}</th><th>{t('eng.ct.col_last', 'Last Seen')}</th><th></th>
+              <th>{t('eng.ct.col_contact')}</th><th>{t('eng.ov.col_seg')}</th><th>{t('eng.ct.language')}</th><th>{t('eng.ct.col_interactions')}</th><th>{t('eng.ct.col_ltv')}</th><th>{t('eng.ct.col_consent')}</th><th>{t('eng.ct.col_source')}</th><th>{t('eng.ct.col_last')}</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -1097,7 +1098,7 @@ function ContactsView({ onContactsChanged, segments }) {
                 full set of headers, then rows appearing from nowhere. */}
             {!listError && loadingList && <Loading row cols={10} />}
             {!listError && filteredContacts.length === 0 && !loadingList && (
-              <tr><td colSpan={10} className="eng-loading">{t('eng.ct.no_match_filters', 'No contacts match your filters.')}</td></tr>
+              <tr><td colSpan={10} className="eng-loading">{t('eng.ct.no_match_filters')}</td></tr>
             )}
             {filteredContacts.map((c, i) => (
               <tr key={i}>
@@ -1112,7 +1113,7 @@ function ContactsView({ onContactsChanged, segments }) {
                         return (
                           <div className={`ct-consent-sub ${optedCount === 0 ? 'pend' : 'ok'}`}>
                             {optedCount === 0
-                              ? t('eng.ct.optin_pending', 'Opt-in request pending')
+                              ? t('eng.ct.optin_pending')
                               : t('eng.ct.channels_opted', { count: optedCount, total: 3, defaultValue: '{{count}} of {{total}} channels opted in' })}
                           </div>
                         )
@@ -1147,16 +1148,16 @@ function ContactsView({ onContactsChanged, segments }) {
                 <td className="tbl-meta">{c.last}</td>
                 <td>
                   {reachableConsents(c).filter(v => v === 'yes').length === 0
-                    ? <button className="btn btn-outline btn-xs" disabled>{t('common.pending', 'Pending')}</button>
+                    ? <button className="btn btn-outline btn-xs" disabled>{t('common.pending')}</button>
                     : c.seg === 'lapsed'
                     ? <button className="btn btn-primary btn-xs" onClick={() => {
                         setMessageContactIds([c.id])
-                        setBulkMsgSubject(t('eng.ct.reengage_subject', 'We miss you, {{name}}!', { name: c.name?.split(' ')[0] || '' }))
-                        setBulkMsgBody(t('eng.ct.reengage_body', "It's been a while — come see what's new at Mi Italia. We'd love to have you back!"))
+                        setBulkMsgSubject(t('eng.ct.reengage_subject', { name: c.name?.split(' ')[0] || '' }))
+                        setBulkMsgBody(t('eng.ct.reengage_body'))
                         setBulkMsgResult(null)
                         setShowBulkMessage(true)
-                      }}>{t('eng.ov.reengage', 'Re-engage')}</button>
-                    : <button className="btn btn-outline btn-xs" onClick={() => { setMessageContactIds([c.id]); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message', 'Message')}</button>
+                      }}>{t('eng.ov.reengage')}</button>
+                    : <button className="btn btn-outline btn-xs" onClick={() => { setMessageContactIds([c.id]); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null); setShowBulkMessage(true) }}>{t('eng.ct.message')}</button>
                   }
                 </td>
               </tr>
@@ -1166,9 +1167,9 @@ function ContactsView({ onContactsChanged, segments }) {
         <div className="ct-table-footer">
           <span>{t('eng.ct.showing_loaded', { shown: filteredContacts.length, total, defaultValue: 'Showing {{shown}} of {{total}} contacts' })}</span>
           <div className="ct-footer-btns">
-            <button className="btn btn-outline btn-xs" disabled={page <= 1 || loadingList} onClick={() => goToPage(page - 1)}>{t('eng.ct.prev', '← Prev')}</button>
+            <button className="btn btn-outline btn-xs" disabled={page <= 1 || loadingList} onClick={() => goToPage(page - 1)}>{t('eng.ct.prev')}</button>
             <span>{t('eng.ct.page_n', { page, defaultValue: 'Page {{page}}' })}</span>
-            <button className="btn btn-outline btn-xs" disabled={!hasNextPage || loadingList} onClick={() => goToPage(page + 1)}>{t('eng.ct.next', 'Next →')}</button>
+            <button className="btn btn-outline btn-xs" disabled={!hasNextPage || loadingList} onClick={() => goToPage(page + 1)}>{t('eng.ct.next')}</button>
           </div>
         </div>
       </div>
@@ -1177,7 +1178,7 @@ function ContactsView({ onContactsChanged, segments }) {
         <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.ct.import_title', 'Import')} <em>{t('eng.ct.import_title_em', 'Contacts')}</em></div>
+              <div className="modal-title">{t('eng.ct.import_title')} <em>{t('eng.ct.import_title_em')}</em></div>
               <div className="modal-close" onClick={closeImportModal}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1192,7 +1193,7 @@ function ContactsView({ onContactsChanged, segments }) {
                   })}
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-primary" onClick={closeImportModal}>{t('common.done', 'Done')}</button>
+                  <button className="btn btn-primary" onClick={closeImportModal}>{t('common.done')}</button>
                 </div>
               </>
             ) : (
@@ -1208,18 +1209,18 @@ function ContactsView({ onContactsChanged, segments }) {
                   onDrop={e => { e.preventDefault(); setImportDragOver(false); pickImportFile(e.dataTransfer.files?.[0]) }}>
                   <span className="material-symbols-outlined ct-drop-icon">upload_file</span>
                   <div className="ct-drop-title">
-                    {importFile ? importFile.name : t('eng.ct.drop_title', 'Drop your CSV here or click to browse')}
+                    {importFile ? importFile.name : t('eng.ct.drop_title')}
                   </div>
-                  <div className="ct-drop-sub">{t('eng.ct.drop_sub', 'Required columns: First Name, Last Name, Email. Optional: Phone, Segment')}</div>
+                  <div className="ct-drop-sub">{t('eng.ct.drop_sub')}</div>
                 </div>
                 <div className="alert-gdpr-blue">
                   <span className="material-symbols-outlined">verified_user</span>
-                  <div dangerouslySetInnerHTML={{ __html: t('eng.ct.import_note', 'Imported contacts are added in <strong>pending consent</strong> status. They cannot be messaged until they opt in. Duplicate emails are automatically merged with existing contacts.') }} />
+                  <div dangerouslySetInnerHTML={{ __html: t('eng.ct.import_note') }} />
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={closeImportModal} disabled={importing}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-outline" onClick={closeImportModal} disabled={importing}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" onClick={handleImportSubmit} disabled={!importFile || importing}>
-                    <span className="material-symbols-outlined">upload</span>{importing ? t('eng.ct.importing', 'Importing') + '…' : t('eng.ct.import_send_btn', 'Import Contacts')}
+                    <span className="material-symbols-outlined">upload</span>{importing ? t('eng.ct.importing') + '…' : t('eng.ct.import_send_btn')}
                   </button>
                 </div>
               </>
@@ -1231,9 +1232,12 @@ function ContactsView({ onContactsChanged, segments }) {
       {/* Add Contact Modal */}
       {showAddContact && (
         <div className="modal-backdrop">
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+          {/* Own <form> so Chrome's autofill preview stays inside the modal
+              instead of lighting up the Language filter behind it. */}
+          <form className="modal modal-sm" noValidate onClick={e => e.stopPropagation()}
+            onSubmit={e => { e.preventDefault(); handleAddContact() }}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.ct.add_title', 'Add')} <em>{t('eng.ct.add_title_em', 'Contact')}</em></div>
+              <div className="modal-title">{t('eng.ct.add_title')} <em>{t('eng.ct.add_title_em')}</em></div>
               <div className="modal-close" onClick={() => setShowAddContact(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1241,50 +1245,50 @@ function ContactsView({ onContactsChanged, segments }) {
             {addError && <div className="eng-error">{addError}</div>}
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">{t('eng.ct.first_name_label', 'First Name *')}</label>
-                <input className="form-input" placeholder="Sofia" value={addFirst} onChange={e => setAddFirst(e.target.value)} />
+                <label className="form-lbl">{t('eng.ct.first_name_label')}</label>
+                <input className="form-input" name="given-name" autoComplete="given-name" placeholder="Sofia" value={addFirst} onChange={e => setAddFirst(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('eng.ct.last_name_label', 'Last Name')}</label>
-                <input className="form-input" placeholder="Marchetti" value={addLast} onChange={e => setAddLast(e.target.value)} />
+                <label className="form-lbl">{t('eng.ct.last_name_label')}</label>
+                <input className="form-input" name="family-name" autoComplete="family-name" placeholder="Marchetti" value={addLast} onChange={e => setAddLast(e.target.value)} />
               </div>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.ct.email_label', 'Email Address *')}</label>
-              <input className="form-input" placeholder="sofia@example.com" type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)} />
+              <label className="form-lbl">{t('eng.ct.email_label')}</label>
+              <input className="form-input" name="email" autoComplete="email" placeholder="sofia@example.com" type="email" value={addEmail} onChange={e => setAddEmail(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{isWhatsappEnabled() ? t('eng.ct.phone_label', 'Phone (for WhatsApp)') : t('customers.detail.phone', 'Phone')}</label>
-              <input className="form-input" placeholder="+39 333 000 0000" value={addPhone} onChange={e => setAddPhone(e.target.value)} />
+              <label className="form-lbl">{isWhatsappEnabled() ? t('eng.ct.phone_label') : t('customers.detail.phone')}</label>
+              <input className="form-input" type="tel" name="phone" autoComplete="tel" placeholder="+39 333 000 0000" value={addPhone} onChange={e => setAddPhone(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.ct.assign_segment_label', 'Assign to Segment')}</label>
+              <label className="form-lbl">{t('eng.ct.assign_segment_label')}</label>
               <div className="select-wrap">
-                <select className="form-select" value={addSegment} onChange={e => setAddSegment(e.target.value)}>
-                  <option value="vip">⭐ {t('eng.camp.seg_vip', 'VIP')}</option>
-                  <option value="loyal">♻ {t('eng.camp.seg_loyal', 'Loyal')}</option>
-                  <option value="new">✦ {t('eng.camp.seg_new', 'New')}</option>
-                  <option value="warm">🔥 {t('eng.camp.seg_warm', 'Warm')}</option>
-                  <option value="lapsed">⏱ {t('eng.camp.seg_lapsed', 'Lapsed')}</option>
+                <select className="form-select" autoComplete="off" value={addSegment} onChange={e => setAddSegment(e.target.value)}>
+                  <option value="vip">⭐ {t('eng.camp.seg_vip')}</option>
+                  <option value="loyal">♻ {t('eng.camp.seg_loyal')}</option>
+                  <option value="new">✦ {t('eng.camp.seg_new')}</option>
+                  <option value="warm">🔥 {t('eng.camp.seg_warm')}</option>
+                  <option value="lapsed">⏱ {t('eng.camp.seg_lapsed')}</option>
                 </select>
                 <span className="material-symbols-outlined select-arrow">expand_more</span>
               </div>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.ct.notes_label', 'Notes')}</label>
-              <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.ct.notes_placeholder', 'Any relevant notes about this customer…')} value={addNotes} onChange={e => setAddNotes(e.target.value)} />
+              <label className="form-lbl">{t('eng.ct.notes_label')}</label>
+              <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.ct.notes_placeholder')} value={addNotes} onChange={e => setAddNotes(e.target.value)} />
             </div>
             <div className="alert-gdpr-blue">
               <span className="material-symbols-outlined">gpp_good</span>
-              <div>{t('eng.ct.add_consent_note', 'A consent request will be sent to this contact via email before any marketing is delivered. You cannot message manually added contacts until they opt in.')}</div>
+              <div>{t('eng.ct.add_consent_note')}</div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowAddContact(false)}>{t('common.cancel', 'Cancel')}</button>
-              <button className="btn btn-primary" onClick={handleAddContact}>
-                <span className="material-symbols-outlined">person_add</span>{t('eng.ct.add_send_btn', 'Add & Send Consent Request')}
+              <button type="button" className="btn btn-outline" onClick={() => setShowAddContact(false)}>{t('common.cancel')}</button>
+              <button type="submit" className="btn btn-primary" disabled={addSaving}>
+                <span className="material-symbols-outlined">person_add</span>{addSaving ? t('common.saving') : t('eng.ct.add_send_btn')}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -1292,7 +1296,7 @@ function ContactsView({ onContactsChanged, segments }) {
         <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.ct.bulk_message_title', 'Message')} <em>{t('eng.ct.bulk_message_title_em', 'Selected')}</em></div>
+              <div className="modal-title">{t('eng.ct.bulk_message_title')} <em>{t('eng.ct.bulk_message_title_em')}</em></div>
               <div className="modal-close" onClick={() => setShowBulkMessage(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1300,17 +1304,17 @@ function ContactsView({ onContactsChanged, segments }) {
             {!bulkMsgResult ? (
               <>
                 <div className="form-group">
-                  <label className="form-lbl">{t('eng.ct.bulk_message_subject', 'Subject')}</label>
+                  <label className="form-lbl">{t('eng.ct.bulk_message_subject')}</label>
                   <input className="form-input" value={bulkMsgSubject} onChange={e => setBulkMsgSubject(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('eng.ct.bulk_message_body', 'Message')}</label>
+                  <label className="form-lbl">{t('eng.ct.bulk_message_body')}</label>
                   <textarea className="form-textarea ct-notes-textarea" value={bulkMsgBody} onChange={e => setBulkMsgBody(e.target.value)} />
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={() => setShowBulkMessage(false)}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-outline" onClick={() => setShowBulkMessage(false)}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" disabled={bulkBusy || !bulkMsgBody.trim()} onClick={handleBulkMessage}>
-                    <span className="material-symbols-outlined">send</span>{bulkBusy ? t('eng.rev.sending', 'Sending…') : t('eng.ct.bulk_message_send', 'Send')}
+                    <span className="material-symbols-outlined">send</span>{bulkBusy ? t('eng.rev.sending') : t('eng.ct.bulk_message_send')}
                   </button>
                 </div>
               </>
@@ -1322,12 +1326,12 @@ function ContactsView({ onContactsChanged, segments }) {
                 {(bulkMsgResult.results ?? []).filter(r => !r.ok).length > 0 && (
                   <ul className="eng-send-failures">
                     {bulkMsgResult.results.filter(r => !r.ok).map((r, i) => (
-                      <li key={i}>{r.id} — {r.reason || t('eng.rev.unknown_error', 'Unknown error')}</li>
+                      <li key={i}>{r.id} — {r.reason || t('eng.rev.unknown_error')}</li>
                     ))}
                   </ul>
                 )}
                 <div className="modal-footer">
-                  <button className="btn btn-primary" onClick={() => { setShowBulkMessage(false); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null) }}>{t('common.done', 'Done')}</button>
+                  <button className="btn btn-primary" onClick={() => { setShowBulkMessage(false); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null) }}>{t('common.done')}</button>
                 </div>
               </>
             )}
@@ -1343,9 +1347,9 @@ function ContactsView({ onContactsChanged, segments }) {
               <button className="ct-panel-back" onClick={() => setShowPanel(false)}>
                 <span className="material-symbols-outlined">arrow_back</span>
               </button>
-              <div className="ct-panel-title">{t('eng.ct.panel_title', 'Contact Profile')}</div>
+              <div className="ct-panel-title">{t('eng.ct.panel_title')}</div>
               <button className="btn btn-primary btn-sm" onClick={() => { setMessageContactIds([panelContact.id]); setBulkMsgSubject(''); setBulkMsgBody(''); setBulkMsgResult(null); setShowBulkMessage(true) }}>
-                <span className="material-symbols-outlined">campaign</span>{t('eng.ct.message', 'Message')}
+                <span className="material-symbols-outlined">campaign</span>{t('eng.ct.message')}
               </button>
             </div>
             <div className="ct-panel-body">
@@ -1363,52 +1367,52 @@ function ContactsView({ onContactsChanged, segments }) {
                   WhatsApp is hidden without the entitlement. */}
               <div className="ct-panel-channels">
                 <div className="ct-panel-ch ct-panel-ch-static act">
-                  <span className="material-symbols-outlined">mail</span>{t('eng.channels.email', 'Email')}
+                  <span className="material-symbols-outlined">mail</span>{t('eng.channels.email')}
                 </div>
                 {isWhatsappEnabled() && (
                   <div className="ct-panel-ch ct-panel-ch-static">
-                    <span className="material-symbols-outlined">chat</span>{t('eng.channels.wa', 'WhatsApp')}
+                    <span className="material-symbols-outlined">chat</span>{t('eng.channels.wa')}
                   </div>
                 )}
                 <div className="ct-panel-ch ct-panel-ch-soon">
-                  <span className="material-symbols-outlined">photo_camera</span>{t('eng.channels.insta_dm', 'Instagram DM')}
-                  <span className="ct-soon-badge">{t('eng.camp.soon_tag', 'SOON')}</span>
+                  <span className="material-symbols-outlined">photo_camera</span>{t('eng.channels.insta_dm')}
+                  <span className="ct-soon-badge">{t('eng.camp.soon_tag')}</span>
                 </div>
               </div>
 
               {/* Boutique Interactions */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.interactions_section', 'Boutique Interactions')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.interactions_section')}</div>
               <div className="ct-panel-rows">
-                <div className="ct-panel-row"><span>{t('eng.ct.purchases', 'Purchases')}</span><strong>{panelContact.purchases}</strong></div>
-                <div className="ct-panel-row"><span>{t('eng.ct.items_favorited', 'Items Favorited')}</span><strong>{panelContact.favorites}</strong></div>
-                <div className="ct-panel-row"><span>{t('eng.ct.total_spent', 'Total Spent')}</span><strong>{panelContact.ltv}</strong></div>
-                <div className="ct-panel-row"><span>{t('eng.ct.source', 'Source')}</span><span>{panelContact.src}</span></div>
-                <div className="ct-panel-row"><span>{t('eng.ct.last_active', 'Last Active')}</span><span>{panelContact.last}</span></div>
+                <div className="ct-panel-row"><span>{t('eng.ct.purchases')}</span><strong>{panelContact.purchases}</strong></div>
+                <div className="ct-panel-row"><span>{t('eng.ct.items_favorited')}</span><strong>{panelContact.favorites}</strong></div>
+                <div className="ct-panel-row"><span>{t('eng.ct.total_spent')}</span><strong>{panelContact.ltv}</strong></div>
+                <div className="ct-panel-row"><span>{t('eng.ct.source')}</span><span>{panelContact.src}</span></div>
+                <div className="ct-panel-row"><span>{t('eng.ct.last_active')}</span><span>{panelContact.last}</span></div>
               </div>
 
               {/* Saved Items */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.saved_items_section', 'Saved Items')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.saved_items_section')}</div>
               {panelFavoritesLoading ? (
                 <Loading className="eng-loading-sm" />
               ) : panelFavoritesError ? (
                 <div className="eng-error">{panelFavoritesError}</div>
               ) : panelFavorites.length === 0 ? (
-                <div className="eng-loading-sm">{t('eng.ct.no_saved_items', 'No saved items yet.')}</div>
+                <div className="eng-loading-sm">{t('eng.ct.no_saved_items')}</div>
               ) : (
                 panelFavorites.map((f, i) => (
                   <div key={f.product_id ?? i} className="ct-panel-row">
-                    <span>{f.product_name || f.name || t('eng.fav.untitled_product', 'Product')}</span>
+                    <span>{f.product_name || f.name || t('eng.fav.untitled_product')}</span>
                     <strong>{f.retail_price != null ? `€${f.retail_price}` : ''}</strong>
                   </div>
                 ))
               )}
 
               {/* Spend by Category */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.spend_by_category', 'Spend by Category')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.spend_by_category')}</div>
               {(() => {
                 const cats = panelDetail?.spend_by_category ?? []
                 if (cats.length === 0) {
-                  return <div className="eng-loading-sm">{t('eng.ct.spend_by_category_unavailable', 'Category breakdown not available yet.')}</div>
+                  return <div className="eng-loading-sm">{t('eng.ct.spend_by_category_unavailable')}</div>
                 }
                 return cats.map(s => (
                   <div key={s.category} className="ct-panel-spend-row">
@@ -1422,17 +1426,17 @@ function ContactsView({ onContactsChanged, segments }) {
               })()}
 
               {/* Language */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.lang_section', 'Language & Localization')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.lang_section')}</div>
               {langEditing ? (
                 <div className="ct-panel-lang-row">
                   <div className="select-wrap" style={{ flex:1 }}>
                     <select className="form-select" value={langCode} onChange={e => setLangCode(e.target.value)} disabled={langSaving}>
-                      <option value="">{t('eng.ct.lang_clear_override', 'No override (use detected)')}</option>
+                      <option value="">{t('eng.ct.lang_clear_override')}</option>
                       {Object.keys(LANG_MAP).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
                     </select>
                   </div>
-                  <button className="btn btn-outline btn-xs" onClick={() => setLangEditing(false)} disabled={langSaving}>{t('common.cancel', 'Cancel')}</button>
-                  <button className="btn btn-primary btn-xs" onClick={saveLangChange} disabled={langSaving}>{langSaving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
+                  <button className="btn btn-outline btn-xs" onClick={() => setLangEditing(false)} disabled={langSaving}>{t('common.cancel')}</button>
+                  <button className="btn btn-primary btn-xs" onClick={saveLangChange} disabled={langSaving}>{langSaving ? t('common.saving') : t('common.save')}</button>
                 </div>
               ) : (
                 <div className="ct-panel-lang-row">
@@ -1442,53 +1446,53 @@ function ContactsView({ onContactsChanged, segments }) {
                     <div className="ct-panel-lang-src">{panelContact.langSrc}</div>
                   </div>
                   <button className="btn btn-outline btn-xs ct-panel-lang-change" onClick={openLangEditor}>
-                    <span className="material-symbols-outlined">edit</span>{t('common.change', 'Change')}
+                    <span className="material-symbols-outlined">edit</span>{t('common.change')}
                   </button>
                 </div>
               )}
               {langSaveError && <div className="eng-error">{langSaveError}</div>}
-                            <div className="ct-panel-lang-note">{t('eng.ct.lang_note', 'All campaign translations target this language. Set explicitly by customer or staff.')}</div>
+                            <div className="ct-panel-lang-note">{t('eng.ct.lang_note')}</div>
 
               {/* GDPR Consent */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.consent_section', 'GDPR Consent — Per Channel')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.consent_section')}</div>
               {[
-                { icon:'mail',         label:t('eng.channels.email', 'Email'),          state:panelContact.email },
+                { icon:'mail',         label:t('eng.channels.email'),          state:panelContact.email },
                 ...(isWhatsappEnabled()
-                  ? [{ icon:'chat',     label:t('eng.channels.wa', 'WhatsApp'),        state:panelContact.wa    }]
+                  ? [{ icon:'chat',     label:t('eng.channels.wa'),        state:panelContact.wa    }]
                   : []),
-                { icon:'photo_camera', label:t('eng.channels.insta_dm', 'Instagram DM'),    soon:true                },
-                { icon:'description',  label:t('eng.ov.print_insert', 'Printed insert'),  state:panelContact.print },
+                { icon:'photo_camera', label:t('eng.channels.insta_dm'),    soon:true                },
+                { icon:'description',  label:t('eng.ov.print_insert'),  state:panelContact.print },
               ].map(ch => {
                 const status   = ch.soon ? 'soon' : ch.state === 'yes' ? 'opted_in' : 'no'
-                const statusTxt = ch.soon ? t('eng.ct.consent_not_available', 'Not yet available') : ch.state === 'yes' ? `✓ ${t('eng.ct.consent_opted_in', 'Opted in')}` : t('eng.ct.consent_not_opted', 'Not opted in')
+                const statusTxt = ch.soon ? t('eng.ct.consent_not_available') : ch.state === 'yes' ? `✓ ${t('eng.ct.consent_opted_in')}` : t('eng.ct.consent_not_opted')
                 return (
                   <div key={ch.label} className="ct-panel-consent-row">
                     <span className="material-symbols-outlined ct-panel-consent-icon">{ch.icon}</span>
                     <div className="ct-panel-consent-label">
                       {ch.label}
-                      {ch.soon && <span className="ct-soon-badge">{t('eng.camp.soon_tag', 'SOON')}</span>}
+                      {ch.soon && <span className="ct-soon-badge">{t('eng.camp.soon_tag')}</span>}
                     </div>
                     <span className={`ct-panel-consent-status ${status}`}>{statusTxt}</span>
                   </div>
                 )
               })}
-              <div className="ct-panel-consent-note">{t('eng.ct.consent_note', 'Consent managed by Mi Italia. You cannot modify consent status directly.')}</div>
+              <div className="ct-panel-consent-note">{t('eng.ct.consent_note')}</div>
 
               {/* Activity Timeline */}
-              <div className="ct-panel-section-lbl">{t('eng.ct.activity_section', 'Activity Timeline')}</div>
+              <div className="ct-panel-section-lbl">{t('eng.ct.activity_section')}</div>
               {panelLoading ? (
                 <Loading className="eng-loading-sm" />
               ) : (() => {
                 const orders  = panelDetail?.recent_orders       ?? []
                 const reservs = panelDetail?.recent_reservations ?? []
                 if (orders.length === 0 && reservs.length === 0) {
-                  return <div className="eng-loading-sm">{t('eng.ct.no_activity', 'No recent activity yet.')}</div>
+                  return <div className="eng-loading-sm">{t('eng.ct.no_activity')}</div>
                 }
                 const items = [
                   ...reservs.map(r => ({
                     key: `r-${r.id}`,
                     icon: 'event',
-                    title: r.product_name || t('eng.ct.reservation_label', 'Reservation'),
+                    title: r.product_name || t('eng.ct.reservation_label'),
                     status: r.status,
                     price: r.pickup_price,
                     date: r.confirmed_at,
@@ -1498,7 +1502,7 @@ function ContactsView({ onContactsChanged, segments }) {
                   ...orders.map((o, i) => ({
                     key: o.id ?? `o-${i}`,
                     icon: 'shopping_bag',
-                    title: o.product_name || o.items?.[0]?.name || t('eng.ct.order_label', 'Order'),
+                    title: o.product_name || o.items?.[0]?.name || t('eng.ct.order_label'),
                     status: o.status,
                     price: o.total ?? o.total_amount ?? o.amount,
                     date: o.created_at ?? o.ordered_at ?? o.date,
@@ -1577,9 +1581,9 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
     campaignApi.delete(deleteTarget.id)
       .then(res => {
         if (res?.success) { setDeleteTarget(null); refetchCampaigns() }
-        else setDeleteError(res?.message || t('eng.camp.err_delete_failed', 'Failed to delete campaign.'))
+        else setDeleteError(res?.message || t('eng.camp.err_delete_failed'))
       })
-      .catch(() => setDeleteError(t('eng.camp.err_delete_failed', 'Failed to delete campaign.')))
+      .catch(() => setDeleteError(t('eng.camp.err_delete_failed')))
       .finally(() => setDeleting(false))
   }
   const handleAction = (c, action) => {
@@ -1599,11 +1603,11 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
     : list.filter(c => c.ch === channelFilter)
 
   const tabs = [
-    { key:'all',   label:t('eng.camp.ch_all', 'All'),         count:counts.all },
-    { key:'email', icon:'mail',         color:'var(--gold-dk)', label:t('eng.camp.ch_email', 'Email'),     count:counts.email, ctBg:'var(--gold)' },
-    { key:'wa',    icon:'chat',         color:'#1a9e4d',         label:t('eng.camp.ch_wa', 'WhatsApp'),  count:counts.wa,    ctBg:'var(--wa)' },
-    { key:'print', icon:'description',  color:'var(--stone)',    label:t('eng.camp.ch_print', 'Print'),     count:counts.print, ctBg:'var(--stone)' },
-    { key:'perf',  icon:'analytics',    color:'var(--gold)',     label:t('eng.camp.ch_performance', 'Performance'), comingSoon:true },
+    { key:'all',   label:t('eng.camp.ch_all'),         count:counts.all },
+    { key:'email', icon:'mail',         color:'var(--gold-dk)', label:t('eng.camp.ch_email'),     count:counts.email, ctBg:'var(--gold)' },
+    { key:'wa',    icon:'chat',         color:'#1a9e4d',         label:t('eng.camp.ch_wa'),  count:counts.wa,    ctBg:'var(--wa)' },
+    { key:'print', icon:'description',  color:'var(--stone)',    label:t('eng.camp.ch_print'),     count:counts.print, ctBg:'var(--stone)' },
+    { key:'perf',  icon:'analytics',    color:'var(--gold)',     label:t('eng.camp.ch_performance'), comingSoon:true },
   // Filtered rather than removed, so the tab returns if the entitlement is
   // switched on. Past WhatsApp campaigns still appear in the list — only the
   // filter chip goes, not the history.
@@ -1617,37 +1621,37 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
       <div className="camp-info-banner">
         <span className="material-symbols-outlined camp-info-icon">verified</span>
         <div className="camp-info-body">
-          <div className="camp-info-title">{t('eng.camp.info_title', 'Mi Italia reviews all campaigns before sending')}</div>
-          <div className="camp-info-sub">{t('eng.camp.info_sub', 'Choose a channel & language → write your content → translations auto-generate → review and submit. Mi Italia approves for brand standards within 4 hours Mon–Fri.')}</div>
+          <div className="camp-info-title">{t('eng.camp.info_title')}</div>
+          <div className="camp-info-sub">{t('eng.camp.info_sub')}</div>
         </div>
         <button className="btn btn-primary" onClick={() => { setEditingId(null); setPresetSegment(null); setPresetTemplate(null); setPresetChannel(null); setCampSub('builder') }}>
-          <span className="material-symbols-outlined">add</span>{t('eng.camp.new_campaign', 'New Campaign')}
+          <span className="material-symbols-outlined">add</span>{t('eng.camp.new_campaign')}
         </button>
       </div>
 
       {/* KPI Row — wired to dashboard */}
       <div className="stat-row col4 camp-kpi-row">
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.camp.kpi_active', 'Active Campaigns')}</div>
+          <div className="stat-lbl">{t('eng.camp.kpi_active')}</div>
           <div className="stat-val">{dashboard?.totalCampaigns ?? '—'}</div>
           <div className="stat-sub">{dashboard
             ? t('eng.camp.kpi_active_sub', { sent: dashboard.sentCampaigns ?? 0, draft: dashboard.draftCampaigns ?? 0, scheduled: dashboard.scheduledCampaigns ?? 0, defaultValue: '{{sent}} sent · {{draft}} draft · {{scheduled}} scheduled' })
-            : t('common.loading', 'Loading...')}</div>
+            : t('common.loading')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.camp.kpi_sent_30d', 'Campaigns Sent · 30d')}</div>
+          <div className="stat-lbl">{t('eng.camp.kpi_sent_30d')}</div>
           <div className="stat-val">{dashboard?.campaignsSent30d ?? '—'}</div>
-          <div className="stat-sub">{t('eng.camp.kpi_last_30d', 'Last 30 days')}</div>
+          <div className="stat-sub">{t('eng.camp.kpi_last_30d')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.camp.kpi_avg_open', 'Avg Open Rate')}</div>
+          <div className="stat-lbl">{t('eng.camp.kpi_avg_open')}</div>
           <div className="stat-val">{dashboard?.avgOpenRate != null ? `${dashboard.avgOpenRate}%` : '—'}</div>
-          <div className="stat-sub">{t('eng.camp.kpi_all_channels', 'Across all channels')}</div>
+          <div className="stat-sub">{t('eng.camp.kpi_all_channels')}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-lbl">{t('eng.camp.kpi_revenue', 'Revenue Attributed')}</div>
+          <div className="stat-lbl">{t('eng.camp.kpi_revenue')}</div>
           <div className="stat-val">{dashboard?.revenue != null ? `€${Number(dashboard.revenue).toLocaleString(activeLocale())}` : '—'}</div>
-          <div className="stat-sub">{t('eng.camp.kpi_revenue_sub', 'From attributed purchases')}</div>
+          <div className="stat-sub">{t('eng.camp.kpi_revenue_sub')}</div>
         </div>
       </div>
 
@@ -1662,7 +1666,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
             {tab.count !== undefined && (
               <span className="tab-ct" style={tab.ctBg && channelFilter === tab.key ? { background:tab.ctBg } : undefined}>{tab.count}</span>
             )}
-            {tab.comingSoon && <span className="eng-soon-tag">{t('eng.camp.soon_tag', 'SOON')}</span>}
+            {tab.comingSoon && <span className="eng-soon-tag">{t('eng.camp.soon_tag')}</span>}
           </div>
         ))}
       </div>
@@ -1672,7 +1676,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
         <Loading />
       ) : filtered.length === 0 ? (
         <div className="eng-loading">
-          {t('eng.camp.empty_hint', { newCampaignLabel: t('eng.camp.new_campaign', 'New Campaign'), defaultValue: 'No campaigns yet — click "{{newCampaignLabel}}" to start.' })}
+          {t('eng.camp.empty_hint', { newCampaignLabel: t('eng.camp.new_campaign'), defaultValue: 'No campaigns yet — click "{{newCampaignLabel}}" to start.' })}
         </div>
       ) : filtered.map(c => (
         <div key={c.id} className="ccamp" onClick={() => openCard(c)}>
@@ -1717,7 +1721,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
         <div className="modal-backdrop" onClick={() => !deleting && setDeleteTarget(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.camp.delete_title_em', 'Campaign')}</em></div>
+              <div className="modal-title">{t('common.delete')} <em>{t('eng.camp.delete_title_em')}</em></div>
               <div className="modal-close" onClick={() => !deleting && setDeleteTarget(null)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1725,9 +1729,9 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
             {deleteError && <div className="eng-error">{deleteError}</div>}
             <div>{t('eng.camp.confirm_delete', { name: deleteTarget.name, defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
+              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel')}</button>
               <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
+                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting') + '…' : t('common.delete')}
               </button>
             </div>
           </div>
@@ -1742,7 +1746,7 @@ function CampaignsView({ campaigns: rawCampaigns, segments, dashboard, refetchCa
 function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSettings, onBack, onReview, initialSegment = null, initialTemplate = null, initialChannel = null }) {
   const { t, i18n } = useTranslation()
   const [campaignId,      setCampaignId]      = useState(initialId || null)
-  const [campaignName,    setCampaignName]    = useState(t('eng.camp.untitled', 'Untitled draft'))
+  const [campaignName,    setCampaignName]    = useState(t('eng.camp.untitled'))
   // Never open on WhatsApp when the boutique has no entitlement, or the
   // composer would start on a channel that is not in the picker.
   const [channel,         setChannel]         = useState(
@@ -1792,7 +1796,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         if (res?.success && res.data) {
           const c = res.data
           setCampaignId(c.id)
-          setCampaignName(c.campaign_name || t('eng.camp.untitled', 'Untitled draft'))
+          setCampaignName(c.campaign_name || t('eng.camp.untitled'))
           setChannel(channelKey(c.channel))
           setSubject(c.subject || '')
           setPreviewText(c.preview_text || '')
@@ -1804,18 +1808,18 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
           setSendMode(c.send_mode === 'scheduled' ? 'scheduled' : 'immediate')
           setScheduledLocal(c.scheduled_at ? utcISOToZonedLocal(c.scheduled_at, tz) : '')
         } else {
-          setErrorMsg(res?.message || t('eng.camp.err_load_failed', 'Failed to load campaign'))
+          setErrorMsg(res?.message || t('eng.camp.err_load_failed'))
         }
       })
-      .catch(() => setErrorMsg(t('eng.camp.err_load_failed', 'Failed to load campaign')))
+      .catch(() => setErrorMsg(t('eng.camp.err_load_failed')))
       .finally(() => setLoadingCampaign(false))
   }, [initialId])
 
   // POST if new, PUT if existing. Returns the saved id (or null on failure).
   const saveDraft = async () => {
-    const name = campaignName.trim() || t('eng.camp.untitled', 'Untitled draft')
+    const name = campaignName.trim() || t('eng.camp.untitled')
     if (sendMode === 'scheduled' && !scheduledLocal) {
-      setErrorMsg(t('eng.camp.err_no_schedule_time', 'Pick a date and time to schedule this campaign.'))
+      setErrorMsg(t('eng.camp.err_no_schedule_time'))
       return null
     }
     setSaving(true)
@@ -1839,14 +1843,14 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         ? await campaignApi.update(campaignId, payload)
         : await campaignApi.create(payload)
       if (!res?.success) {
-        setErrorMsg(res?.message || t('eng.camp.err_save_failed', 'Save failed'))
+        setErrorMsg(res?.message || t('eng.camp.err_save_failed'))
         return null
       }
       const savedId = res.data?.id || campaignId
       if (!campaignId && savedId) setCampaignId(savedId)
       return savedId
     } catch {
-      setErrorMsg(t('eng.camp.err_save_network', 'Save failed — check your connection and try again.'))
+      setErrorMsg(t('eng.camp.err_save_network'))
       return null
     } finally {
       setSaving(false)
@@ -1857,10 +1861,10 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
   const handleReview       = async () => { const id = await saveDraft(); if (id) onReview(id) }
 
   const channels = [
-    { key:'email', icon:'mail',         color:'var(--gold-dk)', label:t('eng.channels.email', 'Email'),     priceLbl:t('eng.camp.free', 'FREE') },
-    { key:'wa',    icon:'chat',         color:'#1a9e4d',        label:t('eng.channels.wa', 'WhatsApp'),  priceLbl:'€0.10' },
-    { key:'insta', icon:'photo_camera', color:'#DD2A7B',        label:t('eng.channels.insta', 'Instagram'), priceLbl:t('eng.camp.coming_soon', 'COMING SOON'), disabled:true },
-    { key:'print', icon:'description',  color:'var(--stone)',   label:t('eng.channels.print', 'Print'),     priceLbl:'€0.18' },
+    { key:'email', icon:'mail',         color:'var(--gold-dk)', label:t('eng.channels.email'),     priceLbl:t('eng.camp.free') },
+    { key:'wa',    icon:'chat',         color:'#1a9e4d',        label:t('eng.channels.wa'),  priceLbl:'€0.10' },
+    { key:'insta', icon:'photo_camera', color:'#DD2A7B',        label:t('eng.channels.insta'), priceLbl:t('eng.camp.coming_soon'), disabled:true },
+    { key:'print', icon:'description',  color:'var(--stone)',   label:t('eng.channels.print'),     priceLbl:'€0.18' },
   ].filter(c => c.key !== 'wa' || isWhatsappEnabled())
 
   // Real per-language share of the selected segment (or all segments combined), from the same
@@ -1894,15 +1898,15 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
     return (segArr || []).find(x => x.key === key)?.customers ?? 0
   }
   const segmentCards = [
-    { key:'all',    emoji:'👥', name:t('eng.camp.seg_all', 'All contacts'), desc:t('eng.camp.seg_desc_all', 'Everyone reachable on this channel') },
-    { key:'vip',    emoji:'⭐', name:t('eng.camp.seg_vip', 'VIP'),          desc:t('eng.camp.seg_desc_vip', 'Platino tier · spend €5k+ lifetime') },
-    { key:'loyal',  emoji:'♻', name:t('eng.camp.seg_loyal', 'Loyal'),        desc:t('eng.camp.seg_desc_loyal', 'Oro+ tier · 3+ purchases · visited 90d') },
-    { key:'new',    emoji:'✦', name:t('eng.camp.seg_new', 'New'),          desc:t('eng.camp.seg_desc_new', 'Argento · 1 purchase · joined 90d') },
-    { key:'warm',   emoji:'🔥', name:t('eng.camp.seg_warm', 'Warm'),         desc:t('eng.camp.seg_desc_warm', 'Has favorited but not purchased') },
-    { key:'lapsed', emoji:'⏱', name:t('eng.camp.seg_lapsed', 'Lapsed'),       desc:t('eng.camp.seg_desc_lapsed', 'Has purchased · no visit 180d') },
+    { key:'all',    emoji:'👥', name:t('eng.camp.seg_all'), desc:t('eng.camp.seg_desc_all') },
+    { key:'vip',    emoji:'⭐', name:t('eng.camp.seg_vip'),          desc:t('eng.camp.seg_desc_vip') },
+    { key:'loyal',  emoji:'♻', name:t('eng.camp.seg_loyal'),        desc:t('eng.camp.seg_desc_loyal') },
+    { key:'new',    emoji:'✦', name:t('eng.camp.seg_new'),          desc:t('eng.camp.seg_desc_new') },
+    { key:'warm',   emoji:'🔥', name:t('eng.camp.seg_warm'),         desc:t('eng.camp.seg_desc_warm') },
+    { key:'lapsed', emoji:'⏱', name:t('eng.camp.seg_lapsed'),       desc:t('eng.camp.seg_desc_lapsed') },
   ]
 
-  const steps = [t('eng.camp.step_channel', 'Channel & Languages'), t('eng.camp.step_template', 'Template'), t('eng.camp.step_content', 'Content'), t('eng.camp.step_audience', 'Audience & Schedule'), t('eng.camp.step_review', 'Translation Review')]
+  const steps = [t('eng.camp.step_channel'), t('eng.camp.step_template'), t('eng.camp.step_content'), t('eng.camp.step_audience'), t('eng.camp.step_review')]
 
   return (
     <div className="camp-sub-wrap">
@@ -1916,24 +1920,24 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
       {/* Top bar */}
       <div className="camp-builder-top">
         <button className="btn btn-outline btn-sm" onClick={onBack} disabled={saving}>
-          <span className="material-symbols-outlined">arrow_back</span>{t('eng.camp.hub_em', 'Hub')}
+          <span className="material-symbols-outlined">arrow_back</span>{t('eng.camp.hub_em')}
         </button>
         <div className="camp-builder-title-wrap">
           <input
             value={campaignName}
             onChange={e => setCampaignName(e.target.value)}
-            placeholder={t('eng.camp.untitled', 'Untitled draft')}
+            placeholder={t('eng.camp.untitled')}
             className="camp-name-input"
           />
           <div className="camp-builder-sub">
-            {campaignId ? t('eng.camp.draft_persist', 'Draft · click Save or Translation Review to persist') : t('eng.camp.untitled_persist', 'Untitled draft · click Save to persist')}
+            {campaignId ? t('eng.camp.draft_persist') : t('eng.camp.untitled_persist')}
           </div>
         </div>
         <button className="btn btn-outline btn-sm" onClick={handleSaveAndClose} disabled={saving}>
-          {saving ? t('common.saving', 'Saving…') : t('eng.camp.save_close', 'Save & close')}
+          {saving ? t('common.saving') : t('eng.camp.save_close')}
         </button>
         <button className="btn btn-primary btn-sm" onClick={handleReview} disabled={saving}>
-          {saving ? t('common.saving', 'Saving…') : t('eng.camp.translation_review', 'Translation Review')}<span className="material-symbols-outlined">arrow_forward</span>
+          {saving ? t('common.saving') : t('eng.camp.translation_review')}<span className="material-symbols-outlined">arrow_forward</span>
         </button>
       </div>
 
@@ -1955,7 +1959,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         <div>
           {/* Step 1: Channel */}
           <div className="camp-step">
-            <div className="form-lbl">{t('eng.camp.step1_label', 'Step 1 — Channel')}</div>
+            <div className="form-lbl">{t('eng.camp.step1_label')}</div>
             <div className="chs-grid">
               {channels.map(c => (
                 <div key={c.key}
@@ -1971,10 +1975,10 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
 
           {/* Step 2: Languages */}
           <div className="camp-step">
-            <div className="form-lbl">{t('eng.camp.step2_label', 'Step 2 — Your audience\'s languages')}</div>
+            <div className="form-lbl">{t('eng.camp.step2_label')}</div>
             <div className="camp-tip">
               <span className="material-symbols-outlined">tips_and_updates</span>
-              {t('eng.camp.lang_tip', 'Every campaign is automatically translated into all supported languages. Below is the language mix for your selected segment.')}
+              {t('eng.camp.lang_tip')}
             </div>
             <div className="lang-pills">
               {LANGS.map(l => (
@@ -1985,26 +1989,26 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
                 </div>
               ))}
             </div>
-            <div className="form-hint">{t('eng.camp.auto_translate', 'Auto-translated on save · review each before send.')}</div>
+            <div className="form-hint">{t('eng.camp.auto_translate')}</div>
           </div>
 
           {/* Step 3: Template */}
           <div className="camp-step">
-            <div className="form-lbl">{t('eng.camp.step3_label', 'Step 3 — Template')}</div>
+            <div className="form-lbl">{t('eng.camp.step3_label')}</div>
             <div className="tmpl-grid">
               {templatesLoading ? (
                 <Loading className="eng-loading-grid" />
               ) : templatesFailed ? (
-                <div className="eng-error">{t('eng.camp.err_templates', 'Could not load your templates. You can still write the message below, or reload to try again.')}</div>
+                <div className="eng-error">{t('eng.camp.err_templates')}</div>
               ) : apiTemplates.length === 0 ? (
                 <div className="eng-loading-grid">
-                  {t('eng.camp.no_templates', 'No templates yet — campaigns will use the message body below.')}
+                  {t('eng.camp.no_templates')}
                 </div>
               ) : (
                 <>
                   <div className={`tmpl-pick${template === null ? ' sel' : ''}`} onClick={() => setTemplate(null)}>
                     <div className="tmpl-pick-emoji">✏️</div>
-                    <div className="tmpl-pick-label">{t('eng.camp.no_template', 'No template')}<br/><span className="tmpl-no-tpl-sub">{t('eng.camp.use_body', 'Use message below')}</span></div>
+                    <div className="tmpl-pick-label">{t('eng.camp.no_template')}<br/><span className="tmpl-no-tpl-sub">{t('eng.camp.use_body')}</span></div>
                   </div>
                   {apiTemplates.map(tpl => (
                     <div key={tpl.id}
@@ -2013,7 +2017,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
                       <div className="tmpl-pick-emoji">{templateEmoji(tpl.template_key)}</div>
                       <div className="tmpl-pick-label">{templateDisplayName(tpl.template_key, t)}</div>
                       {tpl.translations_pending && (
-                        <div className="tmpl-pending-tag">{t('eng.camp.translations_pending', 'TRANSLATIONS PENDING')}</div>
+                        <div className="tmpl-pending-tag">{t('eng.camp.translations_pending')}</div>
                       )}
                     </div>
                   ))}
@@ -2024,7 +2028,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
 
           {/* Step 4: Content */}
           <div className="camp-step">
-            <div className="form-lbl">{t('eng.camp.step4_label', 'Step 4 — Content · Italian (source)')}</div>
+            <div className="form-lbl">{t('eng.camp.step4_label')}</div>
             {template && (
               <div className="alert alert-info">
                 <span className="material-symbols-outlined">info</span>
@@ -2033,27 +2037,27 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             )}
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">{t('eng.camp.subject', 'Subject Line')}</label>
+                <label className="form-lbl">{t('eng.camp.subject')}</label>
                 <input className="form-input" disabled={!!template} value={subject} onChange={e => setSubject(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('eng.camp.preview_text', 'Preview Text')}</label>
+                <label className="form-lbl">{t('eng.camp.preview_text')}</label>
                 <input className="form-input" disabled={!!template} value={previewText} onChange={e => setPreviewText(e.target.value)} />
               </div>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.camp.body', 'Message Body')}</label>
+              <label className="form-lbl">{t('eng.camp.body')}</label>
               <textarea className="form-textarea camp-body-textarea" disabled={!!template} value={body} onChange={e => setBody(e.target.value)} />
-              <div className="form-hint">{t('eng.camp.write_italian', 'Write in Italian. The other languages auto-translate on save — review each in step 5 before send.')}</div>
+              <div className="form-hint">{t('eng.camp.write_italian')}</div>
             </div>
           </div>
 
           {/* Step 5: Audience & schedule */}
           <div className="camp-step">
-            <div className="form-lbl">{t('eng.camp.step5_label', 'Step 5 — Audience & schedule')}</div>
+            <div className="form-lbl">{t('eng.camp.step5_label')}</div>
             <div className="camp-tip">
               <span className="material-symbols-outlined">groups</span>
-              <span dangerouslySetInnerHTML={{ __html: t('eng.camp.segment_hint', 'Pick a segment from your <strong>Contacts</strong>. Manage standing segments once — target them everywhere.') }} />
+              <span dangerouslySetInnerHTML={{ __html: t('eng.camp.segment_hint') }} />
             </div>
             <div className="seg-grid">
               {segmentCards.map(s => (
@@ -2071,36 +2075,36 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             </div>
             <div className="seg-link">
               <span className="material-symbols-outlined">open_in_new</span>
-              {t('eng.camp.edit_segments', 'Create or edit segments in Contacts')}
+              {t('eng.camp.edit_segments')}
             </div>
 
             <div className="refine-row">
               <span className="material-symbols-outlined refine-icon">filter_alt</span>
               <div className="refine-body">
-                <div className="refine-title">{t('eng.camp.exclude_recent', 'Exclude recent recipients')} <span className="eng-soon-tag">{t('eng.camp.soon_tag', 'SOON')}</span></div>
-                <div className="refine-sub">{t('eng.camp.exclude_hint', 'Skip anyone who got another campaign in the last 7 days. Not yet available — targeting is by segment only for now.')}</div>
+                <div className="refine-title">{t('eng.camp.exclude_recent')} <span className="eng-soon-tag">{t('eng.camp.soon_tag')}</span></div>
+                <div className="refine-sub">{t('eng.camp.exclude_hint')}</div>
               </div>
               <Toggle on={false} onToggle={() => {}} />
             </div>
             <div className="refine-row">
               <span className="material-symbols-outlined refine-icon">translate</span>
               <div className="refine-body">
-                <div className="refine-title">{t('eng.camp.match_lang', 'Match recipient language')} <span className="eng-soon-tag">{t('eng.camp.soon_tag', 'SOON')}</span></div>
-                <div className="refine-sub">{t('eng.camp.match_hint', 'Only send to contacts whose language is in your selected languages. Not yet available — targeting is by segment only for now.')}</div>
+                <div className="refine-title">{t('eng.camp.match_lang')} <span className="eng-soon-tag">{t('eng.camp.soon_tag')}</span></div>
+                <div className="refine-sub">{t('eng.camp.match_hint')}</div>
               </div>
               <Toggle on={false} onToggle={() => {}} />
             </div>
 
             <div className="form-row2 eng-mt14">
               <div className="form-group">
-                <label className="form-lbl">{t('eng.camp.when_send', 'When to send')}</label>
+                <label className="form-lbl">{t('eng.camp.when_send')}</label>
                 <select className="form-select" value={sendMode} onChange={e => setSendMode(e.target.value)}>
-                  <option value="immediate">{t('eng.camp.send_approved', 'Send when approved')}</option>
-                  <option value="scheduled">{t('eng.camp.schedule_time', 'Schedule for specific time')}</option>
+                  <option value="immediate">{t('eng.camp.send_approved')}</option>
+                  <option value="scheduled">{t('eng.camp.schedule_time')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('eng.camp.timezone', 'Time zone')}</label>
+                <label className="form-lbl">{t('eng.camp.timezone')}</label>
                 <select className="form-select" value={timezone} onChange={e => setTimezone(e.target.value)}>
                   {TIMEZONE_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </select>
@@ -2108,7 +2112,7 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
             </div>
             {sendMode === 'scheduled' && (
               <div className="form-group eng-mt14">
-                <label className="form-lbl">{t('eng.camp.schedule_datetime', 'Date & time')}</label>
+                <label className="form-lbl">{t('eng.camp.schedule_datetime')}</label>
                 <input
                   className="form-input"
                   type="datetime-local"
@@ -2126,29 +2130,29 @@ function CampaignBuilder({ campaignId: initialId, segments: segArr, emailSetting
         <div>
           <div className="camp-preview-wrap">
             <div className="camp-preview-head">
-              <div className="camp-preview-label">{t('eng.camp.live_preview', { channel: channels.find(c => c.key === channel)?.label || t('eng.channels.email', 'Email'), defaultValue: 'Live preview · {{channel}} · Italian' })}</div>
+              <div className="camp-preview-label">{t('eng.camp.live_preview', { channel: channels.find(c => c.key === channel)?.label || t('eng.channels.email'), defaultValue: 'Live preview · {{channel}} · Italian' })}</div>
               <div className="camp-preview-sub">
-                <span className="material-symbols-outlined">visibility</span>{t('eng.camp.recipient_view', 'Recipient view')}
+                <span className="material-symbols-outlined">visibility</span>{t('eng.camp.recipient_view')}
               </div>
             </div>
             <div className="email-preview">
               <div className="email-preview-head">
-                {t('eng.camp.email_from', 'From:')} {emailSettings
+                {t('eng.camp.email_from')} {emailSettings
                   ? <><strong>{emailSettings.sender_display_name}</strong> &lt;{emailSettings.sender_local_part}@{emailSettings.sender_domain}&gt;</>
-                  : t('common.loading', 'Loading...')}<br />
-                {t('eng.camp.email_subject', 'Subject:')} <strong>{subject}</strong>
+                  : t('common.loading')}<br />
+                {t('eng.camp.email_subject')} <strong>{subject}</strong>
               </div>
               <div className="email-preview-body">
-                <div className="email-preview-brand">{emailSettings ? emailSettings.sender_display_name : t('common.loading', 'Loading...')}</div>
-                <div className="email-preview-title">{campaignName || t('eng.camp.untitled_short', 'Untitled')}</div>
+                <div className="email-preview-brand">{emailSettings ? emailSettings.sender_display_name : t('common.loading')}</div>
+                <div className="email-preview-title">{campaignName || t('eng.camp.untitled_short')}</div>
                 <div className="email-preview-tag">Seta italiana · SS26</div>
                 <div className="email-preview-hero">👗</div>
                 <div className="email-preview-text">{body}</div>
-                <a className="email-preview-cta">{t('eng.camp.email_cta', 'Reserve at Brera')}</a>
+                <a className="email-preview-cta">{t('eng.camp.email_cta')}</a>
               </div>
-              <div className="email-preview-foot">{emailSettings ? `${emailSettings.sender_display_name} · ${emailSettings.physical_address} · Mi Italia` : t('common.loading', 'Loading...')}<br />{t('eng.camp.unsubscribe_anytime', 'Unsubscribe anytime')}</div>
+              <div className="email-preview-foot">{emailSettings ? `${emailSettings.sender_display_name} · ${emailSettings.physical_address} · Mi Italia` : t('common.loading')}<br />{t('eng.camp.unsubscribe_anytime')}</div>
             </div>
-            <div className="camp-preview-note">{t('eng.camp.preview_note', "Preview shows Italian (source). After save, translations generate and you'll review each in step 5.")}</div>
+            <div className="camp-preview-note">{t('eng.camp.preview_note')}</div>
           </div>
         </div>
       </div>
@@ -2234,10 +2238,10 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
         setCampaignTranslations(prev => ({ ...prev, [lang]: res.data }))
         setDirtyLangs(prev => { const next = new Set(prev); next.delete(lang); return next })
       } else {
-        setErrorMsg(res?.message || t('eng.rev.err_save_translation', 'Failed to save this translation.'))
+        setErrorMsg(res?.message || t('eng.rev.err_save_translation'))
       }
     } catch {
-      setErrorMsg(t('eng.rev.err_save_translation_network', 'Failed to save — check your connection.'))
+      setErrorMsg(t('eng.rev.err_save_translation_network'))
     } finally {
       setSavingLang(null)
     }
@@ -2245,7 +2249,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
 
   const handleRetranslate = async (lang) => {
     if (!template?.id) {
-      setErrorMsg(t('eng.rev.err_no_template', 'No template attached — translations can only be regenerated from a template.'))
+      setErrorMsg(t('eng.rev.err_no_template'))
       return
     }
     setRetranslating(lang)
@@ -2258,10 +2262,10 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
         const tres = await templateApi.get(template.id)
         if (tres?.success) setTemplate(tres.data?.template)
       } else {
-        setErrorMsg(res?.message || t('eng.rev.err_retranslate', 'Re-translate failed.'))
+        setErrorMsg(res?.message || t('eng.rev.err_retranslate'))
       }
     } catch {
-      setErrorMsg(t('eng.rev.err_retranslate_network', 'Re-translate failed — check your connection.'))
+      setErrorMsg(t('eng.rev.err_retranslate_network'))
     } finally {
       setRetranslating(null)
     }
@@ -2269,11 +2273,11 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
 
   const handleSubmit = async () => {
     if (!campaignId) {
-      setErrorMsg(t('eng.rev.err_no_campaign', 'No campaign id — save the campaign first.'))
+      setErrorMsg(t('eng.rev.err_no_campaign'))
       return
     }
     if (!allConfirmed) {
-      setErrorMsg(t('eng.rev.err_confirm_all', 'Confirm all translations before submitting.'))
+      setErrorMsg(t('eng.rev.err_confirm_all'))
       return
     }
     setSending(true)
@@ -2283,7 +2287,7 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
     try {
       const res = await campaignApi.send(campaignId)
       if (res?.success) {
-        setSuccessMsg(res.message || t('eng.rev.campaign_sent', 'Campaign sent.'))
+        setSuccessMsg(res.message || t('eng.rev.campaign_sent'))
         setSendResult(res.data ?? null)
         const hasFailures = (res.data?.failed ?? 0) > 0 || (res.data?.failures?.length ?? 0) > 0
         if (!hasFailures) {
@@ -2292,10 +2296,10 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
         }
         // else: leave the panel open so the user can read the failure breakdown
       } else {
-        setErrorMsg(res?.message || t('eng.rev.err_send', 'Send failed.'))
+        setErrorMsg(res?.message || t('eng.rev.err_send'))
       }
     } catch {
-      setErrorMsg(t('eng.rev.err_send_network', 'Send failed — check your connection and try again.'))
+      setErrorMsg(t('eng.rev.err_send_network'))
     } finally {
       setSending(false)
     }
@@ -2306,18 +2310,18 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
       {/* Top bar */}
       <div className="camp-builder-top">
         <button className="btn btn-outline btn-sm" onClick={onBack} disabled={sending}>
-          <span className="material-symbols-outlined">arrow_back</span>{t('eng.rev.back_builder', 'Back to Builder')}
+          <span className="material-symbols-outlined">arrow_back</span>{t('eng.rev.back_builder')}
         </button>
         <div className="camp-builder-title-wrap">
-          <div className="camp-builder-title">{t('eng.rev.title', 'Translation')} <em>{t('eng.rev.title_em', 'Review')}</em></div>
+          <div className="camp-builder-title">{t('eng.rev.title')} <em>{t('eng.rev.title_em')}</em></div>
           <div className="camp-builder-sub">
-            {campaign?.campaign_name || t('eng.camp.untitled', 'Untitled draft')}
+            {campaign?.campaign_name || t('eng.camp.untitled')}
             {hasTemplate ? ` · ${t('eng.rev.langs_ready_dyn', { count: confirmedCount, total: languages.length, defaultValue: '{{count}} of {{total}} languages ready' })}` : ''}
           </div>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={onBack} disabled={sending}>{t('eng.camp.save_draft', 'Save Draft')}</button>
+        <button className="btn btn-outline btn-sm" onClick={onBack} disabled={sending}>{t('eng.camp.save_draft')}</button>
         <button className={`btn btn-primary${sending || !campaignId || !allConfirmed ? ' btn-disabled' : ''}`} disabled={sending || !campaignId || !allConfirmed} onClick={handleSubmit}>
-          <span className="material-symbols-outlined">check</span>{sending ? t('eng.rev.sending', 'Sending…') : t('eng.rev.submit', 'Submit for review')}
+          <span className="material-symbols-outlined">check</span>{sending ? t('eng.rev.sending') : t('eng.rev.submit')}
         </button>
       </div>
 
@@ -2338,12 +2342,12 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
           {sendResult?.failures?.length > 0 && (
             <ul className="eng-send-failures">
               {sendResult.failures.map((f, i) => (
-                <li key={i}>{f.email || f.contact_id || f.recipient} — {f.reason || f.error || t('eng.rev.unknown_error', 'Unknown error')}</li>
+                <li key={i}>{f.email || f.contact_id || f.recipient} — {f.reason || f.error || t('eng.rev.unknown_error')}</li>
               ))}
             </ul>
           )}
           {sendResult && ((sendResult.failed ?? 0) > 0 || (sendResult.failures?.length ?? 0) > 0) && (
-            <button className="btn btn-outline btn-sm eng-mt14" onClick={onSubmit}>{t('common.done', 'Done')}</button>
+            <button className="btn btn-outline btn-sm eng-mt14" onClick={onSubmit}>{t('common.done')}</button>
           )}
         </div>
       )}
@@ -2359,10 +2363,10 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
               <div className="cr-banner-title">
                 {hasTemplate
                   ? t('eng.rev.source_banner_dyn', { lang: langDisplayName(template?.primary_language, t), count: Math.max(languages.length - 1, 0), defaultValue: 'Source: {{lang}} · {{count}} translation(s)' })
-                  : t('eng.rev.source_banner_none', 'No template attached — this campaign sends one message with no translations.')}
+                  : t('eng.rev.source_banner_none')}
               </div>
               {hasTemplate && (
-                <div className="cr-banner-sub" dangerouslySetInnerHTML={{ __html: t('eng.rev.source_hint', "Review each translation. Edit any wording that doesn't sound right. <strong>Confirm</strong> each one before submitting — the Send button only unlocks when all are confirmed.") }} />
+                <div className="cr-banner-sub" dangerouslySetInnerHTML={{ __html: t('eng.rev.source_hint') }} />
               )}
             </div>
           </div>
@@ -2370,9 +2374,9 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
           {!hasTemplate && (
             <div className="card cr-source-card">
               <div className="cr-source-head">
-                <div className="cr-source-title">{t('eng.rev.no_template_title', 'Single-language campaign')}</div>
+                <div className="cr-source-title">{t('eng.rev.no_template_title')}</div>
               </div>
-              <div className="cr-source-subject">{t('eng.rev.subject', 'SUBJECT')}: {campaign?.subject || '—'}</div>
+              <div className="cr-source-subject">{t('eng.rev.subject')}: {campaign?.subject || '—'}</div>
               <div className="cr-source-body">{campaign?.message || '—'}</div>
             </div>
           )}
@@ -2391,30 +2395,30 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
                     <div className="cr-card-head">
                       <span className="eng-flag-lg">{flag}</span>
                       <div className="cr-card-lang">{langDisplayName(lang, t)}</div>
-                      {isPrimary && <span className="cr-source-locked">{t('eng.rev.source_tag', 'SOURCE')}</span>}
+                      {isPrimary && <span className="cr-source-locked">{t('eng.rev.source_tag')}</span>}
                       <span className={`cr-card-status ${confirmed ? 'confirmed' : 'edited'}`}>
-                        {confirmed ? t('eng.rev.confirmed', 'CONFIRMED') : t('eng.rev.needs_review', 'NEEDS REVIEW')}
+                        {confirmed ? t('eng.rev.confirmed') : t('eng.rev.needs_review')}
                       </span>
                     </div>
-                    <div className="cr-card-label">{t('eng.rev.subject', 'SUBJECT')}</div>
+                    <div className="cr-card-label">{t('eng.rev.subject')}</div>
                     <input
                       className={`form-input cr-input${!confirmed ? ' cr-input-edited' : ''}`}
                       value={content.subject}
                       onChange={e => handleFieldChange(lang, 'subject', e.target.value)} />
-                    <div className="cr-card-label">{t('eng.rev.body', 'BODY')}</div>
+                    <div className="cr-card-label">{t('eng.rev.body')}</div>
                     <textarea
                       className="form-textarea cr-card-textarea"
                       value={content.text}
                       onChange={e => handleFieldChange(lang, 'text', e.target.value)} />
                     <div className="cr-card-foot">
                       {confirmed
-                        ? <span className="cr-card-foot-txt">{recipientCount != null ? t('eng.rev.recipients_confirmed', { count: recipientCount, defaultValue: '{{count}} recipients · Confirmed' }) : t('eng.rev.confirmed_label', 'Confirmed')}</span>
+                        ? <span className="cr-card-foot-txt">{recipientCount != null ? t('eng.rev.recipients_confirmed', { count: recipientCount, defaultValue: '{{count}} recipients · Confirmed' }) : t('eng.rev.confirmed_label')}</span>
                         : <button className="btn btn-primary btn-xs" disabled={savingLang === lang} onClick={() => handleConfirmLang(lang)}>
-                            <span className="material-symbols-outlined">check</span>{savingLang === lang ? t('common.saving', 'Saving…') : t('eng.rev.confirm_changes', 'Confirm changes')}
+                            <span className="material-symbols-outlined">check</span>{savingLang === lang ? t('common.saving') : t('eng.rev.confirm_changes')}
                           </button>
                       }
                       <button className="btn btn-outline btn-xs" onClick={() => handleRetranslate(lang)} disabled={!!retranslating}>
-                        <span className="material-symbols-outlined">refresh</span>{retranslating === lang ? t('eng.rev.queuing', 'Queuing…') : t('eng.rev.retranslate', 'Re-translate')}
+                        <span className="material-symbols-outlined">refresh</span>{retranslating === lang ? t('eng.rev.queuing') : t('eng.rev.retranslate')}
                       </button>
                     </div>
                   </div>
@@ -2430,16 +2434,16 @@ function CampaignReview({ campaignId, segments, onBack, onSubmit }) {
               <div className="cr-send-title">
                 {hasTemplate
                   ? t('eng.rev.translations_confirmed_count', { count: confirmedCount, total: languages.length, defaultValue: '{{count}} of {{total}} translations confirmed' })
-                  : t('eng.rev.no_translations_needed', 'No translations to confirm')}
+                  : t('eng.rev.no_translations_needed')}
               </div>
               <div className="cr-send-sub">
                 {allConfirmed
-                  ? t('eng.rev.all_confirmed', 'All translations confirmed — ready to submit for Mi Italia review.')
-                  : t('eng.rev.not_confirmed_dyn', 'Confirm every language before submitting.')}
+                  ? t('eng.rev.all_confirmed')
+                  : t('eng.rev.not_confirmed_dyn')}
               </div>
             </div>
             <button className={`btn btn-primary${sending || !campaignId || !allConfirmed ? ' btn-disabled' : ''}`} disabled={sending || !campaignId || !allConfirmed} onClick={handleSubmit}>
-              <span className="material-symbols-outlined">check</span>{sending ? t('eng.rev.sending', 'Sending…') : t('eng.rev.submit', 'Submit for review')}
+              <span className="material-symbols-outlined">check</span>{sending ? t('eng.rev.sending') : t('eng.rev.submit')}
             </button>
           </div>
         </>
@@ -2487,11 +2491,11 @@ function mapTopPerformers(performers, sentAt, t) {
     return t('eng.an.time_hr', { count: Math.round(diffMin / 60), defaultValue: '{{count}}h after send' })
   }
   return (performers ?? []).map(row => {
-    const name = row.contact_name || row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || t('eng.an.contact_fallback', 'Contact')
+    const name = row.contact_name || row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || t('eng.an.contact_fallback')
     const action = row.action || row.event_type || row.type || 'clicked'
-    const actionLabel = action === 'purchased' ? t('eng.an.action_purchased', 'Purchased')
-      : action === 'opened' ? t('eng.an.action_opened', 'Opened')
-      : t('eng.an.action_clicked', 'Clicked link')
+    const actionLabel = action === 'purchased' ? t('eng.an.action_purchased')
+      : action === 'opened' ? t('eng.an.action_opened')
+      : t('eng.an.action_clicked')
     return { name, action, actionLabel, time: timeSince(row.occurred_at || row.created_at || row.timestamp) }
   })
 }
@@ -2511,9 +2515,9 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setData(res.data)
-        else setErrorMsg(res?.message || t('eng.an.err_load', 'Failed to load analytics'))
+        else setErrorMsg(res?.message || t('eng.an.err_load'))
       })
-      .catch(() => setErrorMsg(t('eng.an.err_load', 'Failed to load analytics')))
+      .catch(() => setErrorMsg(t('eng.an.err_load')))
       .finally(() => setLoading(false))
   }, [campaignId, i18n.language])
 
@@ -2545,8 +2549,8 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
   const fmt    = (n) => (n == null ? '—' : Number(n).toLocaleString(activeLocale()))
   const fmtPct = (r) => (r == null ? '—' : `${(+r).toFixed(1).replace(/\.0$/, '')}%`)
 
-  const displayName = c.campaign_name || t('eng.an.campaign_fallback', 'Campaign')
-  const dateLbl     = c.sent_at ? formatDate(c.sent_at) : c.status === 'draft' ? t('eng.an.draft_not_sent', 'Draft · not yet sent') : ''
+  const displayName = c.campaign_name || t('eng.an.campaign_fallback')
+  const dateLbl     = c.sent_at ? formatDate(c.sent_at) : c.status === 'draft' ? t('eng.an.draft_not_sent') : ''
 
   const revenue   = data?.attribution?.revenue ?? 0
   const purchases = data?.attribution?.orders  ?? 0
@@ -2561,7 +2565,7 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
       <div className="cam-modal-overlay" onClick={onClose} />
       <div className="cam-modal" role="dialog" aria-modal="true">
         <div className="cam-modal-hdr">
-          <div className="cam-modal-title">{displayName} <em>— {t('eng.an.title_em', 'Analytics')}</em></div>
+          <div className="cam-modal-title">{displayName} <em>— {t('eng.an.title_em')}</em></div>
           <button className="cam-modal-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -2580,22 +2584,22 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
               {/* Top 4 KPI cards */}
               <div className="cam-modal-stats">
                 <div className="cam-modal-stat">
-                  <div className="cam-modal-stat-lbl">{t('eng.an.col_sent', 'Sent')}</div>
+                  <div className="cam-modal-stat-lbl">{t('eng.an.col_sent')}</div>
                   <div className="cam-modal-stat-val">{fmt(counts.sent)}</div>
                   <div className="cam-modal-stat-sub">{dateLbl}</div>
                 </div>
                 <div className="cam-modal-stat">
-                  <div className="cam-modal-stat-lbl">{t('eng.ov.stat_opened', 'OPENED')}</div>
+                  <div className="cam-modal-stat-lbl">{t('eng.ov.stat_opened')}</div>
                   <div className="cam-modal-stat-val">{fmt(counts.opened)}</div>
                   <div className="cam-modal-stat-sub up">{t('eng.an.open_rate_val', { pct: fmtPct(rates.open), defaultValue: '{{pct}} open rate' })}</div>
                 </div>
                 <div className="cam-modal-stat">
-                  <div className="cam-modal-stat-lbl">{t('eng.ov.stat_clicked', 'CLICKED')}</div>
+                  <div className="cam-modal-stat-lbl">{t('eng.ov.stat_clicked')}</div>
                   <div className="cam-modal-stat-val">{fmt(counts.clicked)}</div>
                   <div className="cam-modal-stat-sub">{t('eng.an.ctr_val', { pct: fmtPct(rates.click), defaultValue: '{{pct}} CTR' })}</div>
                 </div>
                 <div className="cam-modal-stat">
-                  <div className="cam-modal-stat-lbl">{t('eng.an.col_revenue', 'Revenue')}</div>
+                  <div className="cam-modal-stat-lbl">{t('eng.an.col_revenue')}</div>
                   <div className="cam-modal-stat-val">€{fmt(revenue)}</div>
                   <div className="cam-modal-stat-sub up">{t('eng.an.purchases_attributed', { count: purchases, defaultValue: '{{count}} purchase(s) attributed' })}</div>
                 </div>
@@ -2605,32 +2609,32 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
               {counts.sent > 0 && (
                 <div className="cam-modal-card">
                   <div className="cam-modal-card-hdr">
-                    <div className="cam-modal-card-title">{t('eng.an.delivery_health', 'Delivery')} <em>{t('eng.an.delivery_health_em', 'Health')}</em></div>
+                    <div className="cam-modal-card-title">{t('eng.an.delivery_health')} <em>{t('eng.an.delivery_health_em')}</em></div>
                   </div>
                   <div className="cam-modal-stats">
                     <div className="cam-modal-stat">
-                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_delivery_rate', 'DELIVERY RATE')}</div>
+                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_delivery_rate')}</div>
                       <div className="cam-modal-stat-val">{fmtPct(rates.delivery)}</div>
                     </div>
                     <div className="cam-modal-stat">
-                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_bounce_rate', 'BOUNCE RATE')}</div>
+                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_bounce_rate')}</div>
                       <div className="cam-modal-stat-val">{fmtPct(rates.bounce)}</div>
                     </div>
                     <div className="cam-modal-stat">
-                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_complaint_rate', 'COMPLAINT RATE')}</div>
+                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_complaint_rate')}</div>
                       <div className="cam-modal-stat-val">{fmtPct(rates.complaint)}</div>
                     </div>
                     <div className="cam-modal-stat">
-                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_unsubscribed', 'UNSUBSCRIBED')}</div>
+                      <div className="cam-modal-stat-lbl">{t('eng.an.stat_unsubscribed')}</div>
                       <div className="cam-modal-stat-val">{fmt(counts.unsubscribed)}</div>
                     </div>
                   </div>
                   {(counts.bounced > 0 || counts.complained > 0 || counts.failed > 0 || counts.skipped > 0) && (
                     <div className="cam-modal-stats" style={{ marginTop:10 }}>
-                      {counts.bounced    > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_bounced', 'BOUNCED')}</div><div className="cam-modal-stat-val">{fmt(counts.bounced)}</div></div>}
-                      {counts.complained > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_complained', 'COMPLAINED')}</div><div className="cam-modal-stat-val">{fmt(counts.complained)}</div></div>}
-                      {counts.failed     > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_failed', 'FAILED')}</div><div className="cam-modal-stat-val">{fmt(counts.failed)}</div></div>}
-                      {counts.skipped    > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_skipped', 'SKIPPED')}</div><div className="cam-modal-stat-val">{fmt(counts.skipped)}</div></div>}
+                      {counts.bounced    > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_bounced')}</div><div className="cam-modal-stat-val">{fmt(counts.bounced)}</div></div>}
+                      {counts.complained > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_complained')}</div><div className="cam-modal-stat-val">{fmt(counts.complained)}</div></div>}
+                      {counts.failed     > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_failed')}</div><div className="cam-modal-stat-val">{fmt(counts.failed)}</div></div>}
+                      {counts.skipped    > 0 && <div className="cam-modal-stat"><div className="cam-modal-stat-lbl">{t('eng.an.stat_skipped')}</div><div className="cam-modal-stat-val">{fmt(counts.skipped)}</div></div>}
                     </div>
                   )}
                 </div>
@@ -2640,17 +2644,17 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
               {langRows.length > 0 && (
                 <div className="cam-modal-card">
                   <div className="cam-modal-card-hdr">
-                    <div className="cam-modal-card-title">{t('eng.an.perf_by', 'Performance by')} <em>{t('eng.an.perf_by_em', 'language')}</em></div>
+                    <div className="cam-modal-card-title">{t('eng.an.perf_by')} <em>{t('eng.an.perf_by_em')}</em></div>
                     <div className="cam-modal-card-meta">{t('eng.an.langs_meta', { count: totalLangs, defaultValue: '{{count}} LANGUAGES' })}</div>
                   </div>
                   <table className="cam-modal-tbl">
                     <thead>
                       <tr>
-                        <th>{t('eng.an.col_lang', 'Language')}</th>
-                        <th>{t('eng.an.col_sent', 'Sent')}</th>
-                        <th>{t('eng.an.col_open', 'Open Rate')}</th>
+                        <th>{t('eng.an.col_lang')}</th>
+                        <th>{t('eng.an.col_sent')}</th>
+                        <th>{t('eng.an.col_open')}</th>
                         <th>CTR</th>
-                        <th>{t('eng.an.col_revenue', 'Revenue')}</th>
+                        <th>{t('eng.an.col_revenue')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2683,7 +2687,7 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
               <div className="cam-modal-grid2">
                 <div className="cam-modal-card">
                   <div className="cam-modal-card-hdr">
-                    <div className="cam-modal-card-title">{t('eng.an.opens_time', 'Opens')} <em>{t('eng.an.opens_time_em', 'Over Time')}</em></div>
+                    <div className="cam-modal-card-title">{t('eng.an.opens_time')} <em>{t('eng.an.opens_time_em')}</em></div>
                   </div>
                   <div className="cam-modal-bars">
                     {['1h','3h','6h','12h','24h','48h','+'].map((lbl, i) => (
@@ -2698,14 +2702,14 @@ function CampaignAnalyticsModal({ campaignId, onClose }) {
                 {topPerformers.length > 0 && (
                 <div className="cam-modal-card">
                   <div className="cam-modal-card-hdr">
-                    <div className="cam-modal-card-title">{t('eng.an.top_performers', 'Top')} <em>{t('eng.an.top_performers_em', 'Performers')}</em></div>
+                    <div className="cam-modal-card-title">{t('eng.an.top_performers')} <em>{t('eng.an.top_performers_em')}</em></div>
                   </div>
                   <table className="cam-modal-tbl compact">
                     <thead>
                       <tr>
-                        <th>{t('eng.an.col_contact', 'Contact')}</th>
-                        <th>{t('eng.an.col_action', 'Action')}</th>
-                        <th>{t('eng.an.col_time', 'Time')}</th>
+                        <th>{t('eng.an.col_contact')}</th>
+                        <th>{t('eng.an.col_action')}</th>
+                        <th>{t('eng.an.col_time')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2776,11 +2780,11 @@ function CampaignDetailPanel({ campaignId, onClose }) {
   const channelCls  = camp.channel === 'wa' ? 'wa' : camp.channel === 'sms' ? 'print' : 'email'
 
   const funnelSteps = [
-    { label:t('eng.an.funnel_recipients', 'Recipients'), val:counts.recipients, cls:'cdp-fnl-deep' },
-    { label:t('eng.an.col_sent', 'Sent'),       val:counts.sent,       cls:'cdp-fnl-stone' },
-    { label:t('eng.an.funnel_delivered', 'Delivered'),  val:counts.delivered,  cls:'cdp-fnl-gold' },
-    { label:t('eng.an.funnel_opened', 'Opened'),     val:counts.opened,     cls:'cdp-fnl-goldk' },
-    { label:t('eng.an.funnel_clicked', 'Clicked'),    val:counts.clicked,    cls:'cdp-fnl-green' },
+    { label:t('eng.an.funnel_recipients'), val:counts.recipients, cls:'cdp-fnl-deep' },
+    { label:t('eng.an.col_sent'),       val:counts.sent,       cls:'cdp-fnl-stone' },
+    { label:t('eng.an.funnel_delivered'),  val:counts.delivered,  cls:'cdp-fnl-gold' },
+    { label:t('eng.an.funnel_opened'),     val:counts.opened,     cls:'cdp-fnl-goldk' },
+    { label:t('eng.an.funnel_clicked'),    val:counts.clicked,    cls:'cdp-fnl-green' },
   ].filter(s => s.val != null)
 
   const handleExportDetail = () => {
@@ -2834,7 +2838,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
             </div>
           </div>
           <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); handleExportDetail() }}>
-            <span className="material-symbols-outlined">download</span>{t('common.export', 'Export')}
+            <span className="material-symbols-outlined">download</span>{t('common.export')}
           </button>
           <button className="cdpanel-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -2846,24 +2850,24 @@ function CampaignDetailPanel({ campaignId, onClose }) {
           <div className="cdp-stats">
             <div className="cdp-stat">
               <div className="cdp-stat-val">{counts.sent?.toLocaleString(activeLocale()) ?? 0}</div>
-              <div className="cdp-stat-lbl">{t('eng.an.stat_sent', 'SENT')}</div>
+              <div className="cdp-stat-lbl">{t('eng.an.stat_sent')}</div>
             </div>
             <div className="cdp-stat">
               <div className="cdp-stat-val">{rates.open != null ? `${rates.open}%` : '—'}</div>
-              <div className="cdp-stat-lbl">{t('eng.an.stat_open_rate', 'OPEN RATE')}</div>
+              <div className="cdp-stat-lbl">{t('eng.an.stat_open_rate')}</div>
             </div>
             <div className="cdp-stat">
               <div className="cdp-stat-val">{rates.click != null ? `${rates.click}%` : '—'}</div>
-              <div className="cdp-stat-lbl">{t('eng.an.stat_click_rate', 'CLICK RATE')}</div>
+              <div className="cdp-stat-lbl">{t('eng.an.stat_click_rate')}</div>
             </div>
             <div className="cdp-stat">
               <div className="cdp-stat-val">{counts.unsubscribed ?? 0}</div>
-              <div className="cdp-stat-lbl">{t('eng.an.stat_unsubscribed', 'UNSUBSCRIBED')}</div>
+              <div className="cdp-stat-lbl">{t('eng.an.stat_unsubscribed')}</div>
             </div>
           </div>
 
           {/* Delivery funnel */}
-          <div className="cdp-sec-title">{t('eng.an.delivery_funnel', 'Delivery funnel')}</div>
+          <div className="cdp-sec-title">{t('eng.an.delivery_funnel')}</div>
           <div className="cdp-fnl">
             {funnelSteps.map((s, i) => {
               const pct = counts.recipients > 0 ? Math.round(s.val / counts.recipients * 100) : 0
@@ -2887,19 +2891,19 @@ function CampaignDetailPanel({ campaignId, onClose }) {
           {/* Delivery rate */}
           {rates.delivery != null && (
             <>
-              <div className="cdp-sec-title">{t('eng.an.delivery', 'Delivery')}</div>
+              <div className="cdp-sec-title">{t('eng.an.delivery')}</div>
               <div className="cdp-stats">
                 <div className="cdp-stat">
                   <div className="cdp-stat-val">{rates.delivery}%</div>
-                  <div className="cdp-stat-lbl">{t('eng.an.stat_delivery_rate', 'DELIVERY RATE')}</div>
+                  <div className="cdp-stat-lbl">{t('eng.an.stat_delivery_rate')}</div>
                 </div>
                 <div className="cdp-stat">
                   <div className="cdp-stat-val">{rates.bounce ?? 0}%</div>
-                  <div className="cdp-stat-lbl">{t('eng.an.stat_bounce_rate', 'BOUNCE RATE')}</div>
+                  <div className="cdp-stat-lbl">{t('eng.an.stat_bounce_rate')}</div>
                 </div>
                 <div className="cdp-stat">
                   <div className="cdp-stat-val">{rates.complaint ?? 0}%</div>
-                  <div className="cdp-stat-lbl">{t('eng.an.stat_complaint_rate', 'COMPLAINT RATE')}</div>
+                  <div className="cdp-stat-lbl">{t('eng.an.stat_complaint_rate')}</div>
                 </div>
               </div>
             </>
@@ -2908,12 +2912,12 @@ function CampaignDetailPanel({ campaignId, onClose }) {
           {/* Issues — only show if any */}
           {(counts.bounced > 0 || counts.complained > 0 || counts.failed > 0 || counts.skipped > 0) && (
             <>
-              <div className="cdp-sec-title">{t('eng.an.issues', 'Issues')}</div>
+              <div className="cdp-sec-title">{t('eng.an.issues')}</div>
               <div className="cdp-stats">
-                {counts.bounced > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.bounced}</div><div className="cdp-stat-lbl">{t('eng.an.stat_bounced', 'BOUNCED')}</div></div>}
-                {counts.complained > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.complained}</div><div className="cdp-stat-lbl">{t('eng.an.stat_complained', 'COMPLAINED')}</div></div>}
-                {counts.failed > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.failed}</div><div className="cdp-stat-lbl">{t('eng.an.stat_failed', 'FAILED')}</div></div>}
-                {counts.skipped > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.skipped}</div><div className="cdp-stat-lbl">{t('eng.an.stat_skipped', 'SKIPPED')}</div></div>}
+                {counts.bounced > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.bounced}</div><div className="cdp-stat-lbl">{t('eng.an.stat_bounced')}</div></div>}
+                {counts.complained > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.complained}</div><div className="cdp-stat-lbl">{t('eng.an.stat_complained')}</div></div>}
+                {counts.failed > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.failed}</div><div className="cdp-stat-lbl">{t('eng.an.stat_failed')}</div></div>}
+                {counts.skipped > 0 && <div className="cdp-stat"><div className="cdp-stat-val">{counts.skipped}</div><div className="cdp-stat-lbl">{t('eng.an.stat_skipped')}</div></div>}
               </div>
             </>
           )}
@@ -2922,7 +2926,7 @@ function CampaignDetailPanel({ campaignId, onClose }) {
           {counts.sent === 0 && (
             <div className="an-tip-footer">
               <span className="material-symbols-outlined an-tip-footer-icon">info</span>
-              <div>{t('eng.an.not_sent', "This campaign hasn't been sent yet. Analytics will appear after it's delivered.")}</div>
+              <div>{t('eng.an.not_sent')}</div>
             </div>
           )}
         </div>
@@ -2967,17 +2971,17 @@ function AnalyticsView() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setData(res.data)
-        else setErrorMsg(res?.message || t('eng.an.err_load', 'Failed to load analytics.'))
+        else setErrorMsg(res?.message || t('eng.an.err_load'))
       })
-      .catch(() => setErrorMsg(t('eng.an.err_network', 'Network error.')))
+      .catch(() => setErrorMsg(t('eng.an.err_network')))
       .finally(() => setLoading(false))
   }, [range, compare])
 
   const periodLabel = (() => {
-    if (range === 'custom') return t('eng.an.custom_not_supported', 'Custom ranges aren\'t supported yet — pick a preset above')
+    if (range === 'custom') return t('eng.an.custom_not_supported')
     if (!data?.range) return ''
     const base = `${formatDate(data.range.from)} — ${formatDate(data.range.to)}`
-    if (compare === 'prev') return `${base} · ${t('eng.an.vs_prev_period', 'vs prev period')}`
+    if (compare === 'prev') return `${base} · ${t('eng.an.vs_prev_period')}`
     if (compare === 'prevyear') return `${base} · ${t('eng.an.vs_prev_year', { year: PR_TODAY.getFullYear() - 1, defaultValue: 'vs {{year}}' })}`
     return base
   })()
@@ -3010,18 +3014,18 @@ function AnalyticsView() {
   const trackMonths = data?.cohort_retention?.track_months ?? 6
 
   const SALES_CHANNEL_META = {
-    pos:    { label: t('eng.an.channel_pos', 'In-store (POS)'), icon: 'storefront' },
-    ship:   { label: t('eng.an.channel_ship', 'Shipped'),        icon: 'local_shipping' },
-    pickup: { label: t('eng.an.channel_pickup', 'Pickup'),       icon: 'inventory_2' },
+    pos:    { label: t('eng.an.channel_pos'), icon: 'storefront' },
+    ship:   { label: t('eng.an.channel_ship'),        icon: 'local_shipping' },
+    pickup: { label: t('eng.an.channel_pickup'),       icon: 'inventory_2' },
   }
   const maxChannelRevenue = Math.max(1, ...revByChannel.map(r => Number(r.revenue) || 0))
 
   const funnelStages = funnel ? [
-    { key:'sent',      icon:'campaign',      label:t('eng.an.funnel_sent', 'Sent'),       val: funnel.sent },
-    { key:'delivered',  icon:'mark_email_read', label:t('eng.an.funnel_delivered', 'Delivered'), val: funnel.delivered },
-    { key:'opened',     icon:'drafts',        label:t('eng.an.opened_read', 'Opened / read'), val: funnel.opened },
-    { key:'clicked',    icon:'touch_app',     label:t('eng.an.clicked_replied', 'Clicked / replied'), val: funnel.clicked },
-    { key:'purchased',  icon:'check_circle',  label:t('eng.an.action_purchased', 'Purchased'), val: funnel.purchased, success:true },
+    { key:'sent',      icon:'campaign',      label:t('eng.an.funnel_sent'),       val: funnel.sent },
+    { key:'delivered',  icon:'mark_email_read', label:t('eng.an.funnel_delivered'), val: funnel.delivered },
+    { key:'opened',     icon:'drafts',        label:t('eng.an.opened_read'), val: funnel.opened },
+    { key:'clicked',    icon:'touch_app',     label:t('eng.an.clicked_replied'), val: funnel.clicked },
+    { key:'purchased',  icon:'check_circle',  label:t('eng.an.action_purchased'), val: funnel.purchased, success:true },
   ] : []
   const funnelTop = funnelStages[0]?.val || 1
 
@@ -3043,7 +3047,7 @@ function AnalyticsView() {
       {errorMsg && <div className="eng-error eng-mb18">{errorMsg}</div>}
 
       {range === 'custom' ? (
-        <div className="eng-loading eng-mb18">{t('eng.an.custom_not_supported', 'Custom ranges aren\'t supported yet — pick a preset above')}</div>
+        <div className="eng-loading eng-mb18">{t('eng.an.custom_not_supported')}</div>
       ) : loading ? (
         <Loading className="eng-mb18" />
       ) : (
@@ -3076,8 +3080,8 @@ function AnalyticsView() {
                 <div className="chart-hd-l">
                   <span className="material-symbols-outlined">monitoring</span>
                   <div>
-                    <div className="chart-hd-ttl">{t('eng.an.id_trend', 'Identification')} <em>{t('eng.an.id_trend_em', 'rate trend')}</em></div>
-                    <div className="chart-hd-sub">{t('eng.an.id_trend_sub_real', '% of orders where the buyer was identified, vs an anonymous POS sale.')}</div>
+                    <div className="chart-hd-ttl">{t('eng.an.id_trend')} <em>{t('eng.an.id_trend_em')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.id_trend_sub_real')}</div>
                   </div>
                 </div>
               </div>
@@ -3119,13 +3123,13 @@ function AnalyticsView() {
               <div className="eng-card-footer-row">
                 <div className="an-tier-item">
                   <strong className="eng-strong">{t('eng.an.current_id_rate', { pct: idr.current_pct, defaultValue: '{{pct}}% identified' })}</strong>
-                  {idr.delta_pct != null && <span> · {idr.delta_pct > 0 ? '+' : ''}{idr.delta_pct}% {t('eng.an.vs_compare', 'vs comparison period')}</span>}
+                  {idr.delta_pct != null && <span> · {idr.delta_pct > 0 ? '+' : ''}{idr.delta_pct}% {t('eng.an.vs_compare')}</span>}
                 </div>
                 {idr.commission && (
                   <div className="an-tier-item eng-ml-auto eng-tnum">
-                    <span>{t('eng.an.commission_contracted', 'Contracted:')} </span>
+                    <span>{t('eng.an.commission_contracted')} </span>
                     <strong className="eng-strong">{(idr.commission.commission_rate_pos * 100).toFixed(1)}% POS / {(idr.commission.commission_rate_ecom * 100).toFixed(1)}% online</strong>
-                    <span> · {t('eng.an.commission_realized', 'Realized this period:')} </span>
+                    <span> · {t('eng.an.commission_realized')} </span>
                     <strong className="eng-green">€{(idr.commission.realized_commission ?? 0).toLocaleString(activeLocale())} ({idr.commission.realized_effective_rate_pct}%)</strong>
                   </div>
                 )}
@@ -3140,14 +3144,14 @@ function AnalyticsView() {
                 <div className="chart-hd-l">
                   <span className="material-symbols-outlined">euro</span>
                   <div>
-                    <div className="chart-hd-ttl">{t('eng.an.rev_channel_sales', 'Revenue by')} <em>{t('eng.an.rev_channel_em', 'sales channel')}</em></div>
-                    <div className="chart-hd-sub">{t('eng.an.rev_channel_sales_sub', 'Where your orders came from this period — not campaign attribution.')}</div>
+                    <div className="chart-hd-ttl">{t('eng.an.rev_channel_sales')} <em>{t('eng.an.rev_channel_em')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.rev_channel_sales_sub')}</div>
                   </div>
                 </div>
               </div>
 
               {revByChannel.length === 0 ? (
-                <div className="eng-loading">{t('eng.an.no_revenue_data', 'No revenue data for this range.')}</div>
+                <div className="eng-loading">{t('eng.an.no_revenue_data')}</div>
               ) : (
                 <div className="rev-chan">
                   {revByChannel.map(r => {
@@ -3160,7 +3164,7 @@ function AnalyticsView() {
                           <span>{meta.label}</span>
                         </div>
                         <div className="rev-chan-bar"><div className="rev-chan-fill email" style={{ width:`${pct}%` }}>{r.pct_of_total}%</div></div>
-                        <div className="rev-chan-val">€{(r.revenue ?? 0).toLocaleString(activeLocale())}<span className="sub">{r.orders} {t('eng.an.orders', 'orders')}</span></div>
+                        <div className="rev-chan-val">€{(r.revenue ?? 0).toLocaleString(activeLocale())}<span className="sub">{r.orders} {t('eng.an.orders')}</span></div>
                       </div>
                     )
                   })}
@@ -3173,14 +3177,14 @@ function AnalyticsView() {
                 <div className="chart-hd-l">
                   <span className="material-symbols-outlined">filter_alt</span>
                   <div>
-                    <div className="chart-hd-ttl">{t('eng.an.eng_funnel', 'Engagement')} <em>{t('eng.an.eng_funnel_em', 'funnel')}</em></div>
-                    <div className="chart-hd-sub">{t('eng.an.eng_funnel_sub_real', 'Sent → delivered → opened → clicked → purchased, this period.')}</div>
+                    <div className="chart-hd-ttl">{t('eng.an.eng_funnel')} <em>{t('eng.an.eng_funnel_em')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.eng_funnel_sub_real')}</div>
                   </div>
                 </div>
               </div>
 
               {!funnel ? (
-                <div className="eng-loading">{t('eng.an.no_funnel_data', 'No campaign activity in this range yet.')}</div>
+                <div className="eng-loading">{t('eng.an.no_funnel_data')}</div>
               ) : (
                 <div className="funnel">
                   {funnelStages.map((s, i) => {
@@ -3221,21 +3225,21 @@ function AnalyticsView() {
               <div className="chart-hd-l">
                 <span className="material-symbols-outlined">leaderboard</span>
                 <div>
-                  <div className="chart-hd-ttl">{t('eng.an.campaign_roi_title', 'Campaign')} <em>{t('eng.an.performance_em', 'Performance')}</em></div>
-                  <div className="chart-hd-sub">{t('eng.an.roi_table_sub_real', 'Every campaign sent in the selected range. Revenue per recipient stands in for ROI — we don\'t have per-send cost data yet.')}</div>
+                  <div className="chart-hd-ttl">{t('eng.an.campaign_roi_title')} <em>{t('eng.an.performance_em')}</em></div>
+                  <div className="chart-hd-sub">{t('eng.an.roi_table_sub_real')}</div>
                 </div>
               </div>
             </div>
 
             {roiRows.length === 0 ? (
-              <div className="eng-loading">{t('eng.an.no_sent_campaigns', 'No sent campaigns yet.')}</div>
+              <div className="eng-loading">{t('eng.an.no_sent_campaigns')}</div>
             ) : (
               <table className="croi-tbl">
                 <thead>
                   <tr>
-                    <th>{t('eng.an.col_campaign', 'Campaign')}</th><th>{t('eng.an.col_date', 'Date')}</th>
-                    <th className="num">{t('eng.an.col_sent', 'Sent')}</th><th className="num">{t('eng.an.col_open_short', 'Open')}</th><th className="num">{t('eng.an.col_click', 'Click')}</th>
-                    <th className="num">{t('eng.an.col_orders', 'Orders')}</th><th className="num">{t('eng.an.col_revenue', 'Revenue')}</th><th className="num">{t('eng.an.col_rev_per_recipient', 'Rev/recipient')}</th>
+                    <th>{t('eng.an.col_campaign')}</th><th>{t('eng.an.col_date')}</th>
+                    <th className="num">{t('eng.an.col_sent')}</th><th className="num">{t('eng.an.col_open_short')}</th><th className="num">{t('eng.an.col_click')}</th>
+                    <th className="num">{t('eng.an.col_orders')}</th><th className="num">{t('eng.an.col_revenue')}</th><th className="num">{t('eng.an.col_rev_per_recipient')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3271,14 +3275,14 @@ function AnalyticsView() {
                 <div className="chart-hd-l">
                   <span className="material-symbols-outlined">stacked_bar_chart</span>
                   <div>
-                    <div className="chart-hd-ttl">{t('eng.an.seg_health', 'Segment')} <em>{t('eng.an.seg_health_em', 'health')}</em></div>
-                    <div className="chart-hd-sub">{t('eng.an.seg_health_sub_real', 'Customers, engagement, and revenue by segment this period.')}</div>
+                    <div className="chart-hd-ttl">{t('eng.an.seg_health')} <em>{t('eng.an.seg_health_em')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.seg_health_sub_real')}</div>
                   </div>
                 </div>
               </div>
 
               {segHealth.length === 0 ? (
-                <div className="eng-loading">{t('eng.an.no_segment_data', 'No segment data for this range.')}</div>
+                <div className="eng-loading">{t('eng.an.no_segment_data')}</div>
               ) : (
                 <div className="an-seg-footer" style={{ gridTemplateColumns:`repeat(${segHealth.length}, 1fr)` }}>
                   {segHealth.map(s => (
@@ -3299,8 +3303,8 @@ function AnalyticsView() {
                 <div className="chart-hd-l">
                   <span className="material-symbols-outlined">grid_on</span>
                   <div>
-                    <div className="chart-hd-ttl">{t('eng.an.cohort_retention', 'Cohort')} <em>{t('eng.an.cohort_retention_em', 'retention')}</em></div>
-                    <div className="chart-hd-sub">{t('eng.an.cohort_retention_sub', '% of customers from each month who returned in subsequent months. Higher numbers later = healthier base.')}</div>
+                    <div className="chart-hd-ttl">{t('eng.an.cohort_retention')} <em>{t('eng.an.cohort_retention_em')}</em></div>
+                    <div className="chart-hd-sub">{t('eng.an.cohort_retention_sub')}</div>
                   </div>
                 </div>
               </div>
@@ -3309,7 +3313,7 @@ function AnalyticsView() {
                 <div className="eng-loading">{t('eng.an.no_cohort_data', { months: trackMonths, defaultValue: 'Not enough history yet — cohort retention needs at least a few months of contact data.' })}</div>
               ) : (
                 <div className="cohort">
-                  <div className="cohort-hd cohort-row-lbl">{t('eng.an.acquired_in', 'Acquired in')}</div>
+                  <div className="cohort-hd cohort-row-lbl">{t('eng.an.acquired_in')}</div>
                   {Array.from({ length: trackMonths }, (_, i) => <div key={i} className="cohort-hd">{`M+${i}`}</div>)}
                   {cohorts.flatMap((row, ri) => [
                     <div key={`${ri}-name`} className="cohort-row-name">{row.acquired_month ?? row.month ?? '—'}<span className="sub">{t('eng.an.contacts_count', { count: row.contacts ?? 0, defaultValue: '{{count}} contacts' })}</span></div>,
@@ -3329,10 +3333,10 @@ function AnalyticsView() {
       <div className="an-tip-footer">
         <span className="material-symbols-outlined an-tip-footer-icon">tips_and_updates</span>
         <div>
-          <strong>{t('eng.an.all_shown', 'All Engagement metrics shown.')}</strong>
-          <span> {t('eng.an.storewide_note', 'For store-wide analytics — POS revenue, product velocity, order volume — see')} </span>
-          <span className="an-tip-link">{t('eng.an.storewide_link', 'Insights → Analytics')}</span>
-          <span> {t('eng.an.storewide_note_suffix', 'in the sidebar.')}</span>
+          <strong>{t('eng.an.all_shown')}</strong>
+          <span> {t('eng.an.storewide_note')} </span>
+          <span className="an-tip-link">{t('eng.an.storewide_link')}</span>
+          <span> {t('eng.an.storewide_note_suffix')}</span>
         </div>
       </div>
       <CampaignDetailPanel campaignId={detailId} onClose={() => setDetailId(null)} />
@@ -3399,9 +3403,9 @@ function AutomationsView() {
     automationApi.toggle(a.id, !a.enabled)
       .then(res => {
         if (res?.success) setAutomations(prev => prev.map(x => x.id === a.id ? res.data : x))
-        else setErrorMsg(res?.message || t('eng.auto.err_toggle', 'Failed to update automation.'))
+        else setErrorMsg(res?.message || t('eng.auto.err_toggle'))
       })
-      .catch(() => setErrorMsg(t('eng.auto.err_network', 'Network error.')))
+      .catch(() => setErrorMsg(t('eng.auto.err_network')))
       .finally(() => setBusyId(null))
   }
 
@@ -3411,28 +3415,28 @@ function AutomationsView() {
     automationApi.delete(deleteTarget.id)
       .then(res => {
         if (res?.success) { setDeleteTarget(null); refetch() }
-        else setErrorMsg(res?.message || t('eng.auto.err_delete', 'Failed to delete automation.'))
+        else setErrorMsg(res?.message || t('eng.auto.err_delete'))
       })
-      .catch(() => setErrorMsg(t('eng.auto.err_network', 'Network error.')))
+      .catch(() => setErrorMsg(t('eng.auto.err_network')))
       .finally(() => setDeleting(false))
   }
 
   return (
     <div>
       <div className="auto-header">
-        <div className="auto-intro">{t('eng.auto.intro', 'Set triggers once — Mi Italia sends on your behalf whenever conditions are met.')}</div>
+        <div className="auto-intro">{t('eng.auto.intro')}</div>
         <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true) }}>
-          <span className="material-symbols-outlined">add</span>{t('eng.auto.create', 'Create Automation')}
+          <span className="material-symbols-outlined">add</span>{t('eng.auto.create')}
         </button>
       </div>
 
       {errorMsg && <div className="eng-error">{errorMsg}</div>}
-      {loadFailed && <div className="eng-error">{t('eng.auto.err_load', 'Could not load automations.')}</div>}
+      {loadFailed && <div className="eng-error">{t('eng.auto.err_load')}</div>}
 
       {loading ? (
         <Loading />
       ) : automations.length === 0 ? (
-        <div className="eng-loading">{t('eng.auto.empty', 'No automations yet — create one to get started.')}</div>
+        <div className="eng-loading">{t('eng.auto.empty')}</div>
       ) : (
         <div className="auto-flow-list">
           {automations.map(a => {
@@ -3447,7 +3451,7 @@ function AutomationsView() {
                   <div className="auto-flow-title">{a.name}</div>
                   <div className="auto-flow-sub">
                     {t('eng.auto.desc_line', {
-                      channel: ch === 'wa' ? t('eng.channels.wa', 'WhatsApp') : t('eng.channels.email', 'Email'),
+                      channel: ch === 'wa' ? t('eng.channels.wa') : t('eng.channels.email'),
                       trigger: AUTOMATION_TRIGGER_LABELS[a.trigger_type] || a.trigger_type,
                       segment: AUTOMATION_SEG_LABELS[a.target_segment] || a.target_segment,
                       delay: a.delay_hours ?? 0,
@@ -3457,10 +3461,10 @@ function AutomationsView() {
                 </div>
                 <div className="auto-flow-hdr-actions">
                   <button className="btn btn-outline btn-sm" onClick={() => { setEditing(a); setShowForm(true) }}>
-                    <span className="material-symbols-outlined">edit</span>{t('common.edit', 'Edit')}
+                    <span className="material-symbols-outlined">edit</span>{t('common.edit')}
                   </button>
                   <button className="btn btn-outline btn-sm btn-red" onClick={() => setDeleteTarget(a)}>
-                    <span className="material-symbols-outlined">delete</span>{t('common.delete', 'Delete')}
+                    <span className="material-symbols-outlined">delete</span>{t('common.delete')}
                   </button>
                 </div>
                 <Toggle on={!!a.enabled} onToggle={() => busyId !== a.id && handleToggle(a)} />
@@ -3482,14 +3486,14 @@ function AutomationsView() {
         <div className="modal-backdrop" onClick={() => !deleting && setDeleteTarget(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.auto.delete_title_em', 'Automation')}</em></div>
+              <div className="modal-title">{t('common.delete')} <em>{t('eng.auto.delete_title_em')}</em></div>
               <div className="modal-close" onClick={() => !deleting && setDeleteTarget(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             <div>{t('eng.auto.confirm_delete', { name: deleteTarget.name, defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
+              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>{t('common.cancel')}</button>
               <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
+                <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting') + '…' : t('common.delete')}
               </button>
             </div>
           </div>
@@ -3516,7 +3520,7 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
 
   const handleSave = async () => {
     if (!name.trim() || !triggerType.trim() || !subject.trim() || !message.trim()) {
-      setError(t('eng.auto.err_required', 'Name, trigger type, subject, and message are required.')); return
+      setError(t('eng.auto.err_required')); return
     }
     setSaving(true); setError('')
     const payload = {
@@ -3527,8 +3531,8 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
     try {
       const res = isEdit ? await automationApi.update(automation.id, payload) : await automationApi.create(payload)
       if (res?.success) onSaved()
-      else setError(res?.message || t('eng.auto.err_save', 'Failed to save automation.'))
-    } catch { setError(t('eng.auto.err_network', 'Network error.')) }
+      else setError(res?.message || t('eng.auto.err_save'))
+    } catch { setError(t('eng.auto.err_network')) }
     finally { setSaving(false) }
   }
 
@@ -3536,17 +3540,17 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
     <div className="modal-backdrop">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{isEdit ? t('common.edit', 'Edit') : t('common.create', 'Create')} <em>{t('eng.auto.form_title_em', 'Automation')}</em></div>
+          <div className="modal-title">{isEdit ? t('common.edit') : t('common.create')} <em>{t('eng.auto.form_title_em')}</em></div>
           <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
         </div>
         {error && <div className="eng-error">{error}</div>}
         <div className="form-group">
-          <label className="form-lbl">{t('eng.auto.name', 'Name')}</label>
+          <label className="form-lbl">{t('eng.auto.name')}</label>
           <input className="form-input" value={name} onChange={e => setName(e.target.value)} />
         </div>
         <div className="form-row2">
           <div className="form-group">
-            <label className="form-lbl">{t('eng.auto.trigger_type', 'Trigger type')}</label>
+            <label className="form-lbl">{t('eng.auto.trigger_type')}</label>
             <div className="select-wrap">
               <select className="form-select" value={triggerType} onChange={e => setTriggerType(e.target.value)}>
                 {Object.entries(AUTOMATION_TRIGGER_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -3555,22 +3559,22 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.auto.delay_hours', 'Delay (hours)')}</label>
+            <label className="form-lbl">{t('eng.auto.delay_hours')}</label>
             <input className="form-input" type="number" min="0" value={delayHours} onChange={e => setDelayHours(e.target.value)} />
           </div>
         </div>
         <div className="form-row2">
           <div className="form-group">
-            <label className="form-lbl">{t('eng.camp.step1_channel', 'Channel')}</label>
+            <label className="form-lbl">{t('eng.camp.step1_channel')}</label>
             <div className="select-wrap">
               <select className="form-select" value={channel} onChange={e => setChannel(e.target.value)}>
-                <option value="email">{t('eng.channels.email', 'Email')}</option>
-                {isWhatsappEnabled() && <option value="wa">{t('eng.channels.wa', 'WhatsApp')}</option>}
+                <option value="email">{t('eng.channels.email')}</option>
+                {isWhatsappEnabled() && <option value="wa">{t('eng.channels.wa')}</option>}
               </select>
             </div>
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.ov.col_seg', 'Segment')}</label>
+            <label className="form-lbl">{t('eng.ov.col_seg')}</label>
             <div className="select-wrap">
               <select className="form-select" value={segment} onChange={e => setSegment(e.target.value)}>
                 {Object.entries(AUTOMATION_SEG_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -3579,23 +3583,23 @@ function AutomationFormModal({ automation, onClose, onSaved }) {
           </div>
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('eng.camp.subject', 'Subject')}</label>
+          <label className="form-lbl">{t('eng.camp.subject')}</label>
           <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('eng.camp.body', 'Message')}</label>
+          <label className="form-lbl">{t('eng.camp.body')}</label>
           <textarea className="form-textarea ct-notes-textarea" value={message} onChange={e => setMessage(e.target.value)} />
         </div>
         <div className="refine-row">
           <div className="refine-body">
-            <div className="refine-title">{t('eng.auto.enabled', 'Enabled')}</div>
+            <div className="refine-title">{t('eng.auto.enabled')}</div>
           </div>
           <Toggle on={enabled} onToggle={() => setEnabled(v => !v)} />
         </div>
         <div className="modal-footer">
-          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
+          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -3654,9 +3658,9 @@ function FavoritesView() {
           const pg = res.data?.pagination
           setCustTotal(pg?.total ?? 0)
           setCustHasMore(!!pg?.has_more)
-        } else setFavCustomersError(res?.message || t('eng.fav.err_load', 'Failed to load favorites.'))
+        } else setFavCustomersError(res?.message || t('eng.fav.err_load'))
       })
-      .catch(() => setFavCustomersError(t('eng.fav.err_network', 'Network error.')))
+      .catch(() => setFavCustomersError(t('eng.fav.err_network')))
       .finally(() => setFavCustomersLoading(false))
   }
 
@@ -3683,9 +3687,9 @@ function FavoritesView() {
     favoritesApi.products(50)
       .then(res => {
         if (res?.success) setProducts(res.data?.products ?? [])
-        else setErrorMsg(res?.message || t('eng.fav.err_load', 'Failed to load favorites.'))
+        else setErrorMsg(res?.message || t('eng.fav.err_load'))
       })
-      .catch(() => setErrorMsg(t('eng.fav.err_network', 'Network error.')))
+      .catch(() => setErrorMsg(t('eng.fav.err_network')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -3698,9 +3702,9 @@ function FavoritesView() {
     favoritesApi.savers(p.product_id)
       .then(res => {
         if (res?.success) setSavers(res.data?.savers ?? [])
-        else setSaversError(res?.message || t('eng.fav.err_savers', 'Failed to load savers.'))
+        else setSaversError(res?.message || t('eng.fav.err_savers'))
       })
-      .catch(() => setSaversError(t('eng.fav.err_network', 'Network error.')))
+      .catch(() => setSaversError(t('eng.fav.err_network')))
       .finally(() => setSaversLoading(false))
   }
 
@@ -3708,12 +3712,12 @@ function FavoritesView() {
   const sendNotify = () => {
     if (!notifyTarget) return
     setNotifying(true)
-    favoritesApi.notifyRestock(notifyTarget.product_id, notifyMsg.trim() || t('eng.fav.default_restock_msg', 'Good news — the item you saved is back in stock!'))
+    favoritesApi.notifyRestock(notifyTarget.product_id, notifyMsg.trim() || t('eng.fav.default_restock_msg'))
       .then(res => {
         if (res?.success) setNotifyResult({ ...res.data, message: res.message })
-        else setNotifyResult({ error: res?.message || t('eng.fav.err_notify', 'Failed to notify savers.') })
+        else setNotifyResult({ error: res?.message || t('eng.fav.err_notify') })
       })
-      .catch(() => setNotifyResult({ error: t('eng.fav.err_network', 'Network error.') }))
+      .catch(() => setNotifyResult({ error: t('eng.fav.err_network') }))
       .finally(() => setNotifying(false))
   }
 
@@ -3722,9 +3726,9 @@ function FavoritesView() {
     favoritesApi.alertLowStock()
       .then(res => {
         if (res?.success) setLowStockResult({ ...res.data, message: res.message })
-        else setLowStockResult({ error: res?.message || t('eng.fav.err_alert', 'Failed to alert savers.') })
+        else setLowStockResult({ error: res?.message || t('eng.fav.err_alert') })
       })
-      .catch(() => setLowStockResult({ error: t('eng.fav.err_network', 'Network error.') }))
+      .catch(() => setLowStockResult({ error: t('eng.fav.err_network') }))
       .finally(() => setLowStockSweeping(false))
   }
 
@@ -3741,19 +3745,19 @@ function FavoritesView() {
     })
       .then(res => {
         if (res?.success) setCampaignResult({ ...res.data, message: res.message })
-        else setCampaignResult({ error: res?.message || t('eng.fav.err_campaign', 'Failed to send campaign.') })
+        else setCampaignResult({ error: res?.message || t('eng.fav.err_campaign') })
       })
-      .catch(() => setCampaignResult({ error: t('eng.fav.err_network', 'Network error.') }))
+      .catch(() => setCampaignResult({ error: t('eng.fav.err_network') }))
       .finally(() => setCampaignSending(false))
   }
 
   return (
     <div>
       <div className="card-hdr eng-mb18">
-        <div className="card-title">{t('eng.fav.title', 'Product')} <em>{t('eng.fav.title_em', 'Favorites')}</em></div>
+        <div className="card-title">{t('eng.fav.title')} <em>{t('eng.fav.title_em')}</em></div>
         <button className="btn btn-outline btn-sm" disabled={lowStockSweeping} onClick={runLowStockSweep}>
           <span className="material-symbols-outlined">notifications_active</span>
-          {lowStockSweeping ? t('eng.rev.sending', 'Sending…') : t('eng.fav.alert_low_stock', 'Alert Low-Stock Savers')}
+          {lowStockSweeping ? t('eng.rev.sending') : t('eng.fav.alert_low_stock')}
         </button>
       </div>
       {lowStockResult && (
@@ -3767,7 +3771,7 @@ function FavoritesView() {
         <div className="stat-card">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-email">favorite</span>
-            {t('eng.fav.total_saves', 'Total Product Saves')}
+            {t('eng.fav.total_saves')}
           </div>
           <div className="stat-val">{totalSavers}</div>
           <div className="stat-sub">{t('eng.fav.across_products', { count: products.length, defaultValue: 'Across {{count}} products' })}</div>
@@ -3775,15 +3779,15 @@ function FavoritesView() {
         <div className="stat-card fav-out">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined fav-oos-icon">inventory_2</span>
-            {t('eng.fav.restock_candidates', 'Out-of-Stock, Saved')}
+            {t('eng.fav.restock_candidates')}
           </div>
           <div className="stat-val">{restockCandidates.length}</div>
-          <div className="stat-sub">{t('eng.fav.restock_candidates_sub', 'Products worth a restock alert')}</div>
+          <div className="stat-sub">{t('eng.fav.restock_candidates_sub')}</div>
         </div>
         <div className="stat-card fav-most">
           <div className="stat-lbl stat-lbl-icon">
             <span className="material-symbols-outlined stat-icon-email">star</span>
-            {t('eng.fav.most_saved_product', 'Most-Saved Product')}
+            {t('eng.fav.most_saved_product')}
           </div>
           <div className="stat-val fav-most-val">{mostSaved ? mostSaved.product_name : '—'}</div>
           <div className="stat-sub">{mostSaved ? t('eng.fav.most_saved_product_sub_real', { count: mostSaved.saver_count ?? 0, defaultValue: '{{count}} customer(s) saved this' }) : ''}</div>
@@ -3791,8 +3795,8 @@ function FavoritesView() {
       </div>
 
       <div className="tpl-filter-row eng-mb18">
-        <div className={`tpl-chip${viewMode === 'products' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('products')}>{t('eng.fav.by_product', 'By Product')}</div>
-        <div className={`tpl-chip${viewMode === 'customers' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('customers')}>{t('eng.fav.by_customer', 'By Customer')}</div>
+        <div className={`tpl-chip${viewMode === 'products' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('products')}>{t('eng.fav.by_product')}</div>
+        <div className={`tpl-chip${viewMode === 'customers' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setViewMode('customers')}>{t('eng.fav.by_customer')}</div>
       </div>
 
       {viewMode === 'products' ? (
@@ -3802,19 +3806,19 @@ function FavoritesView() {
       {loading ? (
         <Loading />
       ) : products.length === 0 ? (
-        <div className="eng-loading">{t('eng.fav.empty', 'No products have been saved yet.')}</div>
+        <div className="eng-loading">{t('eng.fav.empty')}</div>
       ) : (
         products.map(p => {
           const stock = p.total_stock ?? 0
           const stockCls = stock === 0 ? 'out' : stock <= 3 ? 'low' : 'in-stock'
-          const stockTxt = stock === 0 ? t('eng.fav.out_of_stock', 'Out of stock') : stock <= 3 ? t('eng.fav.low_stock_n', { count: stock, defaultValue: 'Low stock · {{count}} left' }) : t('eng.fav.in_stock', 'In stock')
+          const stockTxt = stock === 0 ? t('eng.fav.out_of_stock') : stock <= 3 ? t('eng.fav.low_stock_n', { count: stock, defaultValue: 'Low stock · {{count}} left' }) : t('eng.fav.in_stock')
           const img = favImgSrc(p.image_url)
           return (
             <div key={p.product_id} className="pfav-card">
               <div className="pfav-inner">
                 <div className="pfav-img">
                   {img ? <img src={img} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : '👗'}
-                  {stock === 0 && <div className="pfav-stock-badge" style={{ background:'rgba(197,0,26,0.9)', color:'white' }}>{t('eng.fav.out_of_stock', 'Out of stock').toUpperCase()}</div>}
+                  {stock === 0 && <div className="pfav-stock-badge" style={{ background:'rgba(197,0,26,0.9)', color:'white' }}>{t('eng.fav.out_of_stock').toUpperCase()}</div>}
                 </div>
                 <div className="pfav-body">
                   <div className="pfav-name">{p.product_name}</div>
@@ -3836,7 +3840,7 @@ function FavoritesView() {
                 )}
                 {(p.saver_count ?? 0) > 0 && (
                   <button className="btn btn-outline btn-sm" onClick={() => openCampaignToSavers(p)}>
-                    <span className="material-symbols-outlined">campaign</span>{t('eng.fav.campaign_to_savers', 'Send Campaign to Savers')}
+                    <span className="material-symbols-outlined">campaign</span>{t('eng.fav.campaign_to_savers')}
                   </button>
                 )}
                 <button className="btn btn-outline btn-sm" onClick={() => openSavers(p)}>
@@ -3852,24 +3856,24 @@ function FavoritesView() {
         <>
           <div className="ct-search eng-mb18">
             <span className="material-symbols-outlined">search</span>
-            <input placeholder={t('eng.fav.search_customers', 'Search customers') + '…'} value={custQuery} onChange={e => setCustQuery(e.target.value)} />
+            <input placeholder={t('eng.fav.search_customers') + '…'} value={custQuery} onChange={e => setCustQuery(e.target.value)} />
           </div>
           <div className="tpl-filter-row eng-mb18">
             {[
-              { key:'',       label:t('eng.camp.ch_all', 'All') },
-              { key:'vip',    label:t('eng.camp.seg_vip', 'VIP') },
-              { key:'loyal',  label:t('eng.camp.seg_loyal', 'Loyal') },
-              { key:'new',    label:t('eng.camp.seg_new', 'New') },
-              { key:'warm',   label:t('eng.camp.seg_warm', 'Warm') },
-              { key:'lapsed', label:t('eng.camp.seg_lapsed', 'Lapsed') },
+              { key:'',       label:t('eng.camp.ch_all') },
+              { key:'vip',    label:t('eng.camp.seg_vip') },
+              { key:'loyal',  label:t('eng.camp.seg_loyal') },
+              { key:'new',    label:t('eng.camp.seg_new') },
+              { key:'warm',   label:t('eng.camp.seg_warm') },
+              { key:'lapsed', label:t('eng.camp.seg_lapsed') },
             ].map(s => (
               <div key={s.key} className={`tpl-chip${custSegment === s.key ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setCustSegment(s.key)}>{s.label}</div>
             ))}
             <div className="select-wrap" style={{ width:'auto', marginLeft:'auto' }}>
               <select className="form-select" value={`${custSort}:${custOrder}`} onChange={e => { const [s, o] = e.target.value.split(':'); setCustSort(s); setCustOrder(o) }}>
-                <option value="last_favorited:desc">{t('eng.fav.sort_recent', 'Most recently favorited')}</option>
-                <option value="favorite_count:desc">{t('eng.fav.sort_most_saves', 'Most saves')}</option>
-                <option value="name:asc">{t('eng.fav.sort_name', 'Name (A-Z)')}</option>
+                <option value="last_favorited:desc">{t('eng.fav.sort_recent')}</option>
+                <option value="favorite_count:desc">{t('eng.fav.sort_most_saves')}</option>
+                <option value="name:asc">{t('eng.fav.sort_name')}</option>
               </select>
             </div>
           </div>
@@ -3879,21 +3883,21 @@ function FavoritesView() {
           {favCustomersLoading ? (
             <Loading />
           ) : favCustomers.length === 0 ? (
-            <div className="eng-loading">{t('eng.fav.no_customers', 'No customers have saved anything yet.')}</div>
+            <div className="eng-loading">{t('eng.fav.no_customers')}</div>
           ) : (
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>{t('eng.ct.col_contact', 'Contact')}</th><th>{t('eng.ov.col_seg', 'Segment')}</th>
-                  <th>{t('eng.fav.col_saves', 'Saves')}</th><th>{t('eng.fav.col_last_favorited', 'Last favorited')}</th>
+                  <th>{t('eng.ct.col_contact')}</th><th>{t('eng.ov.col_seg')}</th>
+                  <th>{t('eng.fav.col_saves')}</th><th>{t('eng.fav.col_last_favorited')}</th>
                 </tr>
               </thead>
               <tbody>
                 {favCustomers.map((c, i) => (
                   <tr key={c.id ?? c.user_id ?? i}>
                     <td>
-                      {c.name || t('eng.ct.unnamed', 'Unnamed')}
-                      {!c.has_contact_record && <span className="tpl-review-txt" style={{ marginLeft:8 }}>{t('eng.fav.webshop_only', 'Webshop only')}</span>}
+                      {c.name || t('eng.ct.unnamed')}
+                      {!c.has_contact_record && <span className="tpl-review-txt" style={{ marginLeft:8 }}>{t('eng.fav.webshop_only')}</span>}
                     </td>
                     <td>{c.segment ? <SegBadge seg={c.segment} /> : '—'}</td>
                     <td>{c.favorite_count ?? 0}</td>
@@ -3907,9 +3911,9 @@ function FavoritesView() {
           <div className="ct-table-footer">
             <span>{t('eng.ct.showing_loaded', { shown: favCustomers.length, total: custTotal, defaultValue: 'Showing {{shown}} of {{total}} contacts' })}</span>
             <div className="ct-footer-btns">
-              <button className="btn btn-outline btn-xs" disabled={custPage <= 1 || favCustomersLoading} onClick={() => goToCustPage(custPage - 1)}>{t('eng.ct.prev', '← Prev')}</button>
+              <button className="btn btn-outline btn-xs" disabled={custPage <= 1 || favCustomersLoading} onClick={() => goToCustPage(custPage - 1)}>{t('eng.ct.prev')}</button>
               <span>{t('eng.ct.page_n', { page: custPage, defaultValue: 'Page {{page}}' })}</span>
-              <button className="btn btn-outline btn-xs" disabled={!custHasMore || favCustomersLoading} onClick={() => goToCustPage(custPage + 1)}>{t('eng.ct.next', 'Next →')}</button>
+              <button className="btn btn-outline btn-xs" disabled={!custHasMore || favCustomersLoading} onClick={() => goToCustPage(custPage + 1)}>{t('eng.ct.next')}</button>
             </div>
           </div>
         </>
@@ -3919,7 +3923,7 @@ function FavoritesView() {
         <div className="modal-backdrop" onClick={() => setSaversFor(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.fav.savers_title', 'Savers')} <em>{saversFor.product_name}</em></div>
+              <div className="modal-title">{t('eng.fav.savers_title')} <em>{saversFor.product_name}</em></div>
               <div className="modal-close" onClick={() => setSaversFor(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             {saversLoading ? (
@@ -3927,7 +3931,7 @@ function FavoritesView() {
             ) : saversError ? (
               <div className="eng-error">{saversError}</div>
             ) : savers.length === 0 ? (
-              <div className="eng-loading">{t('eng.fav.no_savers', 'No savers to show.')}</div>
+              <div className="eng-loading">{t('eng.fav.no_savers')}</div>
             ) : (
               <ul className="eng-send-failures" style={{ color:'inherit' }}>
                 {savers.map((s, i) => <li key={s.id ?? s.customer_id ?? i}>{s.name || s.email || s.customer_id || JSON.stringify(s)}</li>)}
@@ -3941,19 +3945,19 @@ function FavoritesView() {
         <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.fav.notify_title', 'Notify')} <em>{t('eng.fav.notify_title_em', 'Savers')}</em></div>
+              <div className="modal-title">{t('eng.fav.notify_title')} <em>{t('eng.fav.notify_title_em')}</em></div>
               <div className="modal-close" onClick={() => !notifying && setNotifyTarget(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             {!notifyResult ? (
               <>
                 <div className="form-group">
-                  <label className="form-lbl">{t('eng.fav.notify_message', 'Message')}</label>
-                  <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.fav.default_restock_msg', 'Good news — the item you saved is back in stock!')} value={notifyMsg} onChange={e => setNotifyMsg(e.target.value)} />
+                  <label className="form-lbl">{t('eng.fav.notify_message')}</label>
+                  <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.fav.default_restock_msg')} value={notifyMsg} onChange={e => setNotifyMsg(e.target.value)} />
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={() => setNotifyTarget(null)} disabled={notifying}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-outline" onClick={() => setNotifyTarget(null)} disabled={notifying}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" onClick={sendNotify} disabled={notifying}>
-                    <span className="material-symbols-outlined">send</span>{notifying ? t('eng.rev.sending', 'Sending…') : t('eng.fav.notify_send', 'Notify')}
+                    <span className="material-symbols-outlined">send</span>{notifying ? t('eng.rev.sending') : t('eng.fav.notify_send')}
                   </button>
                 </div>
               </>
@@ -3963,7 +3967,7 @@ function FavoritesView() {
                   {notifyResult.error || notifyResult.message || t('eng.fav.notify_result', { notified: notifyResult.notified ?? 0, total: notifyResult.total ?? 0, defaultValue: 'Notified {{notified}} of {{total}} saver(s).' })}
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-primary" onClick={() => setNotifyTarget(null)}>{t('common.done', 'Done')}</button>
+                  <button className="btn btn-primary" onClick={() => setNotifyTarget(null)}>{t('common.done')}</button>
                 </div>
               </>
             )}
@@ -3975,36 +3979,36 @@ function FavoritesView() {
         <div className="modal-backdrop">
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('eng.fav.campaign_title', 'Campaign to')} <em>{t('eng.fav.campaign_title_em', 'Savers')}</em></div>
+              <div className="modal-title">{t('eng.fav.campaign_title')} <em>{t('eng.fav.campaign_title_em')}</em></div>
               <div className="modal-close" onClick={() => !campaignSending && setCampaignTarget(null)}><span className="material-symbols-outlined">close</span></div>
             </div>
             {!campaignResult ? (
               <>
                 <div className="form-hint eng-mb18">{t('eng.fav.campaign_hint', { count: campaignTarget.saver_count ?? 0, product: campaignTarget.product_name, defaultValue: 'Sends a real campaign to the {{count}} customer(s) who saved "{{product}}".' })}</div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('eng.camp.channel', 'Channel')}</label>
+                  <label className="form-lbl">{t('eng.camp.channel')}</label>
                   <div className="select-wrap">
                     <select className="form-select" value={campaignChannel} onChange={e => setCampaignChannel(e.target.value)}>
-                      <option value="email">{t('eng.channels.email', 'Email')}</option>
-                      {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>}
-                      <option value="push">{t('eng.tpl.push', 'Push')}</option>
+                      <option value="email">{t('eng.channels.email')}</option>
+                      {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa')}</option>}
+                      <option value="push">{t('eng.tpl.push')}</option>
                     </select>
                   </div>
                 </div>
                 {campaignChannel === 'email' && (
                   <div className="form-group">
-                    <label className="form-lbl">{t('eng.rev.subject', 'SUBJECT')}</label>
-                    <input className="form-input" placeholder={t('eng.fav.campaign_subject_placeholder', 'Still thinking about this one?')} value={campaignSubject} onChange={e => setCampaignSubject(e.target.value)} />
+                    <label className="form-lbl">{t('eng.rev.subject')}</label>
+                    <input className="form-input" placeholder={t('eng.fav.campaign_subject_placeholder')} value={campaignSubject} onChange={e => setCampaignSubject(e.target.value)} />
                   </div>
                 )}
                 <div className="form-group">
-                  <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
-                  <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.fav.campaign_message_placeholder', 'Hi {{name}}, the piece you saved is still available — come see it before it\'s gone!')} value={campaignMessage} onChange={e => setCampaignMessage(e.target.value)} />
+                  <label className="form-lbl">{t('eng.rev.body')}</label>
+                  <textarea className="form-textarea ct-notes-textarea" placeholder={t('eng.fav.campaign_message_placeholder')} value={campaignMessage} onChange={e => setCampaignMessage(e.target.value)} />
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={() => setCampaignTarget(null)} disabled={campaignSending}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-outline" onClick={() => setCampaignTarget(null)} disabled={campaignSending}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" onClick={sendCampaignToSavers} disabled={campaignSending || !campaignMessage.trim()}>
-                    <span className="material-symbols-outlined">send</span>{campaignSending ? t('eng.rev.sending', 'Sending…') : t('eng.fav.campaign_send', 'Send Campaign')}
+                    <span className="material-symbols-outlined">send</span>{campaignSending ? t('eng.rev.sending') : t('eng.fav.campaign_send')}
                   </button>
                 </div>
               </>
@@ -4014,7 +4018,7 @@ function FavoritesView() {
                   {campaignResult.error || campaignResult.message || t('eng.fav.campaign_result', { count: campaignResult.recipients_count ?? 0, defaultValue: 'Campaign sent to {{count}} recipient(s).' })}
                 </div>
                 <div className="modal-footer">
-                  <button className="btn btn-primary" onClick={() => setCampaignTarget(null)}>{t('common.done', 'Done')}</button>
+                  <button className="btn btn-primary" onClick={() => setCampaignTarget(null)}>{t('common.done')}</button>
                 </div>
               </>
             )}
@@ -4029,10 +4033,10 @@ function FavoritesView() {
 
 // ── TEMPLATES VIEW (real data) ────────────────────────────
 function templateChannelLabel(ch, t) {
-  return ch === 'whatsapp' ? t('eng.channels.wa', 'WhatsApp') : ch === 'push' ? t('eng.tpl.push', 'Push') : t('eng.channels.email', 'Email')
+  return ch === 'whatsapp' ? t('eng.channels.wa') : ch === 'push' ? t('eng.tpl.push') : t('eng.channels.email')
 }
 function templateChannelTag(ch, t) {
-  return ch === 'whatsapp' ? `💬 ${t('eng.channels.wa', 'WhatsApp')}` : ch === 'push' ? `🔔 ${t('eng.tpl.push', 'Push')}` : `📧 ${t('eng.channels.email', 'Email')}`
+  return ch === 'whatsapp' ? `💬 ${t('eng.channels.wa')}` : ch === 'push' ? `🔔 ${t('eng.tpl.push')}` : `📧 ${t('eng.channels.email')}`
 }
 const tplChDotClass = (ch) => ch === 'whatsapp' ? 'wa' : ch === 'push' ? 'push' : 'email'
 
@@ -4051,16 +4055,16 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
   const [error,       setError]       = useState('')
 
   const handleSave = async () => {
-    if (!isEdit && !templateKey.trim()) { setError(t('eng.tpl.err_key_required', 'Template key is required.')); return }
+    if (!isEdit && !templateKey.trim()) { setError(t('eng.tpl.err_key_required')); return }
     let content
     if (channel === 'whatsapp') {
-      if (!body.trim()) { setError(t('eng.tpl.err_body_required', 'Body is required.')); return }
+      if (!body.trim()) { setError(t('eng.tpl.err_body_required')); return }
       content = { body: body.trim() }
     } else if (channel === 'push') {
-      if (!title.trim() || !body.trim()) { setError(t('eng.tpl.err_title_body_required', 'Title and body are required.')); return }
+      if (!title.trim() || !body.trim()) { setError(t('eng.tpl.err_title_body_required')); return }
       content = { title: title.trim(), body: body.trim() }
     } else {
-      if (!subject.trim() || !text.trim()) { setError(t('eng.tpl.err_content_required', 'Subject and body are required.')); return }
+      if (!subject.trim() || !text.trim()) { setError(t('eng.tpl.err_content_required')); return }
       content = { subject: subject.trim(), html: `<p>${text.trim()}</p>`, text: text.trim() }
     }
     setSaving(true); setError('')
@@ -4069,8 +4073,8 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
         ? await templateApi.update(template.id, { content })
         : await templateApi.create({ templateKey: templateKey.trim(), channel, primaryLanguage: primaryLang, content })
       if (res?.success) onSaved(res.data?.template?.id)
-      else setError(res?.message || t('eng.tpl.err_save', 'Failed to save template.'))
-    } catch { setError(t('eng.tpl.err_network', 'Network error.')) }
+      else setError(res?.message || t('eng.tpl.err_save'))
+    } catch { setError(t('eng.tpl.err_network')) }
     finally { setSaving(false) }
   }
 
@@ -4078,7 +4082,7 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
     <div className="modal-backdrop">
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{isEdit ? t('common.edit', 'Edit') : t('common.create', 'Create')} <em>{t('eng.tpl.form_title_em', 'Template')}</em></div>
+          <div className="modal-title">{isEdit ? t('common.edit') : t('common.create')} <em>{t('eng.tpl.form_title_em')}</em></div>
           <div className="modal-close" onClick={() => !saving && onClose()}><span className="material-symbols-outlined">close</span></div>
         </div>
         {error && <div className="eng-error">{error}</div>}
@@ -4086,11 +4090,11 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
           <>
             <div className="form-row2">
               <div className="form-group">
-                <label className="form-lbl">{t('eng.tpl.template_key', 'Template key')}</label>
-                <input className="form-input" placeholder={t('eng.tpl.template_key_placeholder', 'name, eg. aw25_new_arrivals')} value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
+                <label className="form-lbl">{t('eng.tpl.template_key')}</label>
+                <input className="form-input" placeholder={t('eng.tpl.template_key_placeholder')} value={templateKey} onChange={e => setTemplateKey(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('eng.tpl.primary_language', 'Primary language')}</label>
+                <label className="form-lbl">{t('eng.tpl.primary_language')}</label>
                 <div className="select-wrap">
                   <select className="form-select" value={primaryLang} onChange={e => setPrimaryLang(e.target.value)}>
                     {Object.keys(LANG_MAP).map(code => <option key={code} value={code}>{langDisplayName(code, t)}</option>)}
@@ -4099,12 +4103,12 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.tpl.channel', 'Channel')}</label>
+              <label className="form-lbl">{t('eng.tpl.channel')}</label>
               <div className="select-wrap">
                 <select className="form-select" value={channel} onChange={e => setChannel(e.target.value)}>
-                  <option value="email">{t('eng.channels.email', 'Email')}</option>
-                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa', 'WhatsApp')}</option>}
-                  <option value="push">{t('eng.tpl.push', 'Push')}</option>
+                  <option value="email">{t('eng.channels.email')}</option>
+                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.channels.wa')}</option>}
+                  <option value="push">{t('eng.tpl.push')}</option>
                 </select>
               </div>
             </div>
@@ -4114,35 +4118,35 @@ function RealTemplateFormModal({ template, onClose, onSaved }) {
         )}
         {channel === 'whatsapp' ? (
           <div className="form-group">
-            <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+            <label className="form-lbl">{t('eng.rev.body')}</label>
             <textarea className="form-textarea ct-notes-textarea" value={body} onChange={e => setBody(e.target.value)} />
           </div>
         ) : channel === 'push' ? (
           <>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.tpl.sec_title', 'TITLE')}</label>
+              <label className="form-lbl">{t('eng.tpl.sec_title')}</label>
               <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+              <label className="form-lbl">{t('eng.rev.body')}</label>
               <textarea className="form-textarea ct-notes-textarea" value={body} onChange={e => setBody(e.target.value)} />
             </div>
           </>
         ) : (
           <>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.rev.subject', 'SUBJECT')}</label>
+              <label className="form-lbl">{t('eng.rev.subject')}</label>
               <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.rev.body', 'BODY')}</label>
+              <label className="form-lbl">{t('eng.rev.body')}</label>
               <textarea className="form-textarea ct-notes-textarea" value={text} onChange={e => setText(e.target.value)} />
             </div>
           </>
         )}
         <div className="modal-footer">
-          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}</button>
+          <button className="btn btn-outline" onClick={onClose} disabled={saving}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
         </div>
       </div>
     </div>
@@ -4155,36 +4159,36 @@ function TemplateRequestModal({ requestName, setRequestName, requestChannel, set
     <div className="modal-backdrop">
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{t('eng.tpl.request_title', 'Request a')} <em>{t('eng.tpl.request_title_em', 'Custom Template')}</em></div>
+          <div className="modal-title">{t('eng.tpl.request_title')} <em>{t('eng.tpl.request_title_em')}</em></div>
           <div className="modal-close" onClick={onClose}><span className="material-symbols-outlined">close</span></div>
         </div>
-        <div className="alert alert-info"><span className="material-symbols-outlined">info</span><div dangerouslySetInnerHTML={{ __html: t('eng.tpl.request_timeline_hint', 'Mi Italia will build, translate, and submit your custom template. Timeline: <strong>3–5 business days</strong> for Email/Push · <strong>5–10 days</strong> for WhatsApp (Meta review).') }} /></div>
+        <div className="alert alert-info"><span className="material-symbols-outlined">info</span><div dangerouslySetInnerHTML={{ __html: t('eng.tpl.request_timeline_hint') }} /></div>
         {requestSent ? (
           <>
-            <div className="eng-success">{t('eng.tpl.request_sent', 'Request submitted — Mi Italia will follow up on the timeline above.')}</div>
+            <div className="eng-success">{t('eng.tpl.request_sent')}</div>
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={onClose}>{t('common.done', 'Done')}</button>
+              <button className="btn btn-primary" onClick={onClose}>{t('common.done')}</button>
             </div>
           </>
         ) : (
           <>
             {requestError && <div className="eng-error">{requestError}</div>}
-            <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name', 'Template Name')} *</label><input className="form-input" placeholder={t('eng.tpl.request_name_placeholder', 'e.g. Post-Purchase Thank You')} value={requestName} onChange={e => setRequestName(e.target.value)} /></div>
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.template_name')} *</label><input className="form-input" placeholder={t('eng.tpl.request_name_placeholder')} value={requestName} onChange={e => setRequestName(e.target.value)} /></div>
             <div className="form-group">
-              <label className="form-lbl">{t('eng.tpl.channels_needed', 'Channel Needed')}</label>
+              <label className="form-lbl">{t('eng.tpl.channels_needed')}</label>
               <div className="select-wrap">
                 <select className="form-select" value={requestChannel} onChange={e => setRequestChannel(e.target.value)}>
-                  <option value="email">{t('eng.tpl.email_only', 'Email')}</option>
-                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.tpl.wa_only', 'WhatsApp')}</option>}
-                  <option value="push">{t('eng.tpl.push_only', 'Push')}</option>
+                  <option value="email">{t('eng.tpl.email_only')}</option>
+                  {isWhatsappEnabled() && <option value="whatsapp">{t('eng.tpl.wa_only')}</option>}
+                  <option value="push">{t('eng.tpl.push_only')}</option>
                 </select>
                 <span className="material-symbols-outlined select-arrow">expand_more</span>
               </div>
             </div>
-            <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need', 'Describe what you need')} *</label><textarea className="form-textarea" rows={4} placeholder={t('eng.tpl.request_describe_placeholder', 'Purpose, audience, sections, specific requirements…')} value={requestDescribe} onChange={e => setRequestDescribe(e.target.value)} /></div>
+            <div className="form-group"><label className="form-lbl">{t('eng.tpl.describe_need')} *</label><textarea className="form-textarea" rows={4} placeholder={t('eng.tpl.request_describe_placeholder')} value={requestDescribe} onChange={e => setRequestDescribe(e.target.value)} /></div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={onClose} disabled={requestSending}>{t('common.cancel', 'Cancel')}</button>
-              <button className="btn btn-primary" onClick={onSubmit} disabled={requestSending}><span className="material-symbols-outlined">send</span>{requestSending ? t('eng.rev.sending', 'Sending…') : t('eng.tpl.submit_template_request', 'Submit Template Request')}</button>
+              <button className="btn btn-outline" onClick={onClose} disabled={requestSending}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" onClick={onSubmit} disabled={requestSending}><span className="material-symbols-outlined">send</span>{requestSending ? t('eng.rev.sending') : t('eng.tpl.submit_template_request')}</button>
             </div>
           </>
         )}
@@ -4317,9 +4321,9 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
     templateApi.delete(deleteTarget.id)
       .then(res => {
         if (res?.success) { setDeleteTarget(null); refetchTemplates() }
-        else setDeleteError(res?.message || t('eng.tpl.err_delete', 'Failed to delete template.'))
+        else setDeleteError(res?.message || t('eng.tpl.err_delete'))
       })
-      .catch(() => setDeleteError(t('eng.tpl.err_network', 'Network error.')))
+      .catch(() => setDeleteError(t('eng.tpl.err_network')))
       .finally(() => setDeleting(false))
   }
 
@@ -4331,9 +4335,9 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
         setLangNote(t('eng.tpl.retranslate_queued_lang', { lang: langDisplayName(code, t), defaultValue: 'Translation queued for {{lang}}.' }))
         templateApi.get(selId).then(r => { if (r?.success) setTplDetail(r.data?.template) })
       } else {
-        setLangNote(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
+        setLangNote(res?.message || t('eng.tpl.err_request_failed'))
       }
-    }).catch(() => setLangNote(t('eng.tpl.err_network', 'Network error'))).finally(() => setLangBusy(null))
+    }).catch(() => setLangNote(t('eng.tpl.err_network'))).finally(() => setLangBusy(null))
   }
 
   const submitChangeRequest = () => {
@@ -4342,9 +4346,9 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
     templateApi.submitChangeRequest(selId, changeRequestText.trim())
       .then(res => {
         if (res?.success) { setChangeRequestText(''); refetchChangeRequests(selId) }
-        else setChangeRequestError(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
+        else setChangeRequestError(res?.message || t('eng.tpl.err_request_failed'))
       })
-      .catch(() => setChangeRequestError(t('eng.tpl.err_network', 'Network error')))
+      .catch(() => setChangeRequestError(t('eng.tpl.err_network')))
       .finally(() => setChangeRequestSending(false))
   }
 
@@ -4353,7 +4357,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
   }
   const handleSubmitRequest = () => {
     if (!requestName.trim() || !requestDescribe.trim()) {
-      setRequestError(t('eng.tpl.err_required', 'Template name and description are required'))
+      setRequestError(t('eng.tpl.err_required'))
       return
     }
     setRequestError('')
@@ -4364,18 +4368,18 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       body: JSON.stringify({ channel: requestChannel, title: requestName.trim(), brief: requestDescribe.trim() }),
     }).then(r => r.json()).then(res => {
       if (res?.success) setRequestSent(true)
-      else setRequestError(res?.message || t('eng.tpl.err_request_failed', 'Request failed.'))
-    }).catch(() => setRequestError(t('eng.tpl.err_network', 'Network error.')))
+      else setRequestError(res?.message || t('eng.tpl.err_request_failed'))
+    }).catch(() => setRequestError(t('eng.tpl.err_network')))
       .finally(() => setRequestSending(false))
   }
 
   const TABS = [
-    { key:'structure',   label:t('eng.tpl.tab_structure', 'Structure') },
-    { key:'preview',     label:t('common.preview', 'Preview') },
-    { key:'languages',   label:t('eng.tpl.tab_languages', 'Languages') },
-    { key:'performance', label:t('eng.tpl.tab_performance', 'Performance') },
-    { key:'versions',    label:t('eng.tpl.versions', 'Versions') },
-    { key:'variables',   label:t('eng.tpl.tab_variables', 'Variables') },
+    { key:'structure',   label:t('eng.tpl.tab_structure') },
+    { key:'preview',     label:t('common.preview') },
+    { key:'languages',   label:t('eng.tpl.tab_languages') },
+    { key:'performance', label:t('eng.tpl.tab_performance') },
+    { key:'versions',    label:t('eng.tpl.versions') },
+    { key:'variables',   label:t('eng.tpl.tab_variables') },
   ]
 
   const content = tplDetail?.content?.[previewLang] ?? tplDetail?.content?.[tplDetail?.primary_language] ?? {}
@@ -4386,34 +4390,34 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       {/* ── LIBRARY PANEL ── */}
       <div className="tpl-library">
         <div className="tpl-lib-hdr">
-          <div className="tpl-lib-title">{t('eng.tpl.lib_title', 'Campaign')} <em>{t('eng.tpl.lib_title_em', 'Templates')}</em></div>
+          <div className="tpl-lib-title">{t('eng.tpl.lib_title')} <em>{t('eng.tpl.lib_title_em')}</em></div>
           <div className="tpl-lib-count">{t('eng.tpl.lib_count_real', { count: templates.length, defaultValue: '{{count}} template(s)' })}</div>
         </div>
 
         <div className="tpl-lib-search">
           <span className="material-symbols-outlined">search</span>
-          <input placeholder={t('eng.tpl.search_templates', 'Search templates…')} value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+          <input placeholder={t('eng.tpl.search_templates')} value={searchQ} onChange={e => setSearchQ(e.target.value)} />
         </div>
 
         <div className="tpl-filters">
           <div className="tpl-filter-row">
-            <div className={`tpl-chip${channelFilter === 'all' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('all')}>{t('eng.camp.ch_all', 'All')}</div>
-            <div className={`tpl-chip${channelFilter === 'email' ? ' email-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('email')}>📧 {t('eng.channels.email', 'Email')}</div>
-            {isWhatsappEnabled() && <div className={`tpl-chip${channelFilter === 'whatsapp' ? ' wa-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('whatsapp')}>💬 {t('eng.channels.wa', 'WhatsApp')}</div>}
-            <div className={`tpl-chip${channelFilter === 'push' ? ' push-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('push')}>🔔 {t('eng.tpl.push', 'Push')}</div>
+            <div className={`tpl-chip${channelFilter === 'all' ? ' on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('all')}>{t('eng.camp.ch_all')}</div>
+            <div className={`tpl-chip${channelFilter === 'email' ? ' email-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('email')}>📧 {t('eng.channels.email')}</div>
+            {isWhatsappEnabled() && <div className={`tpl-chip${channelFilter === 'whatsapp' ? ' wa-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('whatsapp')}>💬 {t('eng.channels.wa')}</div>}
+            <div className={`tpl-chip${channelFilter === 'push' ? ' push-on' : ''}`} style={{ cursor:'pointer' }} onClick={() => setChannelFilter('push')}>🔔 {t('eng.tpl.push')}</div>
           </div>
         </div>
 
         <div className="tpl-lib-list">
           <button className="btn btn-primary btn-sm" style={{ marginBottom:12 }} onClick={openCreate}>
-            <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real', 'Create Template')}
+            <span className="material-symbols-outlined">add</span>{t('eng.tpl.create_real')}
           </button>
           {loadingList ? (
             <Loading />
           ) : listFailed ? (
-            <div className="eng-error">{t('eng.tpl.err_load', 'Could not load templates.')}</div>
+            <div className="eng-error">{t('eng.tpl.err_load')}</div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="eng-loading">{t('eng.tpl.no_real_templates', 'No templates yet.')}</div>
+            <div className="eng-loading">{t('eng.tpl.no_real_templates')}</div>
           ) : (
             filteredTemplates.map(tpl => (
               <div key={tpl.id} className={`tpl-row${selId === tpl.id ? ' sel' : ''}`} onClick={() => setSelId(tpl.id)}>
@@ -4422,18 +4426,18 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                   <div className="tpl-row-name">{templateDisplayName(tpl.template_key, t)}</div>
                   <div className="tpl-row-meta">
                     <span className="tpl-row-meta"><span className={`tpl-ch-dot ${tplChDotClass(tpl.channel)}`} />{templateChannelLabel(tpl.channel, t)}</span>
-                    {tpl.translations_pending && <span className="tpl-review-txt">{t('eng.tpl.translations_pending', 'Translations pending')}</span>}
+                    {tpl.translations_pending && <span className="tpl-review-txt">{t('eng.tpl.translations_pending')}</span>}
                   </div>
                 </div>
-                <button className="btn btn-outline btn-xs btn-red" onClick={e => { e.stopPropagation(); setDeleteTarget(tpl) }}>{t('common.delete', 'Delete')}</button>
+                <button className="btn btn-outline btn-xs btn-red" onClick={e => { e.stopPropagation(); setDeleteTarget(tpl) }}>{t('common.delete')}</button>
               </div>
             ))
           )}
 
           <div className="tpl-request" onClick={() => setShowRequestModal(true)}>
             <div className="material-symbols-outlined tpl-request-icon">add_circle</div>
-            <div className="tpl-request-title">{t('eng.tpl.request_title_full', 'Request a Custom Template')}</div>
-            <div className="tpl-request-sub">{t('eng.tpl.request_sub', 'Mi Italia builds and approves it · 3–5 business days')}</div>
+            <div className="tpl-request-title">{t('eng.tpl.request_title_full')}</div>
+            <div className="tpl-request-sub">{t('eng.tpl.request_sub')}</div>
           </div>
         </div>
       </div>
@@ -4446,7 +4450,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                no template picked. Only the first is a wait. */
             detailLoading
               ? <Loading />
-              : <div className="eng-loading">{t('eng.tpl.no_selection', 'Select a template, or create one to get started.')}</div>
+              : <div className="eng-loading">{t('eng.tpl.no_selection')}</div>
           ) : (
             <>
               <div className="tpl-det-hdr">
@@ -4456,23 +4460,23 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                     <div className="tpl-det-name">{templateDisplayName(tplDetail.template_key, t)}</div>
                     <div className="tpl-det-tags">
                       <div className={`tpl-det-tag ${tplChDotClass(tplDetail.channel)}`}>{templateChannelTag(tplDetail.channel, t)}</div>
-                      <div className="tpl-det-tag">{langDisplayName(tplDetail.primary_language, t)} · {t('eng.tpl.source', 'source')}</div>
-                      {tplDetail.translations_pending && <div className="tpl-det-tag">{t('eng.tpl.translations_pending', 'Translations pending')}</div>}
+                      <div className="tpl-det-tag">{langDisplayName(tplDetail.primary_language, t)} · {t('eng.tpl.source')}</div>
+                      {tplDetail.translations_pending && <div className="tpl-det-tag">{t('eng.tpl.translations_pending')}</div>}
                     </div>
                   </div>
                   <div className="tpl-det-actions">
-                    <button className="btn btn-outline btn-sm" onClick={() => openEdit(tplDetail)}><span className="material-symbols-outlined">edit</span>{t('common.edit', 'Edit')}</button>
-                    <button className="btn btn-primary" onClick={() => onNavigateToBuilder?.(tplDetail.id, tplDetail.channel)}><span className="material-symbols-outlined">campaign</span>{t('eng.tpl.use_template', 'Use Template')}</button>
+                    <button className="btn btn-outline btn-sm" onClick={() => openEdit(tplDetail)}><span className="material-symbols-outlined">edit</span>{t('common.edit')}</button>
+                    <button className="btn btn-primary" onClick={() => onNavigateToBuilder?.(tplDetail.id, tplDetail.channel)}><span className="material-symbols-outlined">campaign</span>{t('eng.tpl.use_template')}</button>
                   </div>
                 </div>
               </div>
 
               {perf && (
                 <div className="tpl-stats">
-                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.usage_count ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_times_used', 'Times Used')}</div></div>
-                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_open', 'Avg Open Rate')}</div></div>
-                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_click', 'Avg Click Rate')}</div></div>
-                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.counts?.recipients ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_recipients', 'Recipients')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.usage_count ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_times_used')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_open')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_avg_click')}</div></div>
+                  <div className="tpl-stat"><div className="tpl-stat-val">{perf.counts?.recipients ?? 0}</div><div className="tpl-stat-lbl">{t('eng.tpl.stat_recipients')}</div></div>
                 </div>
               )}
 
@@ -4486,25 +4490,25 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                 <div>
                   <div className="alert alert-info">
                     <span className="material-symbols-outlined">info</span>
-                    <div>{t('eng.tpl.structure_hint_real', 'This is the primary-language content. Click Edit to change it — saving invalidates existing translations.')}</div>
+                    <div>{t('eng.tpl.structure_hint_real')}</div>
                   </div>
                   {tplDetail.channel === 'whatsapp' ? (
                     <div className="tpl-ts">
-                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short', 'Body')}</div>
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short')}</div>
                       <div className="tpl-ts-field-val fixed-val">{content.body || '—'}</div>
                     </div>
                   ) : tplDetail.channel === 'push' ? (
                     <div className="tpl-ts">
-                      <div className="cdp-sec-title">{t('eng.tpl.sec_title', 'Title')}</div>
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_title')}</div>
                       <div className="tpl-ts-field-val fixed-val">{content.title || '—'}</div>
-                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short', 'Body')}</div>
+                      <div className="cdp-sec-title">{t('eng.tpl.sec_body_short')}</div>
                       <div className="tpl-ts-field-val fixed-val">{content.body || '—'}</div>
                     </div>
                   ) : (
                     <div className="tpl-ts">
-                      <div className="cdp-sec-title">{t('eng.rev.subject', 'Subject')}</div>
+                      <div className="cdp-sec-title">{t('eng.rev.subject')}</div>
                       <div className="tpl-ts-field-val fixed-val">{content.subject || '—'}</div>
-                      <div className="cdp-sec-title">{t('eng.rev.body', 'Body')}</div>
+                      <div className="cdp-sec-title">{t('eng.rev.body')}</div>
                       <div className="tpl-ts-field-val fixed-val">{content.text || '—'}</div>
                     </div>
                   )}
@@ -4527,7 +4531,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                         <div className="tpl-ef-urlbar">mail.google.com</div>
                       </div>
                       <div className="tpl-ef-subj-bar">
-                        <div className="tpl-ef-from">{t('eng.tpl.from_label', 'From:')} {emailSettings ? `${emailSettings.sender_display_name} <${emailSettings.reply_to_email || `${emailSettings.sender_local_part}@${emailSettings.sender_domain}`}>` : t('common.loading', 'Loading...')}</div>
+                        <div className="tpl-ef-from">{t('eng.tpl.from_label')} {emailSettings ? `${emailSettings.sender_display_name} <${emailSettings.reply_to_email || `${emailSettings.sender_local_part}@${emailSettings.sender_domain}`}>` : t('common.loading')}</div>
                         <div className="tpl-ef-subj">{content.subject || '—'}</div>
                       </div>
                       <div className="tpl-ef-body">
@@ -4541,7 +4545,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                     <div className="tpl-wa-frame">
                       <div className="tpl-wa-top">
                         <div className="tpl-wa-av">{templateEmoji(tplDetail.template_key)}</div>
-                        <div><div className="tpl-wa-biz">{t('eng.tpl.wa_preview_biz', 'Your Boutique')}</div></div>
+                        <div><div className="tpl-wa-biz">{t('eng.tpl.wa_preview_biz')}</div></div>
                       </div>
                       <div className="tpl-wa-chat">
                         <div className="tpl-wa-bubble">
@@ -4570,7 +4574,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                 <div>
                   <div className="alert alert-info">
                     <span className="material-symbols-outlined">translate</span>
-                    <div>{t('eng.tpl.langs_hint_real', 'Contacts receive this template in their preferred language automatically. Missing languages fall back to the primary language.')}</div>
+                    <div>{t('eng.tpl.langs_hint_real')}</div>
                   </div>
                   <div className="tpl-lang-grid">
                     {Object.keys(LANG_MAP).map(code => {
@@ -4581,11 +4585,11 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                           <div className="tpl-lang-flag">{LANG_MAP[code].flag}</div>
                           <div className="tpl-lang-name">{langDisplayName(code, t)}</div>
                           <div className={`tpl-lang-status${ready ? ' ready' : ' unavail'}`}>
-                            {isPrimary ? t('eng.rev.source_tag', 'Source') : ready ? `✓ ${t('eng.tpl.status_approved_ready', 'Ready')}` : t('eng.tpl.status_not_available', 'Not yet translated')}
+                            {isPrimary ? t('eng.rev.source_tag') : ready ? `✓ ${t('eng.tpl.status_approved_ready')}` : t('eng.tpl.status_not_available')}
                           </div>
                           {!isPrimary && (
                             <button className="btn btn-outline btn-xs" disabled={!!langBusy} onClick={() => retranslateLang(code)} style={{ marginTop:6 }}>
-                              {langBusy === code ? t('eng.tpl.requesting', 'Requesting…') : ready ? t('eng.tpl.retranslate', 'Re-translate') : t('eng.tpl.translate', 'Translate')}
+                              {langBusy === code ? t('eng.tpl.requesting') : ready ? t('eng.tpl.retranslate') : t('eng.tpl.translate')}
                             </button>
                           )}
                         </div>
@@ -4602,22 +4606,22 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                   {perfLoading ? (
                     <Loading />
                   ) : !perf || (perf.usage_count ?? 0) === 0 ? (
-                    <div className="eng-loading">{t('eng.tpl.no_perf_data', 'No performance data yet — this template has not been used in a campaign.')}</div>
+                    <div className="eng-loading">{t('eng.tpl.no_perf_data')}</div>
                   ) : (
                     <div className="tpl-perf-card">
                       <div className="tpl-perf-hdr"><div className="tpl-perf-hdr-txt">{t('eng.tpl.perf_count', { count: perf.usage_count, defaultValue: '{{count}} campaign(s) using this template' })}</div></div>
                       <div className="tpl-perf-stats">
-                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.counts?.recipients ?? 0}</div><div className="tpl-perf-stat-l">{t('eng.an.col_recipients', 'Recipients')}</div></div>
-                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_open_short', 'Open')}</div></div>
-                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_click', 'Click')}</div></div>
-                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.bounce != null ? `${perf.rates.bounce}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_bounce', 'Bounce')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.counts?.recipients ?? 0}</div><div className="tpl-perf-stat-l">{t('eng.an.col_recipients')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.open != null ? `${perf.rates.open}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_open_short')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.click != null ? `${perf.rates.click}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_click')}</div></div>
+                        <div className="tpl-perf-stat"><div className="tpl-perf-stat-v">{perf.rates?.bounce != null ? `${perf.rates.bounce}%` : '—'}</div><div className="tpl-perf-stat-l">{t('eng.an.col_bounce')}</div></div>
                       </div>
                       {(perf.campaigns_used_in ?? []).length > 0 && (
                         <div>
                           {perf.campaigns_used_in.map((c, i) => (
                             <div key={c.id ?? i} className="tpl-perf-row">
                               <div className="tpl-perf-camp">
-                                <div className="tpl-perf-camp-name">{c.campaign_name || c.name || t('eng.tpl.untitled_campaign', 'Untitled campaign')}</div>
+                                <div className="tpl-perf-camp-name">{c.campaign_name || c.name || t('eng.tpl.untitled_campaign')}</div>
                                 {c.sent_at && <div className="tpl-perf-camp-meta">{formatDate(c.sent_at)}</div>}
                               </div>
                             </div>
@@ -4635,14 +4639,14 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                   {versionsLoading ? (
                     <Loading />
                   ) : versions.length === 0 ? (
-                    <div className="eng-loading">{t('eng.tpl.no_version_history', 'No version history yet.')}</div>
+                    <div className="eng-loading">{t('eng.tpl.no_version_history')}</div>
                   ) : (
                     versions.map((v, i) => (
                       <div key={v.id ?? i} className="tpl-ver-row">
                         <div>
                           <div className="tpl-ver-name">
                             {t('eng.tpl.version_n', { n: v.version_number, defaultValue: 'Version {{n}}' })}
-                            {i === 0 && <span className="tpl-ver-badge current">{t('eng.tpl.current', 'Current')}</span>}
+                            {i === 0 && <span className="tpl-ver-badge current">{t('eng.tpl.current')}</span>}
                           </div>
                           <div className="tpl-ver-meta">{formatDate(v.created_at)}{v.change_note ? ` · ${v.change_note}` : ''}</div>
                         </div>
@@ -4651,7 +4655,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                   )}
 
                   <div className="eng-card-footer">
-                    <div className="cdp-sec-title">{t('eng.tpl.request_change', 'Request a Change')}</div>
+                    <div className="cdp-sec-title">{t('eng.tpl.request_change')}</div>
                     {!changeRequestsLoading && changeRequests.length > 0 && (
                       <div style={{ marginBottom:12 }}>
                         {changeRequests.map(cr => (
@@ -4665,14 +4669,14 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                       </div>
                     )}
                     <div className="card card-flush">
-                      <div className="tpl-perf-hdr-txt">{t('eng.tpl.request_custom_hint', "Need something this template can't do? Submit a change request to Mi Italia.")}</div>
+                      <div className="tpl-perf-hdr-txt">{t('eng.tpl.request_custom_hint')}</div>
                       {changeRequestError && <div className="eng-error">{changeRequestError}</div>}
                       <div className="form-group">
-                        <label className="form-lbl">{t('eng.tpl.what_change', 'What would you like to change?')}</label>
-                        <textarea className="form-textarea" placeholder={t('eng.tpl.what_change_placeholder', "e.g. I'd like to add a second CTA button…")} value={changeRequestText} onChange={e => setChangeRequestText(e.target.value)} />
+                        <label className="form-lbl">{t('eng.tpl.what_change')}</label>
+                        <textarea className="form-textarea" placeholder={t('eng.tpl.what_change_placeholder')} value={changeRequestText} onChange={e => setChangeRequestText(e.target.value)} />
                       </div>
                       <button className="btn btn-outline btn-sm" disabled={changeRequestSending || !changeRequestText.trim()} onClick={submitChangeRequest}>
-                        <span className="material-symbols-outlined">send</span>{changeRequestSending ? t('eng.rev.sending', 'Sending…') : t('eng.tpl.submit_change_request', 'Submit Change Request')}
+                        <span className="material-symbols-outlined">send</span>{changeRequestSending ? t('eng.rev.sending') : t('eng.tpl.submit_change_request')}
                       </button>
                     </div>
                   </div>
@@ -4683,7 +4687,7 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
                 <div>
                   <div className="alert alert-info">
                     <span className="material-symbols-outlined">data_object</span>
-                    <div>{t('eng.tpl.variables_hint', 'Variables are pulled automatically from your Mi Italia data at send time.')}</div>
+                    <div>{t('eng.tpl.variables_hint')}</div>
                   </div>
                   {variablesLoading ? (
                     <Loading />
@@ -4717,15 +4721,15 @@ function TemplatesView({ onNavigateToBuilder, emailSettings }) {
       <div className="modal-backdrop" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}>
         <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
           <div className="modal-hdr">
-            <div className="modal-title">{t('common.delete', 'Delete')} <em>{t('eng.tpl.delete_title_em', 'Template')}</em></div>
+            <div className="modal-title">{t('common.delete')} <em>{t('eng.tpl.delete_title_em')}</em></div>
             <div className="modal-close" onClick={() => { if (!deleting) { setDeleteTarget(null); setDeleteError('') } }}><span className="material-symbols-outlined">close</span></div>
           </div>
           {deleteError && <div className="eng-error">{deleteError}</div>}
           <div>{t('eng.tpl.confirm_delete', { name: templateDisplayName(deleteTarget.template_key, t), defaultValue: 'Delete "{{name}}"? This cannot be undone.' })}</div>
           <div className="modal-footer">
-            <button className="btn btn-outline" onClick={() => { setDeleteTarget(null); setDeleteError('') }} disabled={deleting}>{t('common.cancel', 'Cancel')}</button>
+            <button className="btn btn-outline" onClick={() => { setDeleteTarget(null); setDeleteError('') }} disabled={deleting}>{t('common.cancel')}</button>
             <button className="btn btn-red" onClick={confirmDelete} disabled={deleting}>
-              <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting', 'Deleting') + '…' : t('common.delete', 'Delete')}
+              <span className="material-symbols-outlined">delete</span>{deleting ? t('eng.camp.deleting') + '…' : t('common.delete')}
             </button>
           </div>
         </div>
@@ -4784,7 +4788,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
 
   const handleCreate = async () => {
     if (!subdomain.trim() || !localPart.trim() || !displayName.trim() || !replyTo.trim() || !address.trim()) {
-      setSaveError(t('eng.set.err_required', 'All fields are required.')); return
+      setSaveError(t('eng.set.err_required')); return
     }
     setSaving(true); setSaveError(''); setSaveMsg('')
     try {
@@ -4795,15 +4799,15 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
         replyToEmail:      replyTo.trim(),
         physicalAddress:   address.trim(),
       })
-      if (res?.success) { setSaveMsg(res.message || t('eng.set.created', 'Sender identity created.')); refetchEmailSettings() }
-      else setSaveError(res?.message || t('eng.set.err_save', 'Failed to save.'))
-    } catch { setSaveError(t('eng.set.err_network', 'Network error.')) }
+      if (res?.success) { setSaveMsg(res.message || t('eng.set.created')); refetchEmailSettings() }
+      else setSaveError(res?.message || t('eng.set.err_save'))
+    } catch { setSaveError(t('eng.set.err_network')) }
     finally { setSaving(false) }
   }
 
   const handleUpdate = async () => {
     if (!displayName.trim() || !replyTo.trim() || !address.trim()) {
-      setSaveError(t('eng.set.err_required', 'All fields are required.')); return
+      setSaveError(t('eng.set.err_required')); return
     }
     setSaving(true); setSaveError(''); setSaveMsg('')
     try {
@@ -4812,9 +4816,9 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
         replyToEmail:      replyTo.trim(),
         physicalAddress:   address.trim(),
       })
-      if (res?.success) { setSaveMsg(res.message || t('eng.set.saved', 'Settings updated.')); refetchEmailSettings() }
-      else setSaveError(res?.message || t('eng.set.err_save', 'Failed to save.'))
-    } catch { setSaveError(t('eng.set.err_network', 'Network error.')) }
+      if (res?.success) { setSaveMsg(res.message || t('eng.set.saved')); refetchEmailSettings() }
+      else setSaveError(res?.message || t('eng.set.err_save'))
+    } catch { setSaveError(t('eng.set.err_network')) }
     finally { setSaving(false) }
   }
 
@@ -4823,8 +4827,8 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
     try {
       const res = await emailSettingsApi.verify()
       if (res?.success) { setDnsRecords(res.data?.dnsRecords ?? null); refetchEmailSettings() }
-      else setVerifyError(res?.message || t('eng.set.err_verify', 'Verification failed.'))
-    } catch { setVerifyError(t('eng.set.err_network', 'Network error.')) }
+      else setVerifyError(res?.message || t('eng.set.err_verify'))
+    } catch { setVerifyError(t('eng.set.err_network')) }
     finally { setVerifying(false) }
   }
 
@@ -4832,9 +4836,9 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
     setRefreshing(true); setRefreshMsg('')
     try {
       const res = await emailSettingsApi.refresh()
-      setRefreshMsg(res?.message || (res?.success ? t('eng.set.refreshed', 'Status updated.') : t('eng.set.err_refresh', 'Refresh failed.')))
+      setRefreshMsg(res?.message || (res?.success ? t('eng.set.refreshed') : t('eng.set.err_refresh')))
       if (res?.success) refetchEmailSettings()
-    } catch { setRefreshMsg(t('eng.set.err_network', 'Network error.')) }
+    } catch { setRefreshMsg(t('eng.set.err_network')) }
     finally { setRefreshing(false); setTimeout(() => setRefreshMsg(''), 5000) }
   }
 
@@ -4853,33 +4857,33 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
     return (
       <div>
         <div className="card" style={{ maxWidth:560 }}>
-          <div className="card-hdr"><div className="card-title">{t('eng.set.setup_title', 'Set up your')} <em>{t('eng.set.setup_title_em', 'sender identity')}</em></div></div>
-          <div className="eng-loading" style={{ padding:'0 0 14px' }}>{t('eng.set.setup_hint', "Before you can send marketing email, Mi Italia needs a dedicated sending domain and address for your boutique.")}</div>
+          <div className="card-hdr"><div className="card-title">{t('eng.set.setup_title')} <em>{t('eng.set.setup_title_em')}</em></div></div>
+          <div className="eng-loading" style={{ padding:'0 0 14px' }}>{t('eng.set.setup_hint')}</div>
           {saveError && <div className="eng-error">{saveError}</div>}
           {saveMsg && <div className="eng-success">{saveMsg}</div>}
           <div className="form-group">
-            <label className="form-lbl">{t('eng.set.subdomain', 'Subdomain')}</label>
+            <label className="form-lbl">{t('eng.set.subdomain')}</label>
             <input className="form-input" placeholder="yourboutique" value={subdomain} onChange={e => setSubdomain(e.target.value)} />
             <div className="form-hint">{t('eng.set.subdomain_hint', { sub: subdomain.trim() || 'yourboutique', defaultValue: 'Your sending domain will be {{sub}}.miitalia.com' })}</div>
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.set.local_part', 'Sender address (before the @)')}</label>
+            <label className="form-lbl">{t('eng.set.local_part')}</label>
             <input className="form-input" placeholder="newsletter" value={localPart} onChange={e => setLocalPart(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.set.display_name', 'Sender display name')}</label>
-            <input className="form-input" placeholder={t('eng.set.display_name_placeholder', 'Your Boutique Name')} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+            <label className="form-lbl">{t('eng.set.display_name')}</label>
+            <input className="form-input" placeholder={t('eng.set.display_name_placeholder')} value={displayName} onChange={e => setDisplayName(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.set.reply_to', 'Reply-to email')}</label>
+            <label className="form-lbl">{t('eng.set.reply_to')}</label>
             <input className="form-input" type="email" placeholder="support@yourboutique.com" value={replyTo} onChange={e => setReplyTo(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('eng.set.physical_address', 'Physical address')}</label>
-            <input className="form-input" placeholder={t('eng.set.address_placeholder', 'Required by anti-spam law for marketing email')} value={address} onChange={e => setAddress(e.target.value)} />
+            <label className="form-lbl">{t('eng.set.physical_address')}</label>
+            <input className="form-input" placeholder={t('eng.set.address_placeholder')} value={address} onChange={e => setAddress(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={saving} onClick={handleCreate}>
-            <span className="material-symbols-outlined">mail</span>{saving ? t('common.saving', 'Saving…') : t('eng.set.create_btn', 'Create sender identity')}
+            <span className="material-symbols-outlined">mail</span>{saving ? t('common.saving') : t('eng.set.create_btn')}
           </button>
         </div>
       </div>
@@ -4890,9 +4894,9 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
     <div>
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('eng.set.status_title', 'Sender')} <em>{t('eng.set.status_title_em', 'Status')}</em></div>
+          <div className="card-title">{t('eng.set.status_title')} <em>{t('eng.set.status_title_em')}</em></div>
           <button className="card-action" disabled={refreshing} onClick={handleRefresh}>
-            {refreshing ? t('eng.set.refreshing', 'Checking') + '…' : t('eng.set.refresh_btn', '→ Check verification status')}
+            {refreshing ? t('eng.set.refreshing') + '…' : t('eng.set.refresh_btn')}
           </button>
         </div>
         {refreshMsg && <div className="eng-success" style={{ marginBottom:12 }}>{refreshMsg}</div>}
@@ -4900,62 +4904,62 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
           {t('eng.set.sending_from', { addr: `${emailSettings.sender_local_part}@${emailSettings.sender_domain}`, defaultValue: 'Sending from {{addr}}' })}
         </div>
         <div className="stat-row col4">
-          <VerifyStatus ok={emailSettings.ses_verified}   label={t('eng.set.stat_ses', 'DOMAIN VERIFIED')} />
+          <VerifyStatus ok={emailSettings.ses_verified}   label={t('eng.set.stat_ses')} />
           <VerifyStatus ok={emailSettings.dkim_verified}  label="DKIM" />
           <VerifyStatus ok={emailSettings.spf_verified}   label="SPF" />
           <VerifyStatus ok={emailSettings.dmarc_verified} label="DMARC" />
         </div>
         <div className="eng-mt14">
           <span className={`status ${emailSettings.sending_enabled ? 'sent' : 'draft'}`}>
-            {emailSettings.sending_enabled ? t('eng.set.sending_enabled', 'Sending enabled') : t('eng.set.sending_disabled', 'Sending not yet enabled')}
+            {emailSettings.sending_enabled ? t('eng.set.sending_enabled') : t('eng.set.sending_disabled')}
           </span>
         </div>
       </div>
 
       <div className="card eng-mt14">
         <div className="card-hdr">
-          <div className="card-title">{t('common.edit', 'Edit')} <em>{t('eng.set.edit_title_em', 'Sender Details')}</em></div>
+          <div className="card-title">{t('common.edit')} <em>{t('eng.set.edit_title_em')}</em></div>
         </div>
         {saveError && <div className="eng-error">{saveError}</div>}
         {saveMsg && <div className="eng-success">{saveMsg}</div>}
         <div className="form-group">
-          <label className="form-lbl">{t('eng.set.display_name', 'Sender display name')}</label>
+          <label className="form-lbl">{t('eng.set.display_name')}</label>
           <input className="form-input" value={displayName} onChange={e => setDisplayName(e.target.value)} />
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('eng.set.reply_to', 'Reply-to email')}</label>
+          <label className="form-lbl">{t('eng.set.reply_to')}</label>
           <input className="form-input" type="email" value={replyTo} onChange={e => setReplyTo(e.target.value)} />
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('eng.set.physical_address', 'Physical address')}</label>
+          <label className="form-lbl">{t('eng.set.physical_address')}</label>
           <input className="form-input" value={address} onChange={e => setAddress(e.target.value)} />
         </div>
         <button className="btn btn-primary" disabled={saving} onClick={handleUpdate}>
-          {saving ? t('common.saving', 'Saving…') : t('common.save', 'Save')}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
       </div>
 
       {!(emailSettings.ses_verified && emailSettings.dkim_verified && emailSettings.spf_verified && emailSettings.dmarc_verified) && (
         <div className="card eng-mt14">
           <div className="card-hdr">
-            <div className="card-title">{t('eng.set.verify_title', 'Verify')} <em>{t('eng.set.verify_title_em', 'Domain')}</em></div>
+            <div className="card-title">{t('eng.set.verify_title')} <em>{t('eng.set.verify_title_em')}</em></div>
           </div>
           <div className="eng-loading" style={{ padding:'0 0 14px' }}>
-            {t('eng.set.verify_hint', "Get the DNS records to publish at your domain provider, then check status once they're live (DNS changes can take up to a few hours to propagate).")}
+            {t('eng.set.verify_hint')}
           </div>
           {verifyError && <div className="eng-error">{verifyError}</div>}
           <button className="btn btn-outline" disabled={verifying} onClick={handleVerify}>
-            <span className="material-symbols-outlined">dns</span>{verifying ? t('eng.set.verifying', 'Requesting') + '…' : t('eng.set.verify_btn', 'Get DNS records')}
+            <span className="material-symbols-outlined">dns</span>{verifying ? t('eng.set.verifying') + '…' : t('eng.set.verify_btn')}
           </button>
 
           {dnsRows.length > 0 && (
             <table className="tbl eng-mt14">
               <thead>
                 <tr>
-                  <th>{t('eng.set.col_group', 'Record')}</th>
-                  <th>{t('eng.set.col_type', 'Type')}</th>
-                  <th>{t('eng.set.col_name', 'Name')}</th>
-                  <th>{t('eng.set.col_value', 'Value')}</th>
+                  <th>{t('eng.set.col_group')}</th>
+                  <th>{t('eng.set.col_type')}</th>
+                  <th>{t('eng.set.col_name')}</th>
+                  <th>{t('eng.set.col_value')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -4968,7 +4972,7 @@ function SenderSettingsView({ emailSettings, refetchEmailSettings }) {
                     <td style={{ wordBreak:'break-all', fontSize:11 }}>{r.value}</td>
                     <td>
                       <button className="btn btn-outline btn-xs" onClick={() => copyValue(r.value, `${r.group}-${i}`)}>
-                        {copied === `${r.group}-${i}` ? t('common.copied', 'Copied') : t('common.copy', 'Copy')}
+                        {copied === `${r.group}-${i}` ? t('common.copied') : t('common.copy')}
                       </button>
                     </td>
                   </tr>
@@ -5069,21 +5073,21 @@ export default function Engagement() {
   }, [i18n.language])
 
   const LOAD_NAMES = {
-    segments:  t('eng.load.segments',  'segments'),
-    dashboard: t('eng.load.dashboard', 'overview figures'),
-    settings:  t('eng.load.settings',  'sender settings'),
-    campaigns: t('eng.load.campaigns', 'campaigns'),
+    segments:  t('eng.load.segments'),
+    dashboard: t('eng.load.dashboard'),
+    settings:  t('eng.load.settings'),
+    campaigns: t('eng.load.campaigns'),
   }
 
   const VIEWS = [
-    { key:'overview',    icon:'dashboard',  label:t('eng.nav.overview', 'Overview') },
-    { key:'contacts',    icon:'people',     label:t('eng.nav.contacts', 'Contacts') },
-    { key:'favorites',   icon:'favorite',   label:t('eng.nav.favorites', 'Favorites') },
-    { key:'campaigns',   icon:'campaign',   label:t('eng.nav.campaigns', 'Campaigns') },
-    { key:'templates',   icon:'description', label:t('eng.nav.templates', 'Templates') },
-    { key:'automations', icon:'bolt',        label:t('eng.nav.automations', 'Automations') },
-    { key:'analytics',   icon:'monitoring', label:t('eng.nav.analytics', 'Analytics') },
-    { key:'settings',    icon:'settings',   label:t('eng.nav.settings', 'Settings') },
+    { key:'overview',    icon:'dashboard',  label:t('eng.nav.overview') },
+    { key:'contacts',    icon:'people',     label:t('eng.nav.contacts') },
+    { key:'favorites',   icon:'favorite',   label:t('eng.nav.favorites') },
+    { key:'campaigns',   icon:'campaign',   label:t('eng.nav.campaigns') },
+    { key:'templates',   icon:'description', label:t('eng.nav.templates') },
+    { key:'automations', icon:'bolt',        label:t('eng.nav.automations') },
+    { key:'analytics',   icon:'monitoring', label:t('eng.nav.analytics') },
+    { key:'settings',    icon:'settings',   label:t('eng.nav.settings') },
   ]
 
   return (

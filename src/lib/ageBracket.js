@@ -118,6 +118,6 @@ export function bracketRangeShort(t, bracket) {
   const span = AGE_BRACKET_DAYS[bracket]
   if (!span) return ''
   const [from, to] = span
-  const d = t('common.days_abbrev', 'd')
+  const d = t('common.days_abbrev')
   return to == null ? `${from}+${d}` : `${from}–${to}${d}`
 }

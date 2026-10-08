@@ -9,16 +9,13 @@ import Toast, { useToast } from '../components/ui/Toast'
 import Loading from '../components/ui/Loading'
 import useLangStore from '../store/langStore'
 import PrintTagModal from '../components/product/PrintTagModal'
+import { imgUrl as imgSrc } from '../lib/imageUrl'
+import Toggle from '../components/ui/Toggle'
 
 
 const API      = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
 
-function imgSrc(url) {
-  if (!url) return null
-  return url.startsWith('http') ? url : `${IMG_BASE}${url}`
-}
 
 // Thresholds, palette and labels now live in lib/ageBracket.js. They used to
 // be local and were WIDER than the backend's (fresh 0-30 here vs 0-14 server
@@ -107,7 +104,6 @@ export default function Products() {
         // list holds. Say what we actually have.
         if (all.length < totalNum) {
           showToast(t('products.load_partial',
-            'Showing {{shown}} of {{total}} products — some could not be loaded.',
             { shown: all.length, total: totalNum }), 'error')
         }
       })
@@ -125,10 +121,10 @@ export default function Products() {
   }, [lang])
 
   const TABS = [
-    `${t('products.tabs.all', 'All')} (${total})`,
-    t('products.tabs.active', 'Active'),
-    t('products.tabs.hidden', 'Hidden'),
-    t('products.tabs.showroom', 'Showroom'),
+    `${t('products.tabs.all')} (${total})`,
+    t('products.tabs.active'),
+    t('products.tabs.hidden'),
+    t('products.tabs.showroom'),
   ]
 
   // The row badge needs just the bracket word — the chip below adds the range.
@@ -144,7 +140,7 @@ export default function Products() {
 
   // Filter chips spell out the range: "Aging 31–60d".
   const AGE_LABELS = {
-    all: t('products.age.all', 'All'),
+    all: t('products.age.all'),
     ...Object.fromEntries(
       AGE_FILTERS.filter(f => f.key !== 'all')
         .map(f => [f.key, `${bracketName(t, f.key)} ${bracketRangeShort(t, f.key)}`])
@@ -182,7 +178,7 @@ export default function Products() {
   }
 
   async function handleDuplicate() {
-    if (!dupSku.trim()) { setDupError(t('products.duplicate.sku_required', 'SKU is required')); return }
+    if (!dupSku.trim()) { setDupError(t('products.duplicate.sku_required')); return }
     setDupLoading(true); setDupError('')
     const res = await apiFetch(`${API}/boutique/products/${dupModal.id}/duplicate`, {
       method: 'POST',
@@ -234,8 +230,7 @@ export default function Products() {
     setMenuOpen(null)
     const url = webshopProductUrl(product.id)
     if (!url) {
-      showToast(t('products.webshop_not_configured',
-        'This build has no storefront URL — set VITE_WEBSHOP_BASE_URL and rebuild.'), 'error')
+      showToast(t('products.webshop_not_configured'), 'error')
       return
     }
     window.open(url, '_blank', 'noopener,noreferrer')
@@ -277,7 +272,7 @@ export default function Products() {
         // A rejected save used to leave the toggle flipped, so it looked saved
         // until the next refresh. Put it back and say what happened.
         setProducts(prev => prev.map(p => p.id === id ? { ...p, showroom_enabled: !next } : p))
-        showToast(res.message || t('products.showroom_error', 'Could not update Showroom. Please try again.'), 'error')
+        showToast(res.message || t('products.showroom_error'), 'error')
       })
       .catch(() => {
         setProducts(prev => prev.map(p => p.id === id ? { ...p, showroom_enabled: !next } : p))
@@ -306,8 +301,37 @@ export default function Products() {
         setSelected(new Set(failed.map(r => r.id)))
         if (failed.length) {
           showToast(t('products.bulk_delete_partial',
-            '{{failed}} of {{total}} could not be deleted.',
             { failed: failed.length, total: ids.length }), 'error')
+        }
+      })
+      return
+    }
+    if (action === 'showroom' || action === 'showroom_off') {
+      // Both directions go through the per-product call the row toggle uses.
+      // The bulk endpoint has no unlist action, and bulk "Push to Showroom"
+      // through its "showroom" action was reported not working on dev (Oct
+      // 2026). Like the delete above, only the products that
+      // failed stay selected; products already in the target state are skipped.
+      const enable = action === 'showroom'
+      const ids = [...selected].filter(id => {
+        const p = products.find(q => q.id === id)
+        return p && !!p.showroom_enabled !== enable
+      })
+      if (!ids.length) { setSelected(new Set()); return }
+      Promise.all(ids.map(id =>
+        apiFetch(`${API}/boutique/products/${id}/showroom`, { method:'PATCH', body: JSON.stringify({ enabled: enable }) })
+          .then(r => r.json())
+          .then(res => ({ id, ok: !!res.success, now: res.data?.showroom_enabled ?? enable }))
+          .catch(() => ({ id, ok: false }))
+      )).then(results => {
+        const done   = new Map(results.filter(r => r.ok).map(r => [r.id, r.now]))
+        const failed = results.filter(r => !r.ok)
+        if (done.size) setProducts(prev => prev.map(p => done.has(p.id) ? { ...p, showroom_enabled: done.get(p.id) } : p))
+        setSelected(new Set(failed.map(r => r.id)))
+        if (failed.length) {
+          showToast(t(enable ? 'products.bulk_showroom_partial' : 'products.bulk_showroom_off_partial', {
+            failed: failed.length, total: ids.length
+          }), 'error')
         }
       })
       return
@@ -317,11 +341,11 @@ export default function Products() {
       body: JSON.stringify({ action, product_ids: [...selected] })
     }).then(r => r.json()).then(res => {
       if (!res.success) {
-        showToast(res.message || t('products.bulk_error', 'Bulk action failed. Please try again.'), 'error')
+        showToast(res.message || t('products.bulk_error'), 'error')
         return
       }
       setProducts(prev => prev.map(p => selected.has(p.id)
-        ? { ...p, ...(action==='show' ? {status:'active'} : action==='hide' ? {status:'hidden'} : action==='showroom' ? {showroom_enabled:true} : {}) }
+        ? { ...p, ...(action==='show' ? {status:'active'} : action==='hide' ? {status:'hidden'} : {}) }
         : p
       ))
       setSelected(new Set())
@@ -345,7 +369,7 @@ export default function Products() {
       // at all — the row stayed open with the typed values still showing, so
       // it read as an unresponsive button rather than a failed save. The row
       // is deliberately left open so the edit isn't lost.
-      else showToast(res.message || t('products.edit_error', 'Could not save the changes. Please try again.'), 'error')
+      else showToast(res.message || t('products.edit_error'), 'error')
     }).catch(() => showToast(t('common.error_network'), 'error'))
   }
 
@@ -365,7 +389,6 @@ export default function Products() {
       <div className="alert alert-warn" style={{ marginBottom: 12 }}>
         <span className="material-symbols-outlined">error</span>
         {t('products.at_limit',
-           "You've reached the {{max}}-product limit. Hide or delete a product to add a new one. Drafts don't count toward the limit.",
            { max: maxProducts })}
       </div>
     )}
@@ -382,13 +405,12 @@ export default function Products() {
           disabled={atLimit}
           title={atLimit
             ? t('products.limit_tooltip',
-                'Limit reached: {{max}} published products max. Delete or hide products to add more.',
                 { max: maxProducts })
             : undefined}
           style={atLimit ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
         >
           <span className="material-symbols-outlined">add</span>
-          {t('products.add_btn', 'Add Product')}
+          {t('products.add_btn')}
           {publishedCount > 0 && (
             <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.75, fontWeight: 500 }}>
               · {publishedCount}/{maxProducts ?? '∞'}
@@ -399,7 +421,7 @@ export default function Products() {
 
       {/* Stock Age filter row */}
       <div className="prod-age-row">
-        <span className="prod-age-lbl">{t('products.stock_age', 'Stock Age')}:</span>
+        <span className="prod-age-lbl">{t('products.stock_age')}:</span>
         <div className="prod-age-chips">
           {AGE_FILTERS.map(f => {
             const count    = f.key === 'all' ? visibleProducts.length : (ageCounts[f.key] ?? 0)
@@ -423,14 +445,14 @@ export default function Products() {
             <input
               type="text"
               className="prod-search-input"
-              placeholder={t('products.search_placeholder', 'Search products') + '…'}
+              placeholder={t('products.search_placeholder') + '…'}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
           </div>
           <div className="prod-age-report" onClick={() => navigate('/reports')}>
             <span className="material-symbols-outlined prod-age-report-icon">open_in_new</span>
-            {t('products.full_report', 'Full Report')}
+            {t('products.full_report')}
           </div>
         </div>
       </div>
@@ -445,8 +467,8 @@ export default function Products() {
                 beats defaultValue. The day count is interpolated now so it
                 tracks lib/ageBracket instead of being written out by hand. */}
             <strong>{deadStockItems.length} {t('products.dead_stock_alert_days', { count: deadStockItems.length, days: DEAD_STOCK_FROM_DAYS, defaultValue: "product(s) haven't sold in {{days}}+ days:" })}</strong>{' '}
-            {deadStockItems.map(p => p.name).join(', ')} — {t('products.dead_stock_action', 'consider marking down or moving to clearance.')}{' '}
-            <span className="prod-dead-link" onClick={() => setFilterAge('dead')}>{t('products.view_dead', 'View dead stock')} →</span>
+            {deadStockItems.map(p => p.name).join(', ')} — {t('products.dead_stock_action')}{' '}
+            <span className="prod-dead-link" onClick={() => setFilterAge('dead')}>{t('products.view_dead')} →</span>
           </div>
         </div>
       )}
@@ -454,19 +476,22 @@ export default function Products() {
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="bulk-bar">
-          <div className="bulk-bar-count">{selected.size} {t('products.selected', 'selected')}</div>
+          <div className="bulk-bar-count">{selected.size} {t('products.selected')}</div>
           <div className="bulk-bar-actions">
             <button className="bulk-btn primary" onClick={() => bulkAction('show')}>
-              <span className="material-symbols-outlined">visibility</span>{t('products.bulk.show', 'Show')}
+              <span className="material-symbols-outlined">visibility</span>{t('products.bulk.show')}
             </button>
             <button className="bulk-btn outline" onClick={() => bulkAction('hide')}>
-              <span className="material-symbols-outlined">visibility_off</span>{t('products.bulk.hide', 'Hide')}
+              <span className="material-symbols-outlined">visibility_off</span>{t('products.bulk.hide')}
             </button>
             <button className="bulk-btn outline" onClick={() => bulkAction('showroom')}>
-              <span className="material-symbols-outlined">business_center</span>{t('products.bulk.showroom', 'Add to Showroom')}
+              <span className="material-symbols-outlined">business_center</span>{t('products.bulk.showroom')}
+            </button>
+            <button className="bulk-btn outline" onClick={() => bulkAction('showroom_off')}>
+              <span className="material-symbols-outlined">block</span>{t('products.bulk.showroom_off')}
             </button>
             <button className="bulk-btn danger" onClick={() => bulkAction('deleted')}>
-              <span className="material-symbols-outlined">delete</span>{t('common.delete', 'Delete')}
+              <span className="material-symbols-outlined">delete</span>{t('common.delete')}
             </button>
           </div>
         </div>
@@ -478,17 +503,17 @@ export default function Products() {
           <thead>
             <tr>
               <th className="prod-th-check">
-                <div className={`prod-checkbox${allSelected?' checked':''}`} onClick={toggleAll} title={t('products.select_all', 'Select all')} />
+                <div className={`prod-checkbox${allSelected?' checked':''}`} onClick={toggleAll} title={t('products.select_all')} />
               </th>
               <th className="prod-th-img"></th>
-              <th>{t('products.table.product', 'Product')}</th>
-              <th>{t('products.table.brand', 'Brand')}</th>
-              <th>{t('products.table.price', 'Price')}</th>
-              <th>{t('products.table.pickup_price', 'Pickup Price')}</th>
-              <th>{t('products.table.stock', 'Stock')}</th>
-              <th>{t('products.table.age', 'Age')}</th>
-              <th>{t('products.table.showroom', 'Showroom')}</th>
-              <th>{t('products.table.status', 'Status')}</th>
+              <th>{t('products.table.product')}</th>
+              <th>{t('products.table.brand')}</th>
+              <th>{t('products.table.price')}</th>
+              <th>{t('products.table.pickup_price')}</th>
+              <th>{t('products.table.stock')}</th>
+              <th>{t('products.table.age')}</th>
+              <th>{t('products.table.showroom')}</th>
+              <th>{t('products.table.status')}</th>
               <th></th>
             </tr>
           </thead>
@@ -503,8 +528,8 @@ export default function Products() {
               <tr>
                 <td colSpan={11} className="empty">
                   {searchQuery.trim() || filterAge !== 'all'
-                    ? t('products.no_match', 'No products match this filter.')
-                    : t('products.empty', 'No products yet. Use Add Product to create your first one.')}
+                    ? t('products.no_match')
+                    : t('products.empty')}
                 </td>
               </tr>
             )}
@@ -534,12 +559,12 @@ export default function Products() {
                         no brand at all. A bare dash read as "missing data"
                         when it actually means "this is our own product". */}
                     <span className={`prod-brand-name${p.brand_name ? '' : ' prod-brand-own'}`}>
-                      {p.brand_name ?? t('common.own_label', 'Own Label')}
+                      {p.brand_name ?? t('common.own_label')}
                     </span>
                   </td>
                   <td>
                     {p.price_hidden
-                      ? <span className="prod-price-hidden">{t('products.price_hidden', 'Hidden')}</span>
+                      ? <span className="prod-price-hidden">{t('products.price_hidden')}</span>
                       : `€${p.retail_price}`}
                   </td>
                   <td className="prod-pickup-price">
@@ -555,14 +580,12 @@ export default function Products() {
                   <td>
                     {age
                       ? <span className="prod-age-badge" style={{ background:age.bg, color:age.color }}>
-                          {age.days}{t('common.days_abbrev', 'd')} · {AGE_BADGE_LABELS[age.bracket]}{age.warn ? ' ⚠' : ''}
+                          {age.days}{t('common.days_abbrev')} · {AGE_BADGE_LABELS[age.bracket]}{age.warn ? ' ⚠' : ''}
                         </span>
                       : <span className="prod-age-none">—</span>}
                   </td>
                   <td>
-                    <div className={`toggle${p.showroom_enabled?' on':''}`} onClick={() => toggleShowroom(p.id)}>
-                      <div className="toggle-knob" />
-                    </div>
+                    <Toggle on={p.showroom_enabled} onToggle={() => toggleShowroom(p.id)} />
                   </td>
                   <td>
                     <span className={`status ${p.status==='active'?'active':'cancelled'}`}>{statusLabel(t, p.status)}</span>
@@ -601,7 +624,7 @@ export default function Products() {
 
       <div className="alert alert-info">
         <span className="material-symbols-outlined">info</span>
-        {t('products.showroom_info', 'Showroom lets customers browse this product in-store via QR code, even when it\'s not available for online purchase.')}
+        {t('products.showroom_info')}
       </div>
 
       {/* Edit modal */}
@@ -609,39 +632,39 @@ export default function Products() {
         <div className="modal-backdrop" onClick={closeEdit}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <span className="modal-title">{t('products.edit_modal.title', 'Edit')} <em>{t('products.edit_modal.title_em', 'Product')}</em></span>
+              <span className="modal-title">{t('products.edit_modal.title')} <em>{t('products.edit_modal.title_em')}</em></span>
               <span className="modal-close" onClick={closeEdit}>
                 <span className="material-symbols-outlined">close</span>
               </span>
             </div>
-            <p className="prod-edit-hint">{t('products.edit_modal.hint', 'Quick edit — for full details, variants, and photos, use Full Edit below.')}</p>
+            <p className="prod-edit-hint">{t('products.edit_modal.hint')}</p>
             <div className="form-group">
-              <label className="form-lbl">{t('products.edit_modal.name_label', 'Product Name')}</label>
+              <label className="form-lbl">{t('products.edit_modal.name_label')}</label>
               <input className="form-input" value={editData.name} onChange={e => setEditData(d => ({...d, name:e.target.value}))} />
             </div>
             <div className="prod-edit-grid">
               <div className="form-group">
-                <label className="form-lbl">{t('products.edit_modal.price_label', 'Retail Price')}</label>
+                <label className="form-lbl">{t('products.edit_modal.price_label')}</label>
                 <input className="form-input" value={editData.retail_price} onChange={e => setEditData(d => ({...d, retail_price:e.target.value}))} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('products.edit_modal.pickup_label', 'Pickup Discount %')}</label>
+                <label className="form-lbl">{t('products.edit_modal.pickup_label')}</label>
                 <input className="form-input" value={editData.pickup_discount_pct} onChange={e => setEditData(d => ({...d, pickup_discount_pct:e.target.value}))} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('products.edit_modal.status_label', 'Status')}</label>
+                <label className="form-lbl">{t('products.edit_modal.status_label')}</label>
                 <select className="form-select" value={editData.status} onChange={e => setEditData(d => ({...d, status:e.target.value}))}>
-                  <option value="active">{t('products.edit_modal.status_active', 'Active')}</option>
-                  <option value="hidden">{t('products.edit_modal.status_hidden', 'Hidden')}</option>
+                  <option value="active">{t('products.edit_modal.status_active')}</option>
+                  <option value="hidden">{t('products.edit_modal.status_hidden')}</option>
                 </select>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={closeEdit}>{t('common.cancel', 'Cancel')}</button>
+              <button className="btn btn-outline" onClick={closeEdit}>{t('common.cancel')}</button>
               <button className="btn btn-outline" onClick={() => navigate(`/products/edit/${editingId}`)}>
-                <span className="material-symbols-outlined prod-full-edit-icon">open_in_full</span>{t('products.edit_modal.full_edit', 'Full Edit')}
+                <span className="material-symbols-outlined prod-full-edit-icon">open_in_full</span>{t('products.edit_modal.full_edit')}
               </button>
-              <button className="btn btn-primary" onClick={saveEdit}>{t('products.edit_modal.save_btn', 'Save')}</button>
+              <button className="btn btn-primary" onClick={saveEdit}>{t('products.edit_modal.save_btn')}</button>
             </div>
           </div>
         </div>

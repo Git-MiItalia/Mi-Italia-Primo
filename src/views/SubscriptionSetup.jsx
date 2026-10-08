@@ -93,7 +93,7 @@ function ConnectCard({ t, selecting, onSelect }) {
             rather than being dropped. */}
         <Feat>{isWhatsappEnabled()
           ? t('sub.setup.feat_wa_print')
-          : t('sub.setup.feat_print_only', 'Print campaigns')}</Feat>
+          : t('sub.setup.feat_print_only')}</Feat>
         <Feat>{t('sub.setup.feat_25_renders')}</Feat>
         <Feat>{t('sub.setup.feat_8_langs')}</Feat>
         <Feat>{t('sub.setup.feat_tier_discounts')}</Feat>

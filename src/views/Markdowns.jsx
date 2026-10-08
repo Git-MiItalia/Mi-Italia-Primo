@@ -5,6 +5,7 @@ import { AGE_BRACKETS, bracketName, bracketRange } from '../lib/ageBracket'
 import useLangStore from '../store/langStore'
 import Toast, { useToast } from '../components/ui/Toast'
 import Loading from '../components/ui/Loading'
+import Toggle from '../components/ui/Toggle'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -14,14 +15,6 @@ const API = import.meta.env.VITE_API_URL
 // only request shapes were — so these are best-guess snake_case reads
 // matching the confirmed request convention. Flag any mismatch found while
 // testing live so the reads below can be corrected.
-
-function Toggle({ on, onToggle }) {
-  return (
-    <div className={`toggle${on ? ' on' : ''}`} onClick={onToggle}>
-      <div className="toggle-knob" />
-    </div>
-  )
-}
 
 // Bracket ids and thresholds are fixed by the backend and shared with the
 // Products tab via lib/ageBracket.js — see the note there.
@@ -86,7 +79,7 @@ export default function Markdowns() {
   // blank and silent. Each now keeps its own error string and the tab renders
   // it instead of an empty table.
   function loadFailed(res) {
-    return res?.message || t('markdowns.err_load', 'Could not load. Please try again.')
+    return res?.message || t('markdowns.err_load')
   }
 
   function refetchRules() {
@@ -100,7 +93,7 @@ export default function Markdowns() {
         setSettings(prev => ({ ...prev, ...(res.data?.settings ?? {}) }))
         setRules(res.data?.rules ?? [])
       })
-      .catch(() => setRulesError(t('markdowns.err_network', 'Network error.')))
+      .catch(() => setRulesError(t('markdowns.err_network')))
       .finally(() => setRulesLoading(false))
   }
   function refetchPreview() {
@@ -111,7 +104,7 @@ export default function Markdowns() {
         if (!res.success) { setPreviewError(loadFailed(res)); return }
         setPreview({ summary: res.data?.summary ?? {}, rows: res.data?.rows ?? [] })
       })
-      .catch(() => setPreviewError(t('markdowns.err_network', 'Network error.')))
+      .catch(() => setPreviewError(t('markdowns.err_network')))
       .finally(() => setPreviewLoading(false))
   }
   function refetchApprovals() {
@@ -122,7 +115,7 @@ export default function Markdowns() {
         if (!res.success) { setApprovalsError(loadFailed(res)); return }
         setApprovals(res.data?.approvals ?? [])
       })
-      .catch(() => setApprovalsError(t('markdowns.err_network', 'Network error.')))
+      .catch(() => setApprovalsError(t('markdowns.err_network')))
       .finally(() => setApprovalsLoading(false))
   }
   function refetchHistory(page = historyPage) {
@@ -136,7 +129,7 @@ export default function Markdowns() {
         setHistoryMeta({ total: pg.total ?? 0, total_pages: pg.total_pages ?? 0 })
         setHistoryPage(pg.page ?? page)
       })
-      .catch(() => setHistoryError(t('markdowns.err_network', 'Network error.')))
+      .catch(() => setHistoryError(t('markdowns.err_network')))
       .finally(() => setHistoryLoading(false))
   }
 
@@ -156,10 +149,10 @@ export default function Markdowns() {
     return apiFetch(`${API}/boutique/markdowns/rules`, { method: 'PATCH', body: JSON.stringify(body) })
       .then(r => r.json())
       .then(res => {
-        if (!res.success) { show(res.message || t('markdowns.err_save', 'Failed to save.'), 'error'); return false }
+        if (!res.success) { show(res.message || t('markdowns.err_save'), 'error'); return false }
         return true
       })
-      .catch(() => { show(t('markdowns.err_network', 'Network error.'), 'error'); return false })
+      .catch(() => { show(t('markdowns.err_network'), 'error'); return false })
   }
 
   // Every rule control updates the screen first, then saves. If the save
@@ -200,10 +193,10 @@ export default function Markdowns() {
     apiFetch(`${API}/boutique/markdowns/approvals/${id}/approve`, { method: 'POST', body: JSON.stringify(body) })
       .then(r => r.json())
       .then(res => {
-        if (res.success) { show(t('markdowns.approvals.toast_approved', 'Markdown applied.'), 'success'); refetchApprovals(); refetchPreview() }
-        else show(res.message || t('common.error', 'Something went wrong.'), 'error')
+        if (res.success) { show(t('markdowns.approvals.toast_approved'), 'success'); refetchApprovals(); refetchPreview() }
+        else show(res.message || t('common.error'), 'error')
       })
-      .catch(() => show(t('markdowns.err_network', 'Network error.'), 'error'))
+      .catch(() => show(t('markdowns.err_network'), 'error'))
   }
   function skipOne(id) {
     apiFetch(`${API}/boutique/markdowns/approvals/${id}/skip`, { method: 'POST', body: '{}' })
@@ -212,10 +205,10 @@ export default function Markdowns() {
         // Preview has to be refreshed too. Approve already did this; skip did
         // not, so a skipped product vanished from Approvals but stayed listed
         // in Preview & Impact until the page was reloaded.
-        if (res.success) { show(t('markdowns.approvals.toast_skipped', 'Skipped.'), 'success'); refetchApprovals(); refetchPreview() }
-        else show(res.message || t('common.error', 'Something went wrong.'), 'error')
+        if (res.success) { show(t('markdowns.approvals.toast_skipped'), 'success'); refetchApprovals(); refetchPreview() }
+        else show(res.message || t('common.error'), 'error')
       })
-      .catch(() => show(t('markdowns.err_network', 'Network error.'), 'error'))
+      .catch(() => show(t('markdowns.err_network'), 'error'))
   }
   function applyAllAuto() {
     apiFetch(`${API}/boutique/markdowns/apply-auto`, { method: 'POST', body: '{}' })
@@ -225,15 +218,15 @@ export default function Markdowns() {
           show(t('markdowns.preview.toast_applied', { count: res.data?.applied ?? 0, defaultValue: '{{count}} markdown(s) applied' }), 'success')
           refetchPreview(); refetchApprovals(); refetchHistory()
           setActiveTab(3)
-        } else show(res.message || t('common.error', 'Something went wrong.'), 'error')
+        } else show(res.message || t('common.error'), 'error')
       })
-      .catch(() => show(t('markdowns.err_network', 'Network error.'), 'error'))
+      .catch(() => show(t('markdowns.err_network'), 'error'))
   }
 
   function openSettings() { setDraftSettings(settings); setShowSettings(true) }
   function saveSettings() {
     patchRules({ settings: draftSettings }).then(ok => {
-      if (ok) { setSettings(draftSettings); setShowSettings(false); show(t('markdowns.settings.toast_saved', 'Settings saved.'), 'success'); refetchPreview() }
+      if (ok) { setSettings(draftSettings); setShowSettings(false); show(t('markdowns.settings.toast_saved'), 'success'); refetchPreview() }
     })
   }
 
@@ -250,10 +243,10 @@ export default function Markdowns() {
   }
 
   const TABS = [
-    t('markdowns.tabs.rules', 'Markdown Rules'),
-    t('markdowns.tabs.preview', 'Preview & Impact'),
-    `${t('markdowns.tabs.approvals', 'Approvals')}${approvals.length > 0 ? ` (${approvals.length})` : ''}`,
-    t('markdowns.tabs.history', 'History'),
+    t('markdowns.tabs.rules'),
+    t('markdowns.tabs.preview'),
+    `${t('markdowns.tabs.approvals')}${approvals.length > 0 ? ` (${approvals.length})` : ''}`,
+    t('markdowns.tabs.history'),
   ]
 
   return (
@@ -314,7 +307,7 @@ function LoadError({ t, error, retry }) {
     <div className="alert alert-red">
       <span className="material-symbols-outlined">error</span>
       <div style={{ flex: 1 }}>{error}</div>
-      <button className="btn btn-outline btn-sm" onClick={retry}>{t('common.retry', 'Retry')}</button>
+      <button className="btn btn-outline btn-sm" onClick={retry}>{t('common.retry')}</button>
     </div>
   )
 }
@@ -327,14 +320,14 @@ function RulesTab({ t, settings, preview, loading, error, retry, bracketLabels, 
     <>
       <div className="alert alert-info">
         <span className="material-symbols-outlined">info</span>
-        <div>{t('markdowns.rules.intro', 'Markdowns run off your inventory aging. Set a discount per age bracket; items are marked down automatically as they cross into that bracket. A margin floor protects you: any cut that would push margin below the floor is held for your approval instead of applying silently.')}</div>
+        <div>{t('markdowns.rules.intro')}</div>
       </div>
 
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('markdowns.rules.title_pre', 'Markdown by')} <em>{t('markdowns.rules.title_em', 'age bracket')}</em></div>
+          <div className="card-title">{t('markdowns.rules.title_pre')} <em>{t('markdowns.rules.title_em')}</em></div>
           <button className="btn btn-outline btn-sm" onClick={openSettings}>
-            <span className="material-symbols-outlined">tune</span>{t('markdowns.rules.global_settings', 'Global settings')}
+            <span className="material-symbols-outlined">tune</span>{t('markdowns.rules.global_settings')}
           </button>
         </div>
         {AGE_BRACKETS.map(bk => {
@@ -351,7 +344,7 @@ function RulesTab({ t, settings, preview, loading, error, retry, bracketLabels, 
               <Toggle on={!!rule.enabled} onToggle={() => toggleRule(bk)} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, flex: 1, opacity: rule.enabled ? 1 : 0.4, pointerEvents: rule.enabled ? 'auto' : 'none', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--stone)', marginBottom: 4 }}>{t('markdowns.rules.discount', 'Discount')}</div>
+                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--stone)', marginBottom: 4 }}>{t('markdowns.rules.discount')}</div>
                   <div className="num-stepper">
                     <div className="num-btn" onClick={() => stepRulePct(bk, -5)}>−</div>
                     <span style={{ minWidth: 36, textAlign: 'center', fontWeight: 700 }}>{rule.discount_pct}%</span>
@@ -359,10 +352,10 @@ function RulesTab({ t, settings, preview, loading, error, retry, bracketLabels, 
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--stone)', marginBottom: 4 }}>{t('markdowns.rules.apply_mode', 'Apply mode')}</div>
+                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--stone)', marginBottom: 4 }}>{t('markdowns.rules.apply_mode')}</div>
                   <select className="form-select" value={rule.apply_mode} onChange={e => setRuleMode(bk, e.target.value)}>
-                    <option value="auto">{t('markdowns.rules.mode_auto', 'Auto-apply')}</option>
-                    <option value="approval">{t('markdowns.rules.mode_approval', 'Require approval')}</option>
+                    <option value="auto">{t('markdowns.rules.mode_auto')}</option>
+                    <option value="approval">{t('markdowns.rules.mode_approval')}</option>
                   </select>
                 </div>
               </div>
@@ -375,10 +368,10 @@ function RulesTab({ t, settings, preview, loading, error, retry, bracketLabels, 
       </div>
 
       <div className="stat-row">
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_floor', 'Margin Floor')}</div><div className="stat-val">{settings.margin_floor_pct}%</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_round', 'Price Rounding')}</div><div className="stat-val">{settings.rounding_mode === 'whole' ? '€1' : settings.rounding_mode === 'none' ? t('markdowns.rules.exact', 'Exact') : settings.rounding_mode}</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_notify', 'Notify Savers')}</div><div className="stat-val">{settings.notify_savers ? t('common.on', 'On') : t('common.off', 'Off')}</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_cap', 'Daily Auto Cap')}</div><div className="stat-val">{settings.daily_cap}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_floor')}</div><div className="stat-val">{settings.margin_floor_pct}%</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_round')}</div><div className="stat-val">{settings.rounding_mode === 'whole' ? '€1' : settings.rounding_mode === 'none' ? t('markdowns.rules.exact') : settings.rounding_mode}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_notify')}</div><div className="stat-val">{settings.notify_savers ? t('common.on') : t('common.off')}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.rules.stat_cap')}</div><div className="stat-val">{settings.daily_cap}</div></div>
       </div>
     </>
   )
@@ -403,15 +396,15 @@ function PreviewTab({ t, lang, preview, loading, error, retry, bracketLabels, ap
             their CURRENT price. cash_recoverable is the same basket after the
             cut, and aged_value - cash_recoverable = margin_given_up exactly.
             New key on purpose: the old one has "90d+" baked into the bundle. */}
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_value_before', 'Value Before Markdown')}</div><div className="stat-val" style={{ color: 'var(--red)' }}>{fmt(s.aged_value ?? 0, lang)}</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_proposed', 'Markdowns Proposed')}</div><div className="stat-val">{s.proposed ?? 0}</div><div className="form-hint">{t('markdowns.preview.stat_proposed_sub', { auto: s.auto_eligible ?? 0, appr: s.need_approval ?? 0, defaultValue: '{{auto}} auto · {{appr}} approval' })}</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_auto', 'Auto-Eligible Now')}</div><div className="stat-val" style={{ color: 'var(--green)' }}>{s.auto_eligible ?? 0}</div></div>
-        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_cash', 'Cash Recoverable')}</div><div className="stat-val">{fmt(s.cash_recoverable ?? 0, lang)}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_value_before')}</div><div className="stat-val" style={{ color: 'var(--red)' }}>{fmt(s.aged_value ?? 0, lang)}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_proposed')}</div><div className="stat-val">{s.proposed ?? 0}</div><div className="form-hint">{t('markdowns.preview.stat_proposed_sub', { auto: s.auto_eligible ?? 0, appr: s.need_approval ?? 0, defaultValue: '{{auto}} auto · {{appr}} approval' })}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_auto')}</div><div className="stat-val" style={{ color: 'var(--green)' }}>{s.auto_eligible ?? 0}</div></div>
+        <div className="stat-card"><div className="stat-lbl">{t('markdowns.preview.stat_cash')}</div><div className="stat-val">{fmt(s.cash_recoverable ?? 0, lang)}</div></div>
       </div>
 
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('markdowns.preview.title_pre', 'Markdown')} <em>{t('markdowns.preview.title_em', 'preview')}</em></div>
+          <div className="card-title">{t('markdowns.preview.title_pre')} <em>{t('markdowns.preview.title_em')}</em></div>
           {/* Greyed out with no reason given just reads as a broken button.
               Say why: it only ever applies the AUTO rows, and every row here
               can be sitting on "approval" instead. */}
@@ -422,31 +415,31 @@ function PreviewTab({ t, lang, preview, loading, error, retry, bracketLabels, ap
               </span>
             )}
             <button className="btn btn-primary btn-sm" onClick={applyAllAuto} disabled={autoCount === 0}
-              title={autoCount === 0 ? t('markdowns.preview.no_auto_title', 'No auto-eligible markdowns right now') : undefined}>
-              <span className="material-symbols-outlined">bolt</span>{t('markdowns.preview.apply_auto', 'Apply auto now')}
+              title={autoCount === 0 ? t('markdowns.preview.no_auto_title') : undefined}>
+              <span className="material-symbols-outlined">bolt</span>{t('markdowns.preview.apply_auto')}
             </button>
           </div>
         </div>
         {rows.length === 0 ? (
           <div className="empty">
             <span className="material-symbols-outlined">sell</span>
-            {t('markdowns.preview.empty', 'Nothing due for a markdown right now.')}
+            {t('markdowns.preview.empty')}
           </div>
         ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
               <tr>
-                <th>{t('markdowns.preview.col_product', 'Product')}</th>
-                <th>{t('markdowns.preview.col_age', 'Age')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_units', 'Units')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_cost', 'Cost')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_current', 'Current')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_cut', 'Cut')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_new_price', 'New Price')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_new_margin', 'New Margin')}</th>
-                <th>{t('markdowns.preview.col_status', 'Status')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_savers', 'Savers')}</th>
+                <th>{t('markdowns.preview.col_product')}</th>
+                <th>{t('markdowns.preview.col_age')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_units')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_cost')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_current')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_cut')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_new_price')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_new_margin')}</th>
+                <th>{t('markdowns.preview.col_status')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.preview.col_savers')}</th>
               </tr>
             </thead>
             <tbody>
@@ -472,9 +465,9 @@ function PreviewTab({ t, lang, preview, loading, error, retry, bracketLabels, ap
                     <td style={{ textAlign: 'right' }}>{outcome === 'none' ? '—' : <span style={{ fontWeight: 700 }}>{fmt(e.new_price, lang)}</span>}</td>
                     <td style={{ textAlign: 'right' }}>{e.margin_pct != null ? `${Number(e.margin_pct).toFixed(0)}%` : '—'}</td>
                     <td>
-                      {outcome === 'none' && <span className="status hidden">{t('markdowns.preview.status_none', 'No markdown')}</span>}
-                      {outcome === 'auto' && <span className="status active">{t('markdowns.preview.status_auto', 'Auto')}</span>}
-                      {outcome === 'approval' && <span className="status pending">{e.floor_breach ? t('markdowns.preview.status_floor', 'Floor · approve') : t('markdowns.preview.status_approve', 'Approve')}</span>}
+                      {outcome === 'none' && <span className="status hidden">{t('markdowns.preview.status_none')}</span>}
+                      {outcome === 'auto' && <span className="status active">{t('markdowns.preview.status_auto')}</span>}
+                      {outcome === 'approval' && <span className="status pending">{e.floor_breach ? t('markdowns.preview.status_floor') : t('markdowns.preview.status_approve')}</span>}
                     </td>
                     <td style={{ textAlign: 'right', color: 'var(--gold-dk)', fontWeight: 600 }}>{p.savers_count ?? 0}</td>
                   </tr>
@@ -505,7 +498,7 @@ function ApprovalsTab({ t, lang, items, loading, error, retry, settings, bracket
       {items.length === 0 ? (
         <div className="empty">
           <span className="material-symbols-outlined">task_alt</span>
-          {t('markdowns.approvals.empty', 'Nothing awaiting approval. Auto-markdowns apply on their own; dead-stock and below-floor cuts appear here.')}
+          {t('markdowns.approvals.empty')}
         </div>
       ) : (
         <div className="grid2">
@@ -527,7 +520,7 @@ function ApprovalsTab({ t, lang, items, loading, error, retry, settings, bracket
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700 }}>{a.product_name}</div>
-                    <div style={{ fontSize: 9, color: 'var(--stone)' }}>{lbl.name} · {a.days_in_stock} {t('markdowns.approvals.days', 'days')} · {a.stock} {t('markdowns.approvals.units', 'units')}</div>
+                    <div style={{ fontSize: 9, color: 'var(--stone)' }}>{lbl.name} · {a.days_in_stock} {t('markdowns.approvals.days')} · {a.stock} {t('markdowns.approvals.units')}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '10px 0' }}>
@@ -536,23 +529,23 @@ function ApprovalsTab({ t, lang, items, loading, error, retry, settings, bracket
                   <span style={{ fontSize: 22, fontWeight: 600 }}>{fmt(a.new_price, lang)}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--red)', background: 'rgba(197,0,26,.07)', padding: '2px 8px', borderRadius: 6 }}>−{pct}%</span>
                 </div>
-                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.new_margin', 'New margin')}</div><div className="detail-value" style={{ color: breach ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{margin != null && Number.isFinite(margin) ? `${margin.toFixed(0)}%` : '—'}{breach ? ` · ${t('markdowns.approvals.below_floor', 'below {{floor}}% floor', { floor: settings.margin_floor_pct })}` : ''}</div></div>
-                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.cash', 'Cash recoverable')}</div><div className="detail-value">{fmt(a.new_price != null ? a.new_price * (a.stock ?? 1) : null, lang)}</div></div>
-                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.savers', 'Savers to notify')}</div><div className="detail-value">{a.savers ?? 0}</div></div>
+                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.new_margin')}</div><div className="detail-value" style={{ color: breach ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>{margin != null && Number.isFinite(margin) ? `${margin.toFixed(0)}%` : '—'}{breach ? ` · ${t('markdowns.approvals.below_floor', { floor: settings.margin_floor_pct })}` : ''}</div></div>
+                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.cash')}</div><div className="detail-value">{fmt(a.new_price != null ? a.new_price * (a.stock ?? 1) : null, lang)}</div></div>
+                <div className="detail-row"><div className="detail-label">{t('markdowns.approvals.savers')}</div><div className="detail-value">{a.savers ?? 0}</div></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--mist)' }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--stone)' }}>{t('markdowns.approvals.adjust', 'Adjust')}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--stone)' }}>{t('markdowns.approvals.adjust')}</span>
                   <div className="num-stepper">
                     <div className="num-btn" onClick={() => setAdjust(prev => ({ ...prev, [a.id]: Math.max(5, Math.min(70, pct - 5)) }))}>−</div>
                     <span style={{ minWidth: 32, textAlign: 'center', fontWeight: 700 }}>{pct}%</span>
                     <div className="num-btn" onClick={() => setAdjust(prev => ({ ...prev, [a.id]: Math.max(5, Math.min(70, pct + 5)) }))}>+</div>
                   </div>
-                  <span style={{ fontSize: 9, color: 'var(--stone)' }}>{t('markdowns.approvals.then_approve', 'then approve')}</span>
+                  <span style={{ fontSize: 9, color: 'var(--stone)' }}>{t('markdowns.approvals.then_approve')}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => approveOne(a.id, adjust[a.id])}>
-                    <span className="material-symbols-outlined">check</span>{t('markdowns.approvals.approve_btn', 'Approve & apply')}
+                    <span className="material-symbols-outlined">check</span>{t('markdowns.approvals.approve_btn')}
                   </button>
-                  <button className="btn btn-outline btn-sm" onClick={() => skipOne(a.id)}>{t('markdowns.approvals.skip_btn', 'Skip')}</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => skipOne(a.id)}>{t('markdowns.approvals.skip_btn')}</button>
                 </div>
               </div>
             )
@@ -568,9 +561,9 @@ function HistoryTab({ t, lang, history, loading, error, retry, exportHistory, pa
   return (
     <div className="card">
       <div className="card-hdr">
-        <div className="card-title">{t('markdowns.history.title_pre', 'Applied')} <em>{t('markdowns.history.title_em', 'markdowns')}</em></div>
+        <div className="card-title">{t('markdowns.history.title_pre')} <em>{t('markdowns.history.title_em')}</em></div>
         <button className="btn btn-outline btn-sm" onClick={exportHistory} disabled={history.length === 0}>
-          <span className="material-symbols-outlined">download</span>{t('common.export', 'Export')}
+          <span className="material-symbols-outlined">download</span>{t('common.export')}
         </button>
       </div>
       {loading ? (
@@ -580,21 +573,21 @@ function HistoryTab({ t, lang, history, loading, error, retry, exportHistory, pa
       ) : history.length === 0 ? (
         <div className="empty">
           <span className="material-symbols-outlined">history</span>
-          {t('markdowns.history.empty', 'No markdowns applied yet.')}
+          {t('markdowns.history.empty')}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
               <tr>
-                <th>{t('markdowns.history.col_date', 'Date')}</th>
-                <th>{t('markdowns.history.col_product', 'Product')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_was', 'Was')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_now', 'Now')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_cut', 'Cut')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_units', 'Units')}</th>
-                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_savers', 'Savers Notified')}</th>
-                <th>{t('markdowns.history.col_by', 'By')}</th>
+                <th>{t('markdowns.history.col_date')}</th>
+                <th>{t('markdowns.history.col_product')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_was')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_now')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_cut')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_units')}</th>
+                <th style={{ textAlign: 'right' }}>{t('markdowns.history.col_savers')}</th>
+                <th>{t('markdowns.history.col_by')}</th>
               </tr>
             </thead>
             <tbody>
@@ -612,7 +605,7 @@ function HistoryTab({ t, lang, history, loading, error, retry, exportHistory, pa
                   <td style={{ textAlign: 'right', color: 'var(--red)', fontWeight: 700 }}>−{Math.round(Number(h.discount_pct) || 0)}%</td>
                   <td style={{ textAlign: 'right' }}>{h.units}</td>
                   <td style={{ textAlign: 'right' }}>{h.savers_notified > 0 ? <span style={{ fontSize: 9, color: 'var(--gold-dk)', fontWeight: 600 }}>{t('markdowns.history.notified', { count: h.savers_notified, defaultValue: '{{count}} notified' })}</span> : '—'}</td>
-                  <td>{isAutoApplied(h.applied_by) ? <span className="status active">{t('markdowns.auto', 'Auto')}</span> : h.applied_by}</td>
+                  <td>{isAutoApplied(h.applied_by) ? <span className="status active">{t('markdowns.auto')}</span> : h.applied_by}</td>
                 </tr>
               ))}
             </tbody>
@@ -640,14 +633,14 @@ function SettingsModal({ t, draft, setDraft, onClose, onSave }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{t('markdowns.settings.title', 'Global settings')}</div>
+          <div className="modal-title">{t('markdowns.settings.title')}</div>
           <div className="modal-close" onClick={onClose}><span className="material-symbols-outlined">close</span></div>
         </div>
 
         <div className="ap-toggle-row ap-toggle-border">
           <div>
-            <div className="ap-toggle-label">{t('markdowns.settings.floor_label', 'Margin floor')}</div>
-            <div className="form-hint">{t('markdowns.settings.floor_hint', 'Minimum gross margin for an automatic markdown. Cuts below this are held for approval.')}</div>
+            <div className="ap-toggle-label">{t('markdowns.settings.floor_label')}</div>
+            <div className="form-hint">{t('markdowns.settings.floor_hint')}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input className="form-input" style={{ width: 56, textAlign: 'center' }} type="number" min="0" max="90" value={draft.margin_floor_pct} onChange={e => setDraft(d => ({ ...d, margin_floor_pct: Math.max(0, Math.min(90, Number(e.target.value) || 0)) }))} />
@@ -657,37 +650,37 @@ function SettingsModal({ t, draft, setDraft, onClose, onSave }) {
 
         <div className="ap-toggle-row ap-toggle-border">
           <div>
-            <div className="ap-toggle-label">{t('markdowns.settings.round_label', 'Price rounding')}</div>
-            <div className="form-hint">{t('markdowns.settings.round_hint', 'How new prices are rounded after the discount.')}</div>
+            <div className="ap-toggle-label">{t('markdowns.settings.round_label')}</div>
+            <div className="form-hint">{t('markdowns.settings.round_hint')}</div>
           </div>
           <select className="form-select" value={draft.rounding_mode} onChange={e => setDraft(d => ({ ...d, rounding_mode: e.target.value }))}>
-            <option value=".90">{t('markdowns.settings.round_90', '.90 ending')}</option>
-            <option value=".99">{t('markdowns.settings.round_99', '.99 ending')}</option>
-            <option value="whole">{t('markdowns.settings.round_whole', 'Whole euro')}</option>
-            <option value="none">{t('markdowns.settings.round_exact', 'Exact')}</option>
+            <option value=".90">{t('markdowns.settings.round_90')}</option>
+            <option value=".99">{t('markdowns.settings.round_99')}</option>
+            <option value="whole">{t('markdowns.settings.round_whole')}</option>
+            <option value="none">{t('markdowns.settings.round_exact')}</option>
           </select>
         </div>
 
         <div className="ap-toggle-row ap-toggle-border">
           <div>
-            <div className="ap-toggle-label">{t('markdowns.settings.notify_label', 'Notify savers on markdown')}</div>
-            <div className="form-hint">{t('markdowns.settings.notify_hint', 'When a markdown applies, fire the price-drop alert to customers who saved the item.')}</div>
+            <div className="ap-toggle-label">{t('markdowns.settings.notify_label')}</div>
+            <div className="form-hint">{t('markdowns.settings.notify_hint')}</div>
           </div>
           <Toggle on={draft.notify_savers} onToggle={() => setDraft(d => ({ ...d, notify_savers: !d.notify_savers }))} />
         </div>
 
         <div className="ap-toggle-row">
           <div>
-            <div className="ap-toggle-label">{t('markdowns.settings.cap_label', 'Daily auto-apply cap')}</div>
-            <div className="form-hint">{t('markdowns.settings.cap_hint', 'Maximum automatic markdowns applied in one day, to avoid flooding customers.')}</div>
+            <div className="ap-toggle-label">{t('markdowns.settings.cap_label')}</div>
+            <div className="form-hint">{t('markdowns.settings.cap_hint')}</div>
           </div>
           <input className="form-input" style={{ width: 56, textAlign: 'center' }} type="number" min="1" value={draft.daily_cap} onChange={e => setDraft(d => ({ ...d, daily_cap: Math.max(1, Number(e.target.value) || 1) }))} />
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-outline" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
+          <button className="btn btn-outline" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={onSave}>
-            <span className="material-symbols-outlined">save</span>{t('markdowns.settings.save_btn', 'Save settings')}
+            <span className="material-symbols-outlined">save</span>{t('markdowns.settings.save_btn')}
           </button>
         </div>
       </div>

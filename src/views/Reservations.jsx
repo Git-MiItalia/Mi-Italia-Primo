@@ -24,9 +24,9 @@ function fmtDateTime(iso, t) {
   const sameDay = (a, b) =>
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
   const time = d.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })
-  if (sameDay(d, now)) return t('reservations.date.today',     'Today, {{time}}',     { time })
-  if (sameDay(d, y))   return t('reservations.date.yesterday', 'Yesterday, {{time}}', { time })
-  if (sameDay(d, tm))  return t('reservations.date.tomorrow',  'Tomorrow, {{time}}',  { time })
+  if (sameDay(d, now)) return t('reservations.date.today',     { time })
+  if (sameDay(d, y))   return t('reservations.date.yesterday', { time })
+  if (sameDay(d, tm))  return t('reservations.date.tomorrow',  { time })
   return d.toLocaleDateString(i18n.language, { day: '2-digit', month: 'short' }) + ', ' + time
 }
 
@@ -76,7 +76,6 @@ function openWhatsApp(reservation, t) {
   const name  = reservation.name?.split(' ')[0] ?? ''
   const msg   = encodeURIComponent(t(
     'reservations.whatsapp_msg',
-    'Ciao {{name}}, regarding your reservation for {{product}} — ',
     { name, product: reservation.product_name },
   ))
   window.open(`https://wa.me/${phone}?text=${msg}`, '_blank')
@@ -198,7 +197,7 @@ function ReservationDetailCard({
             <div className="detail-label">{t('reservations.detail.visits')}</div>
             <div className="detail-value">
               {r.boutique_visit_count > 1
-                ? `${r.boutique_visit_count} ${t('reservations.detail.visits_plural', 'visits')} · ${t('reservations.detail.repeat')}`
+                ? `${r.boutique_visit_count} ${t('reservations.detail.visits_plural')} · ${t('reservations.detail.repeat')}`
                 : t('reservations.detail.first_visit')}
               {r.is_vip && <span className="res-vip-badge">VIP</span>}
             </div>
@@ -226,21 +225,21 @@ function ReservationDetailCard({
           {r.status === 'collected' && r.collected_at && (
             <div className="res-status-note res-status-collected">
               <span className="material-symbols-outlined">verified</span>
-              {t('reservations.status_note.collected', 'Collected on {{date}}', { date: fmtDateTime(r.collected_at, t) })}
+              {t('reservations.status_note.collected', { date: fmtDateTime(r.collected_at, t) })}
             </div>
           )}
           {r.status === 'cancelled' && r.cancelled_at && (
             <div className="res-status-note res-status-cancelled">
               <span className="material-symbols-outlined">cancel</span>
               {r.cancelled_by
-                ? t('reservations.status_note.cancelled_by', 'Cancelled by {{who}} on {{date}}', { who: r.cancelled_by, date: fmtDateTime(r.cancelled_at, t) })
-                : t('reservations.status_note.cancelled',    'Cancelled on {{date}}',            { date: fmtDateTime(r.cancelled_at, t) })}
+                ? t('reservations.status_note.cancelled_by', { who: r.cancelled_by, date: fmtDateTime(r.cancelled_at, t) })
+                : t('reservations.status_note.cancelled',            { date: fmtDateTime(r.cancelled_at, t) })}
             </div>
           )}
           {r.status === 'expired' && (
             <div className="res-status-note res-status-expired">
               <span className="material-symbols-outlined">event_busy</span>
-              {t('reservations.status_note.expired', 'Expired on {{date}}', { date: fmtDateTime(r.expires_at, t) })}
+              {t('reservations.status_note.expired', { date: fmtDateTime(r.expires_at, t) })}
             </div>
           )}
 
@@ -482,7 +481,7 @@ export default function Reservations() {
   // stayed, no message appeared, and the button read as dead. A network error
   // additionally became an unhandled rejection.
   function whoFor(reservation) {
-    return reservation.name ?? t('reservations.this_one', 'this reservation')
+    return reservation.name ?? t('reservations.this_one')
   }
 
   function confirmReservation(reservation) {
@@ -516,7 +515,7 @@ export default function Reservations() {
         setDetailModal(null)
         // Confirm and Collect both acknowledged; Cancel silently did not, so
         // the only feedback was the row vanishing.
-        setConfirm({ message: t('reservations.cancelled_success', '{{name}} has been cancelled.', { name: whoFor(reservation) }) })
+        setConfirm({ message: t('reservations.cancelled_success', { name: whoFor(reservation) }) })
       })
       .catch(() => setConfirm({ message: t('common.error_network') }))
   }
@@ -539,7 +538,7 @@ export default function Reservations() {
         if (selected?.id    === reservation.id) setSelected(s    => s    && { ...s,    ...updated })
         if (detailModal?.id === reservation.id) setDetailModal(m => m    && { ...m,    ...updated })
         setExtendModal(null)
-        setConfirm({ message: t('reservations.extended_success', { name: reservation.name ?? t('reservations.this_one', 'this reservation') }) })
+        setConfirm({ message: t('reservations.extended_success', { name: reservation.name ?? t('reservations.this_one') }) })
       })
       .catch(err => {
         console.error('[Reservations] extend failed', err)
@@ -700,9 +699,9 @@ export default function Reservations() {
             {/* A failed load used to be indistinguishable from an empty tab. */}
             {!loading && loadFailed && (
               <div className="state-empty">
-                {t('reservations.err_load', 'Could not load reservations.')}{' '}
+                {t('reservations.err_load')}{' '}
                 <span className="db-alert-link" onClick={() => setReloadTick(n => n + 1)}>
-                  {t('common.retry', 'Retry')}
+                  {t('common.retry')}
                 </span>
               </div>
             )}
@@ -716,7 +715,7 @@ export default function Reservations() {
               <div className="res-pager">
                 <button className="btn btn-outline btn-xs" disabled={page <= 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}>
-                  {t('reservations.prev', '← Prev')}
+                  {t('reservations.prev')}
                 </button>
                 <span className="res-pager-lbl">
                   {t('reservations.page_of', { page, pages: totalPages, defaultValue: 'Page {{page}} of {{pages}}' })}
@@ -724,7 +723,7 @@ export default function Reservations() {
                 </span>
                 <button className="btn btn-outline btn-xs" disabled={page >= totalPages}
                   onClick={() => setPage(p => p + 1)}>
-                  {t('reservations.next', 'Next →')}
+                  {t('reservations.next')}
                 </button>
               </div>
             )}

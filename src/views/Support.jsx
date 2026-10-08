@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
 import Loading from '../components/ui/Loading'
 import { safeIcon } from '../lib/safeIcon'
+import { timeAgo } from '../lib/timeAgo'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -27,6 +28,13 @@ const PRIORITY_STYLES = {
   urgent: { borderColor:'var(--red)',   background:'rgba(197,0,26,.05)', color:'var(--red)' },
 }
 
+// Statuses and priorities are looked up with a dynamic key, and t() with no
+// default prints the key path itself when one is missing — so an unexpected
+// value would put "sup.ticket_status.closed" on screen in front of a boutique.
+// The documented set is new/open/progress/resolved/closed/spam; this turns
+// anything else into an ordinary word instead of a key path.
+const prettyEnum = (v) => (v ?? '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+
 function statusStyle(status) {
   if (status === 'open')     return { background:'rgba(26,79,191,.08)',  color:'#1A4FBF' }
   if (status === 'progress') return { background:'rgba(180,83,9,.08)',   color:'#B45309' }
@@ -39,21 +47,13 @@ function catToSubject(category) {
   return SUBJECT_KEYS.find(s => s.key === category) ?? SUBJECT_KEYS[SUBJECT_KEYS.length - 1]
 }
 
-function formatRelative(iso, t) {
-  if (!iso) return ''
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diff = Math.max(0, Date.now() - then)
-  const sec  = Math.floor(diff / 1000)
-  const min  = Math.floor(sec / 60)
-  const hr   = Math.floor(min / 60)
-  const day  = Math.floor(hr / 24)
-  if (sec < 60) return t('sup.just_now')
-  if (min < 60) return `${min}m ago`
-  if (hr < 24)  return `${hr}h ago`
-  if (day < 7)  return `${day}d ago`
-  return new Date(iso).toLocaleDateString()
-}
+// Was a fourth private copy of the relative-time helper, and the least
+// translated of them: only "just now" went through t(), so every ticket read
+// "5m ago" / "3d ago" in English on an Italian page, and anything older than a
+// week fell back to toLocaleDateString() with no locale — the browser's format,
+// not the portal's. Now the shared helper, which Notifications and AI Model
+// Studio already use, so the wording matches across the portal.
+const formatRelative = (iso, t) => timeAgo(t, iso)
 
 function initials(name) {
   const parts = (name ?? '').trim().split(/\s+/).map(w => w[0]).filter(Boolean)
@@ -118,11 +118,11 @@ export default function Support() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setTickets(res.data?.tickets ?? [])
-        else setTicketsError(res?.message ?? 'Failed to load tickets')
+        else setTicketsError(res?.message ?? t('sup.err_load_tickets'))
       })
       .catch(err => {
         console.error('[Support] tickets fetch failed:', err)
-        setTicketsError('Network error loading tickets')
+        setTicketsError(t('common.error_network'))
       })
       .finally(() => setLoadingTickets(false))
   }
@@ -136,11 +136,11 @@ export default function Support() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) setOpenThread(res.data)
-        else setThreadError(res?.message ?? 'Failed to load ticket')
+        else setThreadError(res?.message ?? t('sup.err_load_ticket'))
       })
       .catch(err => {
         console.error('[Support] thread fetch failed:', err)
-        setThreadError('Network error loading ticket')
+        setThreadError(t('common.error_network'))
       })
       .finally(() => setLoadingThread(false))
   }, [openTicketId])
@@ -335,7 +335,7 @@ export default function Support() {
                     <div key={pk} onClick={() => setSelectedPri(pk)}
                       className="sup-priority-chip"
                       style={selectedPri===pk ? PRIORITY_STYLES[pk] : { borderColor:'var(--mist)', background:'var(--white)', color:'var(--stone)' }}>
-                      {t(`sup.priority.${pk}`)}
+                      {t(`sup.priority.${pk}`, prettyEnum(pk))}
                     </div>
                   ))}
                 </div>
@@ -368,7 +368,7 @@ export default function Support() {
                   <span className="material-symbols-outlined sup-upload-selected-icon">description</span>
                   <span className="sup-upload-selected-name">{attachFile.name}</span>
                   <span className="material-symbols-outlined sup-upload-selected-remove"
-                    title={t('sup.form.remove_title', 'Remove attachment')} onClick={() => setAttachFile(null)}>close</span>
+                    title={t('sup.form.remove_title')} onClick={() => setAttachFile(null)}>close</span>
                 </div>
               )}
             </div>
@@ -445,9 +445,9 @@ export default function Support() {
                   </div>
                   <div className="sup-ticket-badges">
                     <span className="sup-ticket-status" style={statusStyle(tk.status)}>
-                      {t(`sup.ticket_status.${tk.status}`)}
+                      {t(`sup.ticket_status.${tk.status}`, prettyEnum(tk.status))}
                     </span>
-                    <div className="sup-ticket-priority">{t(`sup.priority.${tk.priority}`)}</div>
+                    <div className="sup-ticket-priority">{t(`sup.priority.${tk.priority}`, prettyEnum(tk.priority))}</div>
                   </div>
                 </div>
 
@@ -531,12 +531,12 @@ export default function Support() {
                                     <span className="material-symbols-outlined">description</span>
                                     {followUpFile.name}
                                     <span className="material-symbols-outlined sup-attach-chip-remove"
-                                      title={t('sup.form.remove_title', 'Remove attachment')} onClick={() => setFollowUpFile(null)}>close</span>
+                                      title={t('sup.form.remove_title')} onClick={() => setFollowUpFile(null)}>close</span>
                                   </div>
                                 )}
                               </div>
                               <button className="btn btn-outline btn-sm sup-attach-btn"
-                                title={t('sup.form.attach_title', 'Attach a file')}
+                                title={t('sup.form.attach_title')}
                                 onClick={() => followUpFileInputRef.current?.click()}
                                 disabled={sendingFollowUp}>
                                 <span className="material-symbols-outlined">attach_file</span>
@@ -565,7 +565,7 @@ export default function Support() {
                             <button className="btn btn-outline btn-xs sup-reopen-btn"
                               onClick={() => setTicketStatus(tk.id, 'open')}
                               disabled={resolving}>
-                              {resolving ? t('sup.tickets.reopening_btn', 'Reopening') + '…' : t('sup.tickets.reopen_btn', 'Reopen ticket')}
+                              {resolving ? t('sup.tickets.reopening_btn') + '…' : t('sup.tickets.reopen_btn')}
                             </button>
                           </div>
                         )}

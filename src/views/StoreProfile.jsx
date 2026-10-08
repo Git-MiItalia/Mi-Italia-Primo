@@ -15,9 +15,10 @@ import { fetchPolicies, savePolicies, fetchClasses, saveClassMap } from '../lib/
 import * as shopify from '../lib/shopifyIntegration'
 import { useCategoryTree } from '../lib/categoryTree'
 import Loading from '../components/ui/Loading'
+import { imgUrl } from '../lib/imageUrl'
+import Toggle from '../components/ui/Toggle'
 
 const API      = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 // ─── Media limits (from .env) ────────────────────────────────
 const MAX_PHOTOS         = Number(import.meta.env.VITE_MAX_PHOTOS         ?? 10)
@@ -137,16 +138,19 @@ export default function StoreProfile() {
   const lang = useLangStore(s => s.lang)
 
   const DAY_LABELS = {
-    monday:    t('store_profile.details.day_mon', 'Mon'),
-    tuesday:   t('store_profile.details.day_tue', 'Tue'),
-    wednesday: t('store_profile.details.day_wed', 'Wed'),
-    thursday:  t('store_profile.details.day_thu', 'Thu'),
-    friday:    t('store_profile.details.day_fri', 'Fri'),
-    saturday:  t('store_profile.details.day_sat', 'Sat'),
-    sunday:    t('store_profile.details.day_sun', 'Sun'),
+    monday:    t('store_profile.details.day_mon'),
+    tuesday:   t('store_profile.details.day_tue'),
+    wednesday: t('store_profile.details.day_wed'),
+    thursday:  t('store_profile.details.day_thu'),
+    friday:    t('store_profile.details.day_fri'),
+    saturday:  t('store_profile.details.day_sat'),
+    sunday:    t('store_profile.details.day_sun'),
   }
 
-  const { tree: categoryTree } = useCategoryTree()
+  // loading/error are read so the Categories card can say which of the three
+  // empty-looking states it is in. Without them a still-loading tree, a failed
+  // fetch and a genuinely empty catalogue all render as the same blank card.
+  const { tree: categoryTree, loading: catLoading, error: catError } = useCategoryTree()
   const activeCategories = categoryTree.filter(c => (c.product_count ?? 0) > 0)
 
   const [loading, setLoading]         = useState(true)
@@ -360,8 +364,8 @@ export default function StoreProfile() {
         setFounderCardEnabled(d.founder_card_enabled ?? false)
         setFounderName(d.founder_name ?? '')
         setFounderTitle(d.founder_title ?? '')
-        setFounderPhotoUrl(d.founder_photo_url ? `${IMG_BASE}${d.founder_photo_url}` : null)
-        setCoverPhotoUrl(d.cover_photo_url ? `${IMG_BASE}${d.cover_photo_url}` : null)
+        setFounderPhotoUrl(imgUrl(d.founder_photo_url))
+        setCoverPhotoUrl(imgUrl(d.cover_photo_url))
         setTerminal(d.payment_terminal_type ?? 'none')
         setPosPayment(d.default_pos_payment_method ?? 'external_terminal')
         setWebsite(d.website_platform ?? 'none')
@@ -490,7 +494,7 @@ export default function StoreProfile() {
     // Refuse rather than PUT the seed defaults over real data — see the load
     // effect above.
     if (policiesFailed) {
-      setRpError(t('store_profile.returns.err_stale', 'Your returns policies could not be loaded, so they cannot be saved — reload the page first, otherwise you would overwrite them with the defaults.'))
+      setRpError(t('store_profile.returns.err_stale'))
       return
     }
     setRpSaving(true)
@@ -555,8 +559,8 @@ export default function StoreProfile() {
   function rpName(item) { return lang === 'it' ? item.it : item.en }
 
   function rpWinText(p) {
-    if (p.none) return t('returns_policy.window_none', 'No returns')
-    return `${p.days} ${t('returns_policy.days', 'days')}`
+    if (p.none) return t('returns_policy.window_none')
+    return `${p.days} ${t('returns_policy.days')}`
   }
 
   const RP_SEED_DESC = {
@@ -570,21 +574,21 @@ export default function StoreProfile() {
     if (RP_SEED_DESC[p.id] && !p.edited) return lang === 'it' ? RP_SEED_DESC[p.id].it : RP_SEED_DESC[p.id].en
     if (p.none) {
       const exTxt = p.exempt === 'bespoke'
-        ? t('returns_policy.desc.bespoke_exemption', 'bespoke exemption')
+        ? t('returns_policy.desc.bespoke_exemption')
         : p.exempt === 'sealed'
-          ? t('returns_policy.desc.sealed_exemption', 'sealed exemption')
-          : t('returns_policy.desc.instore_only', 'in-store only')
-      return `${t('returns_policy.desc.no_returns_prefix', 'No returns,')} ${exTxt}.`
+          ? t('returns_policy.desc.sealed_exemption')
+          : t('returns_policy.desc.instore_only')
+      return `${t('returns_policy.desc.no_returns_prefix')} ${exTxt}.`
     }
-    return `${t('returns_policy.desc.custom_window_prefix', 'Custom window of')} ${p.days} ${t('returns_policy.desc.days_suffix', 'days.')}`
+    return `${t('returns_policy.desc.custom_window_prefix')} ${p.days} ${t('returns_policy.desc.days_suffix')}`
   }
 
   function rpStatusFor(p) {
-    if (p.id === defaultPolicyId) return { cls: 'pending', label: t('returns_policy.status.default', 'Store default') }
-    if (!isLawfulOnline(p)) return { cls: 'cancelled', label: t('returns_policy.status.instore_only', 'In-store only') }
-    if (p.exempt === 'bespoke') return { cls: 'active', label: t('returns_policy.status.exempt_bespoke', 'Exempt: bespoke') }
-    if (p.exempt === 'sealed') return { cls: 'active', label: t('returns_policy.status.exempt_sealed', 'Exempt: sealed') }
-    return { cls: 'active', label: t('returns_policy.status.compliant', 'Compliant') }
+    if (p.id === defaultPolicyId) return { cls: 'pending', label: t('returns_policy.status.default') }
+    if (!isLawfulOnline(p)) return { cls: 'cancelled', label: t('returns_policy.status.instore_only') }
+    if (p.exempt === 'bespoke') return { cls: 'active', label: t('returns_policy.status.exempt_bespoke') }
+    if (p.exempt === 'sealed') return { cls: 'active', label: t('returns_policy.status.exempt_sealed') }
+    return { cls: 'active', label: t('returns_policy.status.compliant') }
   }
 
   const RP_CLASS_NOTES = {
@@ -603,14 +607,14 @@ export default function StoreProfile() {
     fd.append('photo', file)
     apiFetch(`${API}/boutique/profile/founder-photo`, { method: 'POST', body: fd })
       .then(r => r.json())
-      .then(res => { if (res.success) setFounderPhotoUrl(`${IMG_BASE}${res.data.founder_photo_url}`) })
+      .then(res => { if (res.success) setFounderPhotoUrl(imgUrl(res.data.founder_photo_url)) })
   }
 
   // ─── Cover photo upload ──────────────────────────────────
   function uploadCoverPhoto(file) {
     setCoverError(null)
     if (!isImageType(file.type)) {
-      setCoverError(t('store_profile.photo.err_not_image', 'Please select an image file.'))
+      setCoverError(t('store_profile.photo.err_not_image'))
       return
     }
     if (file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024) {
@@ -626,12 +630,12 @@ export default function StoreProfile() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) {
-          setCoverPhotoUrl(`${IMG_BASE}${res.data.cover_photo_url}`)
+          setCoverPhotoUrl(imgUrl(res.data.cover_photo_url))
         } else {
-          setCoverError(res?.message || t('store_profile.photo.upload_failed', 'Upload failed'))
+          setCoverError(res?.message || t('store_profile.photo.upload_failed'))
         }
       })
-      .catch(() => setCoverError(t('store_profile.photo.upload_failed_network', 'Upload failed — check your connection')))
+      .catch(() => setCoverError(t('store_profile.photo.upload_failed_network')))
       .finally(() => setCoverUploading(false))
   }
 
@@ -683,10 +687,10 @@ export default function StoreProfile() {
         if (res?.success) {
           setMedia(prev => [...prev, ...(res.data?.media ?? [])])
         } else {
-          setUploadError(res?.message || t('store_profile.photo.upload_failed', 'Upload failed'))
+          setUploadError(res?.message || t('store_profile.photo.upload_failed'))
         }
       })
-      .catch(() => setUploadError(t('store_profile.photo.upload_failed_network', 'Upload failed — check your connection')))
+      .catch(() => setUploadError(t('store_profile.photo.upload_failed_network')))
       .finally(() => setUploading(false))
   }
 
@@ -700,12 +704,12 @@ export default function StoreProfile() {
       .then(res => {
         if (!res?.success) {
           setMedia(backup)
-          setUploadError(res?.message || t('store_profile.photo.delete_failed', 'Delete failed'))
+          setUploadError(res?.message || t('store_profile.photo.delete_failed'))
         }
       })
       .catch(() => {
         setMedia(backup)
-        setUploadError(t('store_profile.photo.delete_failed_network', 'Delete failed — check your connection'))
+        setUploadError(t('store_profile.photo.delete_failed_network'))
       })
   }
 
@@ -741,7 +745,7 @@ export default function StoreProfile() {
   const rowMedia = media.slice(0, GALLERY_ROW_SIZE)
 
   function renderMediaCell(m) {
-    const fullUrl = `${IMG_BASE}${m.url}`
+    const fullUrl = imgUrl(m.url)
     return (
       <div key={m.id} className="sp-media-cell">
         {m.media_type === 'video' ? (
@@ -752,13 +756,13 @@ export default function StoreProfile() {
         {m.media_type === 'video' && (
           <div className="sp-media-video-badge">
             <span className="material-symbols-outlined">play_arrow</span>
-            <span className="sp-media-video-badge-text">{t('store_profile.photo.video_badge', 'VIDEO')}</span>
+            <span className="sp-media-video-badge-text">{t('store_profile.photo.video_badge')}</span>
           </div>
         )}
         <button
           className="sp-media-delete-btn"
           onClick={() => deleteMedia(m.id)}
-          title={t('store_profile.photo.remove_tooltip', 'Remove')}
+          title={t('store_profile.photo.remove_tooltip')}
         >
           <span className="material-symbols-outlined">close</span>
         </button>
@@ -776,12 +780,12 @@ export default function StoreProfile() {
           {uploading ? (
             <>
               <span className="material-symbols-outlined">hourglass_top</span>
-              <div className="sp-media-add-lbl">{t('store_profile.uploading', 'Uploading…')}</div>
+              <div className="sp-media-add-lbl">{t('store_profile.uploading')}</div>
             </>
           ) : (
             <>
               <span className="material-symbols-outlined">add_photo_alternate</span>
-              <div className="sp-media-add-lbl">{t('store_profile.photo.add_media', 'Add media')}</div>
+              <div className="sp-media-add-lbl">{t('store_profile.photo.add_media')}</div>
             </>
           )}
         </div>
@@ -800,7 +804,7 @@ export default function StoreProfile() {
         before that can happen. */}
     {profileFailed && (
       <div className="sp-load-error">
-        {t('store_profile.err_load', 'Could not load your store profile. The fields below may be blank or out of date — reload the page before saving, or you risk overwriting your details.')}
+        {t('store_profile.err_load')}
       </div>
     )}
     <div className="grid2">
@@ -811,35 +815,35 @@ export default function StoreProfile() {
         {/* Store Details */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('store_profile.details.title', 'Store')} <em>{t('store_profile.details.title_em', 'Details')}</em></div>
+            <div className="card-title">{t('store_profile.details.title')} <em>{t('store_profile.details.title_em')}</em></div>
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.details.name_label', 'Store Name')}</label>
+            <label className="form-lbl">{t('store_profile.details.name_label')}</label>
             <input className="form-input" value={name} onChange={e => setName(e.target.value)} />
           </div>
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.address_label', 'Address')}</label>
+              <label className="form-lbl">{t('store_profile.details.address_label')}</label>
               <input className="form-input" value={address} onChange={e => setAddress(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.city_label', 'City')}</label>
+              <label className="form-lbl">{t('store_profile.details.city_label')}</label>
               <input className="form-input" value={city} onChange={e => setCity(e.target.value)} />
             </div>
           </div>
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.postcode_label', 'Postcode')}</label>
+              <label className="form-lbl">{t('store_profile.details.postcode_label')}</label>
               <input className="form-input" value={postcode} onChange={e => setPostcode(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.email_label', 'Email')}</label>
+              <label className="form-lbl">{t('store_profile.details.email_label')}</label>
               <input className="form-input" value={email} onChange={e => setEmail(e.target.value)} />
             </div>
           </div>
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.phone_label', 'Phone')}</label>
+              <label className="form-lbl">{t('store_profile.details.phone_label')}</label>
               <PhoneInput
                 international
                 defaultCountry={country || 'IT'}
@@ -849,7 +853,7 @@ export default function StoreProfile() {
               />
               {phone && !isValidPhoneNumber(phone) && (
                 <div className="form-hint sp-phone-hint-invalid">
-                  {t('store_profile.details.invalid_phone', 'Not a valid phone number')}
+                  {t('store_profile.details.invalid_phone')}
                 </div>
               )}
             </div>
@@ -858,7 +862,7 @@ export default function StoreProfile() {
                 the entitlement is off — only hidden — so switching WhatsApp
                 back on restores it rather than losing it. */}
             {isWhatsappEnabled() && <div className="form-group">
-              <label className="form-lbl">{t('store_profile.details.whatsapp_label', 'WhatsApp')}</label>
+              <label className="form-lbl">{t('store_profile.details.whatsapp_label')}</label>
               <PhoneInput
                 international
                 defaultCountry={country || 'IT'}
@@ -868,17 +872,17 @@ export default function StoreProfile() {
               />
               {whatsapp && !isValidPhoneNumber(whatsapp) && (
                 <div className="form-hint sp-phone-hint-invalid">
-                  {t('store_profile.details.invalid_phone', 'Not a valid phone number')}
+                  {t('store_profile.details.invalid_phone')}
                 </div>
               )}
             </div>}
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.details.bio_label', 'Store Bio')}</label>
+            <label className="form-lbl">{t('store_profile.details.bio_label')}</label>
             <textarea className="form-textarea" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.details.hours_label', 'Opening Hours')}</label>
+            <label className="form-lbl">{t('store_profile.details.hours_label')}</label>
             <div className="sp-hours-list">
               {DAYS.map(day => {
                 const slots = hours[day] ?? []
@@ -891,19 +895,19 @@ export default function StoreProfile() {
                         <span className="sp-hours-day">{i === 0 ? DAY_LABELS[day] : ''}</span>
                         <input className="form-input sp-hours-input" value={slot.open ?? ''}
                           onChange={e => updateHour(day, i, 'open', e.target.value)}
-                          placeholder={t('store_profile.details.hours_open_placeholder', '10:00')} />
+                          placeholder={t('store_profile.details.hours_open_placeholder')} />
                         <span className="sp-hours-sep">–</span>
                         <input className="form-input sp-hours-input" value={slot.close ?? ''}
                           onChange={e => updateHour(day, i, 'close', e.target.value)}
-                          placeholder={t('store_profile.details.hours_close_placeholder', '19:00 or Closed')} />
+                          placeholder={t('store_profile.details.hours_close_placeholder')} />
                         {i === 0 && slots.length < MAX_SLOTS_PER_DAY ? (
                           <button type="button" className="sp-hours-slot-btn" onClick={() => addSlot(day)}
-                            title={t('store_profile.details.hours_add_slot', 'Add a second opening (for a midday closure)')}>
+                            title={t('store_profile.details.hours_add_slot')}>
                             <span className="material-symbols-outlined">add</span>
                           </button>
                         ) : i > 0 ? (
                           <button type="button" className="sp-hours-slot-btn" onClick={() => removeSlot(day, i)}
-                            title={t('store_profile.details.hours_remove_slot', 'Remove this opening')}>
+                            title={t('store_profile.details.hours_remove_slot')}>
                             <span className="material-symbols-outlined">close</span>
                           </button>
                         ) : <span className="sp-hours-slot-spacer" />}
@@ -914,12 +918,12 @@ export default function StoreProfile() {
               })}
             </div>
             <div className="form-hint">
-              {t('store_profile.details.hours_hint', 'Closing for lunch? Press + to add a second opening for that day.')}
+              {t('store_profile.details.hours_hint')}
             </div>
           </div>
           <div className="sp-card-footer-actions">
             <button className="btn btn-sm btn-primary" onClick={saveProfile} disabled={saving}>
-              {saved ? `✓ ${t('common.saved', 'Saved')}` : saving ? t('common.saving', 'Saving…') : t('store_profile.save_changes_btn', 'Save Changes')}
+              {saved ? `✓ ${t('common.saved')}` : saving ? t('common.saving') : t('store_profile.save_changes_btn')}
             </button>
           </div>
         </div>
@@ -927,24 +931,24 @@ export default function StoreProfile() {
         {/* Social Media Platforms */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('store_profile.social.title', 'Social Media')} <em>{t('store_profile.social.title_em', 'Platforms')}</em></div>
+            <div className="card-title">{t('store_profile.social.title')} <em>{t('store_profile.social.title_em')}</em></div>
             <div className="sp-social-hdr-actions">
               {!socialEditMode && (
                 <button
                   type="button"
                   className="btn btn-sm btn-outline sp-social-edit-btn"
                   onClick={() => setSocialEditMode(true)}
-                  title={t('common.edit', 'Edit')}
+                  title={t('common.edit')}
                 >
                   <span className="material-symbols-outlined">edit</span>
                 </button>
               )}
               <button className="btn btn-sm btn-primary" onClick={() => saveSocialLinks()} disabled={socialSaving}>
-                {socialSaved ? `✓ ${t('common.saved', 'Saved')}` : socialSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
+                {socialSaved ? `✓ ${t('common.saved')}` : socialSaving ? t('common.saving') : t('store_profile.save_btn')}
               </button>
             </div>
           </div>
-          <p className="sp-social-intro">{t('store_profile.social.intro', 'Add the links to your Social Media')}</p>
+          <p className="sp-social-intro">{t('store_profile.social.intro')}</p>
           <div className="sp-social-grid">
             {SOCIAL_PLATFORMS.map(p => {
               const value = SOCIAL_VALUES[p.key]
@@ -957,14 +961,14 @@ export default function StoreProfile() {
                     <span className="sp-social-icon" style={{ color: p.color }}><p.Icon /></span>
                     <div className="sp-social-tile-body">
                       <div className="sp-social-tile-label">{p.label}</div>
-                      <div className="sp-social-tile-sub">{value || t('store_profile.social.add_link', 'Add link')}</div>
+                      <div className="sp-social-tile-sub">{value || t('store_profile.social.add_link')}</div>
                     </div>
                   </div>
                   {openSocial === p.key && (
                     <>
                       <div className="sp-social-popover-overlay" onClick={() => setOpenSocial(null)} />
                       <div className="sp-social-popover">
-                        <label className="form-lbl">{t('store_profile.social.link_label', '{{platform}} Link', { platform: p.label })}</label>
+                        <label className="form-lbl">{t('store_profile.social.link_label', { platform: p.label })}</label>
                         <input
                           className="form-input"
                           value={socialDraft}
@@ -973,12 +977,12 @@ export default function StoreProfile() {
                           autoFocus
                         />
                         <div className="sp-social-popover-actions">
-                          <button className="btn btn-outline btn-sm" onClick={() => setOpenSocial(null)}>{t('common.cancel', 'Cancel')}</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => setOpenSocial(null)}>{t('common.cancel')}</button>
                           <button
                             type="button"
                             className="btn btn-primary btn-sm sp-social-popover-save"
                             onClick={saveSocialDraft}
-                            title={t('common.save', 'Save')}
+                            title={t('common.save')}
                           >
                             <span className="material-symbols-outlined">check</span>
                           </button>
@@ -995,29 +999,27 @@ export default function StoreProfile() {
         {/* Founder Card */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('store_profile.founder.title', 'Founder')} <em>{t('store_profile.founder.title_em', 'Card')}</em></div>
+            <div className="card-title">{t('store_profile.founder.title')} <em>{t('store_profile.founder.title_em')}</em></div>
             <button className="btn btn-sm btn-primary" onClick={saveFounderCard} disabled={founderSaving}>
-              {founderSaved ? `✓ ${t('common.saved', 'Saved')}` : founderSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
+              {founderSaved ? `✓ ${t('common.saved')}` : founderSaving ? t('common.saving') : t('store_profile.save_btn')}
             </button>
           </div>
 
           <div className="sp-founder-toggle-row">
             <div>
-              <div className="sp-founder-toggle-title">{t('store_profile.founder.toggle_title', 'Show founder card on boutique page')}</div>
-              <div className="sp-founder-toggle-sub">{t('store_profile.founder.toggle_sub', 'Displays founder photo and name on your Mi Italia listing')}</div>
+              <div className="sp-founder-toggle-title">{t('store_profile.founder.toggle_title')}</div>
+              <div className="sp-founder-toggle-sub">{t('store_profile.founder.toggle_sub')}</div>
             </div>
-            <div className={`toggle${founderCardEnabled ? ' on' : ''}`} onClick={() => setFounderCardEnabled(v => !v)}>
-              <div className="toggle-knob" />
-            </div>
+            <Toggle on={founderCardEnabled} onToggle={() => setFounderCardEnabled(v => !v)} />
           </div>
 
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.founder.name_label', 'Founder Name')}</label>
+              <label className="form-lbl">{t('store_profile.founder.name_label')}</label>
               <input className="form-input" value={founderName} onChange={e => setFounderName(e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.founder.role_label', 'Founder Title')}</label>
+              <label className="form-lbl">{t('store_profile.founder.role_label')}</label>
               <input className="form-input" value={founderTitle} onChange={e => setFounderTitle(e.target.value)} />
             </div>
           </div>
@@ -1029,15 +1031,15 @@ export default function StoreProfile() {
             <div className="sp-founder-preview">
               <div className="sp-founder-photo" style={{ backgroundImage:`url('${founderPhotoUrl}')` }} />
               <div className="sp-founder-preview-body">
-                <div className="sp-founder-preview-title">{t('store_profile.founder.photo_uploaded', 'Founder photo uploaded')}</div>
-                <button className="btn btn-sm btn-outline" onClick={() => founderPhotoRef.current.click()}>{t('store_profile.replace_btn', 'Replace')}</button>
+                <div className="sp-founder-preview-title">{t('store_profile.founder.photo_uploaded')}</div>
+                <button className="btn btn-sm btn-outline" onClick={() => founderPhotoRef.current.click()}>{t('store_profile.replace_btn')}</button>
               </div>
             </div>
           ) : (
             <div className="upload-zone sp-clickable" onClick={() => founderPhotoRef.current.click()}>
               <span className="material-symbols-outlined">person</span>
-              <div className="upload-zone-title">{t('store_profile.founder.upload_title', 'Upload Founder Photo')}</div>
-              <div className="upload-zone-sub">{t('store_profile.founder.upload_hint', 'Min 400×400px · Square crop recommended')}</div>
+              <div className="upload-zone-title">{t('store_profile.founder.upload_title')}</div>
+              <div className="upload-zone-sub">{t('store_profile.founder.upload_hint')}</div>
             </div>
           )}
         </div>
@@ -1045,9 +1047,9 @@ export default function StoreProfile() {
         {/* Returns Policies */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('returns_policy.title_a', 'Returns')} <em>{t('returns_policy.title_b', 'Policies')}</em></div>
+            <div className="card-title">{t('returns_policy.title_a')} <em>{t('returns_policy.title_b')}</em></div>
             <button className="btn btn-sm btn-primary" onClick={saveReturnsPolicy} disabled={rpSaving}>
-              {rpSaved ? `✓ ${t('common.saved', 'Saved')}` : rpSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
+              {rpSaved ? `✓ ${t('common.saved')}` : rpSaving ? t('common.saving') : t('store_profile.save_btn')}
             </button>
           </div>
           {rpError && (
@@ -1058,24 +1060,24 @@ export default function StoreProfile() {
 
           <div className="rp-banner">
             <div>
-              <div className="rp-banner-lbl">{t('returns_policy.default_lbl', 'Store default')}</div>
+              <div className="rp-banner-lbl">{t('returns_policy.default_lbl')}</div>
               <div className="rp-banner-val">
                 {(() => {
                   const d = findById(policies, defaultPolicyId)
                   return d ? `${rpName(d)} · ${rpWinText(d)}` : '—'
                 })()}
               </div>
-              <div className="rp-banner-sub">{t('returns_policy.default_sub', 'Applied to every product without an override')}</div>
+              <div className="rp-banner-sub">{t('returns_policy.default_sub')}</div>
             </div>
             <button className="btn btn-sm btn-outline" onClick={() => setRpModal({ type: 'default' })}>
-              {t('returns_policy.change_default_btn', 'Change default')}
+              {t('returns_policy.change_default_btn')}
             </button>
           </div>
 
           <div className="rp-lib-hdr">
-            <div className="form-lbl">{t('returns_policy.library_title', 'Policy library')}</div>
+            <div className="form-lbl">{t('returns_policy.library_title')}</div>
             <button className="btn btn-xs btn-primary" onClick={() => setRpModal({ type: 'policy', id: null })}>
-              <span className="material-symbols-outlined">add</span> {t('returns_policy.new_policy_btn', 'New policy')}
+              <span className="material-symbols-outlined">add</span> {t('returns_policy.new_policy_btn')}
             </button>
           </div>
 
@@ -1087,12 +1089,12 @@ export default function StoreProfile() {
                   <div className="rp-row-name">{rpName(p)}</div>
                   <div className="rp-row-desc">{rpDescFor(p)}</div>
                   <div className="rp-row-meta">
-                    {rpWinText(p)} · {p.online ? t('returns_policy.online', 'Online') : t('returns_policy.online_off', 'Not online')} · {p.instore ? t('returns_policy.instore', 'In-store') : t('returns_policy.instore_off', 'Not in-store')}
+                    {rpWinText(p)} · {p.online ? t('returns_policy.online') : t('returns_policy.online_off')} · {p.instore ? t('returns_policy.instore') : t('returns_policy.instore_off')}
                   </div>
                 </div>
                 <span className={`status ${status.cls}`}>{status.label}</span>
                 <button className="btn btn-sm btn-outline" onClick={() => setRpModal({ type: 'policy', id: p.id })}>
-                  {t('common.edit', 'Edit')}
+                  {t('common.edit')}
                 </button>
               </div>
             )
@@ -1101,8 +1103,8 @@ export default function StoreProfile() {
           <div className="alert alert-info rp-callout">
             <span className="material-symbols-outlined">gavel</span>
             <span>
-              <strong>{t('returns_policy.callout_strong', 'Separate from returns:')}</strong>{' '}
-              {t('returns_policy.callout_body', 'the two-year legal guarantee for faulty goods always applies and is never affected by any policy above. Online sales inherit the 14-day withdrawal minimum by law.')}
+              <strong>{t('returns_policy.callout_strong')}</strong>{' '}
+              {t('returns_policy.callout_body')}
             </span>
           </div>
         </div>
@@ -1110,16 +1112,16 @@ export default function StoreProfile() {
         {/* Returns Classes */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('returns_classes.title_a', 'Returns')} <em>{t('returns_classes.title_b', 'Classes')}</em></div>
+            <div className="card-title">{t('returns_classes.title_a')} <em>{t('returns_classes.title_b')}</em></div>
             <button className="btn btn-sm btn-primary" onClick={saveReturnsPolicy} disabled={rpSaving}>
-              {rpSaved ? `✓ ${t('common.saved', 'Saved')}` : rpSaving ? t('common.saving', 'Saving…') : t('store_profile.save_changes_btn', 'Save Changes')}
+              {rpSaved ? `✓ ${t('common.saved')}` : rpSaving ? t('common.saving') : t('store_profile.save_changes_btn')}
             </button>
           </div>
 
           {returnsClasses.map(c => {
             const mapped = c.map ? findById(policies, c.map) : null
             const fallbackDefault = findById(policies, defaultPolicyId)
-            const mappedName = mapped ? rpName(mapped) : t('returns_classes.follow_default', 'Store default')
+            const mappedName = mapped ? rpName(mapped) : t('returns_classes.follow_default')
             const win = mapped ? rpWinText(mapped) : (fallbackDefault ? rpWinText(fallbackDefault) : '')
             return (
               <div key={c.id} className="rp-row">
@@ -1131,7 +1133,7 @@ export default function StoreProfile() {
                   </div>
                 </div>
                 <button className="btn btn-sm btn-outline" onClick={() => setRpModal({ type: 'class', classId: c.id })}>
-                  {t('common.change', 'Change')}
+                  {t('common.change')}
                 </button>
               </div>
             )
@@ -1140,8 +1142,8 @@ export default function StoreProfile() {
           <div className="alert alert-info rp-callout">
             <span className="material-symbols-outlined">account_tree</span>
             <span>
-              <strong>{t('returns_classes.callout_strong', 'Precedence:')}</strong>{' '}
-              {t('returns_classes.callout_body', 'product override beats returns class beats store default. Final Sale eligible maps to an in-store-only policy; if such a product is listed online it falls back to the store default, shown transparently.')}
+              <strong>{t('returns_classes.callout_strong')}</strong>{' '}
+              {t('returns_classes.callout_body')}
             </span>
           </div>
         </div>
@@ -1153,12 +1155,12 @@ export default function StoreProfile() {
         {/* Store Photography — cover photo + gallery */}
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('store_profile.photo.title', 'Store')} <em>{t('store_profile.photo.title_em', 'Photography')}</em></div>
+            <div className="card-title">{t('store_profile.photo.title')} <em>{t('store_profile.photo.title_em')}</em></div>
           </div>
 
           {/* Cover Photo — single hero image */}
           <div className="sp-photo-section">
-            <div className="sp-photo-section-lbl">{t('store_profile.photo.cover_label', 'Cover Photo')}</div>
+            <div className="sp-photo-section-lbl">{t('store_profile.photo.cover_label')}</div>
 
             <input ref={coverPhotoRef} type="file" accept="image/*" className="sp-file-hidden"
               onChange={e => { if (e.target.files[0]) uploadCoverPhoto(e.target.files[0]); e.target.value = '' }} />
@@ -1181,7 +1183,7 @@ export default function StoreProfile() {
                   disabled={coverUploading}
                 >
                   <span className="material-symbols-outlined">{coverUploading ? 'hourglass_top' : 'edit'}</span>
-                  {coverUploading ? t('store_profile.uploading', 'Uploading…') : t('store_profile.replace_btn', 'Replace')}
+                  {coverUploading ? t('store_profile.uploading') : t('store_profile.replace_btn')}
                 </button>
               </div>
             ) : (
@@ -1190,8 +1192,8 @@ export default function StoreProfile() {
                 onClick={() => !coverUploading && coverPhotoRef.current.click()}
               >
                 <span className="material-symbols-outlined">{coverUploading ? 'hourglass_top' : 'add_photo_alternate'}</span>
-                <div className="upload-zone-title">{coverUploading ? t('store_profile.uploading', 'Uploading…') : t('store_profile.photo.upload_cover_title', 'Upload Cover Photo')}</div>
-                <div className="upload-zone-sub">{t('store_profile.photo.upload_cover_hint', '1200×400px recommended · Used as hero on boutique page')}</div>
+                <div className="upload-zone-title">{coverUploading ? t('store_profile.uploading') : t('store_profile.photo.upload_cover_title')}</div>
+                <div className="upload-zone-sub">{t('store_profile.photo.upload_cover_hint')}</div>
               </div>
             )}
           </div>
@@ -1199,7 +1201,7 @@ export default function StoreProfile() {
           {/* Gallery — photos + videos */}
           <div>
             <div className="sp-gallery-hdr">
-              <div className="sp-photo-section-lbl">{t('store_profile.photo.gallery_label', 'Gallery')}</div>
+              <div className="sp-photo-section-lbl">{t('store_profile.photo.gallery_label')}</div>
               <div className="sp-gallery-count">
                 {t('store_profile.photo.gallery_count', { photoCount, maxPhotos: MAX_PHOTOS, videoCount, maxVideos: MAX_VIDEOS, defaultValue: '{{photoCount}}/{{maxPhotos}} photos · {{videoCount}}/{{maxVideos}} videos' })}
               </div>
@@ -1219,9 +1221,9 @@ export default function StoreProfile() {
             )}
 
             {mediaLoading ? (
-              <div className="sp-media-loading">{t('store_profile.photo.loading_media', 'Loading media…')}</div>
+              <div className="sp-media-loading">{t('store_profile.photo.loading_media')}</div>
             ) : mediaFailed ? (
-              <div className="sp-load-error">{t('store_profile.photo.err_media', 'Could not load your photo library — any photos you have already uploaded are not shown.')}</div>
+              <div className="sp-load-error">{t('store_profile.photo.err_media')}</div>
             ) : (
               <>
                 <div className="sp-media-grid">
@@ -1232,7 +1234,7 @@ export default function StoreProfile() {
                   className="btn btn-sm btn-outline ap-see-all-models-btn sp-media-see-all-btn"
                   onClick={() => setShowAllPhotosModal(true)}
                 >
-                  {t('store_profile.photo.see_all_btn', 'See all Photos')}
+                  {t('store_profile.photo.see_all_btn')}
                 </button>
               </>
             )}
@@ -1240,7 +1242,7 @@ export default function StoreProfile() {
             <div className="sp-media-hint">
               {t('store_profile.photo.media_hint', { photoSize: MAX_PHOTO_SIZE_MB, videoSize: MAX_VIDEO_SIZE_MB, max: MAX_UPLOAD_COUNT, defaultValue: 'Photos up to {{photoSize}}MB · Videos up to {{videoSize}}MB · Max {{max}} files per upload' })}
               {!canAddMore && (
-                <span className="sp-media-hint-warn">· {t('store_profile.photo.gallery_full', 'Gallery full — remove media to add more')}</span>
+                <span className="sp-media-hint-warn">· {t('store_profile.photo.gallery_full')}</span>
               )}
             </div>
           </div>
@@ -1248,29 +1250,38 @@ export default function StoreProfile() {
 
         {/* Categories */}
         <div className="card">
-          <div className="card-hdr"><div className="card-title">{t('store_profile.categories.title', 'Categories (By your Products)')}</div></div>
+          <div className="card-hdr"><div className="card-title">{t('store_profile.categories.title')}</div></div>
           <div className="sp-cat-chips">
             {activeCategories.map(c => (
               <div key={c.id} className="sp-cat-chip">{c.name}</div>
             ))}
           </div>
+          {catLoading && (
+            <div className="form-hint">{t('store_profile.categories.loading') + '…'}</div>
+          )}
+          {!catLoading && catError && (
+            <div className="form-hint">{t('store_profile.categories.error')}</div>
+          )}
+          {!catLoading && !catError && activeCategories.length === 0 && (
+            <div className="form-hint">{t('store_profile.categories.empty')}</div>
+          )}
         </div>
 
         {/* Language & Region */}
         <div className="card">
-          <div className="card-hdr"><div className="card-title">{t('store_profile.language.title', 'Language &')} <em>{t('store_profile.language.title_em', 'Region')}</em></div></div>
+          <div className="card-hdr"><div className="card-title">{t('store_profile.language.title')} <em>{t('store_profile.language.title_em')}</em></div></div>
           <div className="form-row2">
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.language.primary_label', 'Primary Language')}</label>
-              <select className="form-select"><option>{t('store_profile.language.opt_italian', 'Italian')}</option><option>{t('store_profile.language.opt_english', 'English')}</option></select>
+              <label className="form-lbl">{t('store_profile.language.primary_label')}</label>
+              <select className="form-select"><option>{t('store_profile.language.opt_italian')}</option><option>{t('store_profile.language.opt_english')}</option></select>
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.language.currency_label', 'Currency')}</label>
-              <select className="form-select"><option>{t('store_profile.language.opt_eur', 'EUR €')}</option></select>
+              <label className="form-lbl">{t('store_profile.language.currency_label')}</label>
+              <select className="form-select"><option>{t('store_profile.language.opt_eur')}</option></select>
             </div>
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.language.active_label', 'Active Languages')}</label>
+            <label className="form-lbl">{t('store_profile.language.active_label')}</label>
             <div className="sp-lang-list">
               {[{l:'IT',on:true},{l:'EN',on:true},{l:'FR',on:false},{l:'DE',on:false},{l:'AR',on:false},{l:'ZH',on:false}].map(({l,on}) => (
                 <span key={l} className={`sp-lang-chip${on ? ' on' : ''}`}>{l}</span>
@@ -1283,48 +1294,48 @@ export default function StoreProfile() {
         <div className="card">
           <div className="card-hdr">
             <div>
-              <div className="card-title">{t('store_profile.tech.title', 'Tech')} <em>{t('store_profile.tech.title_em', 'Stack')}</em></div>
-              <div className="sp-tech-sub">{t('store_profile.tech.sub', 'Helps us connect Primo to your existing tools')}</div>
+              <div className="card-title">{t('store_profile.tech.title')} <em>{t('store_profile.tech.title_em')}</em></div>
+              <div className="sp-tech-sub">{t('store_profile.tech.sub')}</div>
             </div>
             <button className="btn btn-sm btn-primary" onClick={saveTechStack} disabled={techSaving}>
-              {techSaved ? `✓ ${t('common.saved', 'Saved')}` : techSaving ? t('common.saving', 'Saving…') : t('store_profile.save_btn', 'Save')}
+              {techSaved ? `✓ ${t('common.saved')}` : techSaving ? t('common.saving') : t('store_profile.save_btn')}
             </button>
           </div>
 
           <div className="sp-tech-section">
-            <span className="material-symbols-outlined">credit_card</span>{t('store_profile.tech.terminal_section', 'In-Store Payment Terminal')}
+            <span className="material-symbols-outlined">credit_card</span>{t('store_profile.tech.terminal_section')}
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.tech.terminal_question', 'How do you take card payments in-store?')}</label>
+            <label className="form-lbl">{t('store_profile.tech.terminal_question')}</label>
             <select className="form-select" value={terminal} onChange={e => setTerminal(e.target.value)}>
-              <option value="stripe">{t('store_profile.tech.opt_stripe', 'Stripe Terminal (Mi Italia integrated)')}</option>
+              <option value="stripe">{t('store_profile.tech.opt_stripe')}</option>
               <option value="sumup">SumUp</option>
               <option value="square">Square</option>
               <option value="verifone">Verifone</option>
-              <option value="bank">{t('store_profile.tech.opt_bank', 'Bank-issued terminal')}</option>
-              <option value="other">{t('store_profile.tech.opt_other_terminal', 'Other external terminal')}</option>
-              <option value="none">{t('store_profile.tech.opt_no_terminal', 'No card payments in-store')}</option>
+              <option value="bank">{t('store_profile.tech.opt_bank')}</option>
+              <option value="other">{t('store_profile.tech.opt_other_terminal')}</option>
+              <option value="none">{t('store_profile.tech.opt_no_terminal')}</option>
             </select>
           </div>
           {terminal === 'stripe'
-            ? <div className="alert alert-info"><span className="material-symbols-outlined">check_circle</span>{t('store_profile.tech.stripe_alert', 'Stripe Terminal is fully integrated with Primo POS. Card payments are processed directly and commission is auto-deducted per sale.')}</div>
-            : terminal !== 'none' && <div className="alert alert-warn"><span className="material-symbols-outlined">info</span>{t('store_profile.tech.external_alert', "External terminals work seamlessly with Primo. Primo tracks the sale and calculates commission. You'll receive a monthly invoice for POS commission rather than per-transaction deduction.")}</div>
+            ? <div className="alert alert-info"><span className="material-symbols-outlined">check_circle</span>{t('store_profile.tech.stripe_alert')}</div>
+            : terminal !== 'none' && <div className="alert alert-warn"><span className="material-symbols-outlined">info</span>{t('store_profile.tech.external_alert')}</div>
           }
 
           <div className="sp-divider" />
 
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.tech.pos_method_label', 'Default POS Payment Method')}</label>
+            <label className="form-lbl">{t('store_profile.tech.pos_method_label')}</label>
             <select className="form-select" value={posPaymentVal} onChange={e => setPosPayment(e.target.value)}>
               {[
-                { k: 'external_terminal', label: t('store_profile.tech.opt_pos_external', 'External Terminal (show external panel first)') },
-                { k: 'stripe',            label: t('store_profile.tech.opt_pos_stripe', 'Stripe Terminal') },
-                { k: 'cash',              label: t('store_profile.tech.opt_pos_cash', 'Cash') },
+                { k: 'external_terminal', label: t('store_profile.tech.opt_pos_external') },
+                { k: 'stripe',            label: t('store_profile.tech.opt_pos_stripe') },
+                { k: 'cash',              label: t('store_profile.tech.opt_pos_cash') },
               ].filter(o => posDefaults.includes(o.k)).map(o => (
                 <option key={o.k} value={o.k}>{o.label}</option>
               ))}
             </select>
-            <div className="form-hint">{t('store_profile.tech.pos_method_hint', 'This pre-selects the payment tab when you open POS. You can always switch during a sale.')}</div>
+            <div className="form-hint">{t('store_profile.tech.pos_method_hint')}</div>
             {/* A note used to sit here saying POS had no external-terminal tab
                 and would open on Cash instead. It does have one now, so the
                 note went with it — and `store_profile.tech.pos_method_external_note`
@@ -1339,25 +1350,25 @@ export default function StoreProfile() {
           <div className="sp-divider" />
 
           <div className="sp-tech-section">
-            <span className="material-symbols-outlined">language</span>{t('store_profile.tech.website_section', 'Your Website')}
+            <span className="material-symbols-outlined">language</span>{t('store_profile.tech.website_section')}
           </div>
           <div className="form-group">
-            <label className="form-lbl">{t('store_profile.tech.website_question', 'Do you have your own website?')}</label>
+            <label className="form-lbl">{t('store_profile.tech.website_question')}</label>
             <select className="form-select" value={website} onChange={e => setWebsite(e.target.value)}>
-              <option value="none">{t('store_profile.tech.opt_no_website', 'No — Mi Italia is my only online presence')}</option>
-              <option value="shopify">{t('store_profile.tech.opt_website_shopify', 'Yes — Shopify')}</option>
-              <option value="woocommerce">{t('store_profile.tech.opt_website_woo', 'Yes — WooCommerce')}</option>
-              <option value="lightspeed">{t('store_profile.tech.opt_website_lightspeed', 'Yes — Lightspeed eCom')}</option>
-              <option value="custom">{t('store_profile.tech.opt_website_custom', 'Yes — Custom / other platform')}</option>
+              <option value="none">{t('store_profile.tech.opt_no_website')}</option>
+              <option value="shopify">{t('store_profile.tech.opt_website_shopify')}</option>
+              <option value="woocommerce">{t('store_profile.tech.opt_website_woo')}</option>
+              <option value="lightspeed">{t('store_profile.tech.opt_website_lightspeed')}</option>
+              <option value="custom">{t('store_profile.tech.opt_website_custom')}</option>
             </select>
           </div>
           {website !== 'none' && (
             <div className="form-group">
-              <label className="form-lbl">{t('store_profile.tech.website_url_label', 'Website URL')}</label>
-              <input className="form-input" value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder={t('store_profile.tech.website_url_placeholder', 'https://yourstore.com')} />
+              <label className="form-lbl">{t('store_profile.tech.website_url_label')}</label>
+              <input className="form-input" value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} placeholder={t('store_profile.tech.website_url_placeholder')} />
               {!isValidWebsiteUrl(websiteUrl) && (
                 <div className="form-hint sp-phone-hint-invalid">
-                  {t('store_profile.tech.invalid_website_url', 'That does not look like a website address')}
+                  {t('store_profile.tech.invalid_website_url')}
                 </div>
               )}
               {/* Offered, not forced. The connected .myshopify.com domain always
@@ -1373,7 +1384,7 @@ export default function StoreProfile() {
                   type="button"
                   className="btn btn-sm btn-outline sp-url-suggest"
                   onClick={() => setWebsiteUrl(`https://${shopifyHost(shopDomains[0])}`)}>
-                  {t('store_profile.tech.use_shopify_domain', 'Use {{domain}}', { domain: shopifyHost(shopDomains[0]) })}
+                  {t('store_profile.tech.use_shopify_domain', { domain: shopifyHost(shopDomains[0]) })}
                 </button>
               )}
             </div>
@@ -1392,7 +1403,7 @@ export default function StoreProfile() {
                     instead — right meaning in the wrong language beats the
                     wrong meaning in the right one. Retire the old pair in the
                     next prune. */}
-                <div className="sp-integration-title">{t('store_profile.tech.shopify_live_title', 'Shopify Integration')}</div>
+                <div className="sp-integration-title">{t('store_profile.tech.shopify_live_title')}</div>
               </div>
               {/* While the check is in flight the card keeps the setup wording
                   rather than showing a spinner. It is a one-line aside on a
@@ -1400,21 +1411,21 @@ export default function StoreProfile() {
                   least important thing on the screen. */}
               <div className="sp-integration-body">
                 {shopDomains.length === 1
-                  ? t('store_profile.tech.shopify_connected', 'Connected to {{domain}} — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.', { domain: shopifyHost(shopDomains[0]) })
+                  ? t('store_profile.tech.shopify_connected', { domain: shopifyHost(shopDomains[0]) })
                   : shopDomains.length > 1
                     /* `n`, not `count`: i18next treats `count` as the plural
                        selector and resolves `key_one` / `key_other` before the
                        key itself, which does not play well with relying on the
                        default string above while the key is not yet in the
                        bundle. This branch is only reached for two or more. */
-                    ? t('store_profile.tech.shopify_connected_multi', 'Connected for {{n}} locations — your catalogue, orders and customers are syncing. Manage it under Settings › Integrations.', { n: shopDomains.length })
-                    : t('store_profile.tech.shopify_live_body', 'Mirror your Shopify catalogue, orders, and customers, and write POS sales back to Shopify. Set it up under Settings › Integrations.')}
+                    ? t('store_profile.tech.shopify_connected_multi', { n: shopDomains.length })
+                    : t('store_profile.tech.shopify_live_body')}
               </div>
               <button className="btn btn-sm btn-outline sp-integration-btn" onClick={() => navigate('/integrations')}>
                 <span className="material-symbols-outlined">cable</span>
                 {shopDomains.length > 0
-                  ? t('store_profile.tech.manage_integration_btn', 'Manage integration')
-                  : t('store_profile.tech.go_to_integrations_btn', 'Go to Integrations')}
+                  ? t('store_profile.tech.manage_integration_btn')
+                  : t('store_profile.tech.go_to_integrations_btn')}
               </button>
             </div>
           )}
@@ -1422,9 +1433,9 @@ export default function StoreProfile() {
             <div className="sp-integration-box sp-integration-woo">
               <div className="sp-integration-hdr">
                 <span className="material-symbols-outlined">store</span>
-                <div className="sp-integration-title">{t('store_profile.tech.woo_title', 'WooCommerce Integration — Coming Soon')}</div>
+                <div className="sp-integration-title">{t('store_profile.tech.woo_title')}</div>
               </div>
-              <div className="sp-integration-body">{t('store_profile.tech.woo_body', 'A Mi Italia WooCommerce plugin will allow automatic product and inventory sync between your WordPress store and Primo.')}</div>
+              <div className="sp-integration-body">{t('store_profile.tech.woo_body')}</div>
               {/* "Notify Me When Available" used to sit here with no onClick at
                   all — it looked like a working button, registered nothing, and
                   gave no feedback, so a boutique would believe it had asked to
@@ -1435,28 +1446,28 @@ export default function StoreProfile() {
             </div>
           )}
           {website === 'none' && (
-            <div className="alert alert-info"><span className="material-symbols-outlined">info</span>{t('store_profile.tech.no_website_alert', 'Mi Italia + Primo is your complete online retail presence. Your boutique page on Mi Italia serves as your public storefront.')}</div>
+            <div className="alert alert-info"><span className="material-symbols-outlined">info</span>{t('store_profile.tech.no_website_alert')}</div>
           )}
 
           <div className="sp-divider" />
 
           <div className="sp-tech-section">
-            <span className="material-symbols-outlined">point_of_sale</span>{t('store_profile.tech.pos_section', 'Existing POS System')}
+            <span className="material-symbols-outlined">point_of_sale</span>{t('store_profile.tech.pos_section')}
           </div>
           <div className="form-group sp-form-group-tight">
-            <label className="form-lbl">{t('store_profile.tech.pos_question', 'Do you use a dedicated POS system?')}</label>
+            <label className="form-lbl">{t('store_profile.tech.pos_question')}</label>
             <select className="form-select" value={posSystem} onChange={e => setPosSystem(e.target.value)}>
-              <option value="primo">{t('store_profile.tech.opt_no_pos', 'No — Primo POS is my only system')}</option>
+              <option value="primo">{t('store_profile.tech.opt_no_pos')}</option>
               <option value="lightspeed">Lightspeed Retail</option>
               <option value="square-pos">Square POS</option>
               <option value="shopify-pos">Shopify POS</option>
               <option value="revel">Revel Systems</option>
-              <option value="other-pos">{t('store_profile.tech.opt_other_pos', 'Other POS system')}</option>
+              <option value="other-pos">{t('store_profile.tech.opt_other_pos')}</option>
             </select>
           </div>
           {posSystem !== 'primo' && (
             <div className="alert alert-warn sp-alert-tight">
-              <span className="material-symbols-outlined">info</span>{t('store_profile.tech.dual_pos_alert', 'Running two POS systems is fine. Use Primo POS for Mi Italia app customers and reservations. Use your existing POS for all other in-store transactions.')}
+              <span className="material-symbols-outlined">info</span>{t('store_profile.tech.dual_pos_alert')}
             </div>
           )}
         </div>
@@ -1496,7 +1507,7 @@ export default function StoreProfile() {
       <div className="modal-backdrop" onClick={() => setShowAllPhotosModal(false)}>
         <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ overflowY:'auto', maxHeight:'85vh' }}>
           <div className="modal-hdr">
-            <div className="modal-title">{t('store_profile.photo.all_modal_title', 'All')} <em>{t('store_profile.photo.all_modal_title_em', 'Gallery Photos')}</em></div>
+            <div className="modal-title">{t('store_profile.photo.all_modal_title')} <em>{t('store_profile.photo.all_modal_title_em')}</em></div>
             <div className="modal-close" onClick={() => setShowAllPhotosModal(false)}>
               <span className="material-symbols-outlined">close</span>
             </div>

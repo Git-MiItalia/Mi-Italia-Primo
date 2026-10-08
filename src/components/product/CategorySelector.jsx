@@ -125,9 +125,9 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
       <div className="cat-bc-nav">
         <div className="cat-bc-crumbs">
           {state.l3 && collapsed && (
-            <span className="cat-selected-label">{t('catsel.selected_label', 'Selected Category') + ':'}</span>
+            <span className="cat-selected-label">{t('catsel.selected_label') + ':'}</span>
           )}
-          {!state.l1 && <span className="cat-bc-crumb">{t('catsel.choose', 'Choose') + '…'}</span>}
+          {!state.l1 && <span className="cat-bc-crumb">{t('catsel.choose') + '…'}</span>}
           {state.l1 && (
             <span
               className={`cat-bc-crumb ${!state.l2 ? 'bc-active' : 'bc-done'}`}
@@ -164,7 +164,7 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
           )}
 
           {state.l3 && collapsed && (
-            <span className="cat-bc-change" onClick={reset}>{t('common.change', 'Change')}</span>
+            <span className="cat-bc-change" onClick={reset}>{t('common.change')}</span>
           )}
 
           {onNotFound && (
@@ -183,8 +183,8 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
             <span className="material-symbols-outlined">{panelHdr.icon}</span>
             <span>{panelHdr.text}</span>
           </div>
-          {loading && <div className="cat-bc-hint">{t('catsel.loading', 'Loading categories') + '…'}</div>}
-          {!loading && error && <div className="cat-bc-hint">{t('catsel.err_load', "Couldn't load categories. Please refresh.")}</div>}
+          {loading && <div className="cat-bc-hint">{t('catsel.loading') + '…'}</div>}
+          {!loading && error && <div className="cat-bc-hint">{t('catsel.err_load')}</div>}
           <div className={`cat-bc-grid${isSingle(items) ? ' col1' : ''}`}>
             {items.map(item => {
               const selected =
@@ -211,7 +211,7 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
         <div className="cat-bc-panel">
           <div className="cat-bc-panel-hdr">
             <span className="material-symbols-outlined">auto_awesome</span>
-            <span>{t('catsel.occasion', 'Occasion')} <span className="cat-bc-optional">{t('catsel.occasion_optional', '(optional · select all that apply)')}</span></span>
+            <span>{t('catsel.occasion')} <span className="cat-bc-optional">{t('catsel.occasion_optional')}</span></span>
           </div>
           <div className="cat-attr-row">
             {attrs.map(a => (
@@ -220,7 +220,7 @@ export default function CategorySelector({ onChange, initialCategory, initialSty
               </div>
             ))}
           </div>
-          <div className="cat-bc-hint">{t('catsel.occasion_hint', 'Helps surface this product in occasion-based filters in the app')}</div>
+          <div className="cat-bc-hint">{t('catsel.occasion_hint')}</div>
           <div className="cat-done-wrap">
             <button className="btn btn-sm btn-primary cat-done-btn" onClick={() => setCollapsed(true)}>
               <span className="material-symbols-outlined">check</span>Done

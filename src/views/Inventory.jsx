@@ -8,9 +8,10 @@ import RestockGrid from '../components/product/RestockGrid'
 import useNotifStore from '../store/notifStore'
 import { sortSizeLabels } from '../common/sizechart'
 import Loading from '../components/ui/Loading'
+import { imgUrl as resolveImg } from '../lib/imageUrl'
+import Toggle from '../components/ui/Toggle'
 
 const API      = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL ?? ''
 
 function loadRestocks(setRestocks) {
   apiFetch(`${API}/boutique/inventory/restocks`)
@@ -49,9 +50,10 @@ function stockBadge(total, minQty, warn, crit, hasActive = true) {
   return                     { cls:'in',  icon:null,      key:'in_stock'     }
 }
 
+// Delegates to lib/imageUrl so the rule lives in one place; '' rather than null
+// is kept because the row builder below stores the result on every row.
 function imgUrl(raw) {
-  if (!raw) return ''
-  return raw.startsWith('http') ? raw : `${IMG_BASE}${raw}`
+  return resolveImg(raw) ?? ''
 }
 
 export default function Inventory() {
@@ -104,12 +106,44 @@ export default function Inventory() {
   useEffect(() => {
     apiFetch(`${API}/boutique/inventory`)
       .then(r => r.json())
-      .then(res => {
+      .then(async res => {
         // `res.data.stats` threw outright when the payload had no `data`, and
         // nothing checked `success` — an error body became an empty inventory.
         if (res.success === false || !res.data) throw new Error(res.message || 'inventory request failed')
+
+        // This endpoint pages at 20, the same as /boutique/products, and this
+        // page used to take the first response as the whole catalogue. A
+        // boutique with 21 products had one silently missing from the table
+        // and from every total on the page. Walk the remaining pages, exactly
+        // as Products does.
+        const first    = res.data.products ?? []
+        const totalNum = Number(res.data.total ?? first.length)
+        const perPage  = Number(res.data.limit) || first.length || 20
+        const pages    = perPage > 0 ? Math.ceil(totalNum / perPage) : 1
+
+        let all = first
+        if (pages > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: pages - 1 }, (_, i) =>
+              apiFetch(`${API}/boutique/inventory?page=${i + 2}&limit=${perPage}`)
+                .then(r => r.json())
+                .then(p => p.data?.products ?? [])
+                // One failed page must not empty the table — the rows we did
+                // get are still correct, and loadFailed stays false.
+                .catch(() => [])
+            )
+          )
+          // De-duplicated by id: if the endpoint ever ignored ?page= it would
+          // hand back page 1 again, and every product would appear twice.
+          // Falling back to the first page is a wrong total; showing each
+          // product twice is a wrong table.
+          all = [...new Map(first.concat(...rest).map(p => [p.id, p])).values()]
+        }
+
+        // stats come from the server and already cover the whole catalogue,
+        // so they are read from the first page rather than recomputed.
         setApiStats(res.data.stats ?? {})
-        setAllProducts(res.data.products ?? [])
+        setAllProducts(all)
         setLoadFailed(false)
       })
       .catch(() => {
@@ -133,7 +167,7 @@ export default function Inventory() {
       // against default thresholds rather than the boutique's configured ones.
       // i18n.t, not the hook's t: using t here would make it a dependency
       // of this fetch effect and re-run the whole load on every re-render.
-      .catch(() => toast(i18n.t('inventory.err_settings', 'Could not load your stock thresholds — showing the defaults.')))
+      .catch(() => toast(i18n.t('inventory.err_settings')))
 
     loadRestocks(setRestocks)
     // `i18n` is only read inside the catch above, to translate a toast at the
@@ -199,8 +233,9 @@ export default function Inventory() {
           sku:         p.sku,
           img:         imgUrl(p.main_photo),
           colour:      colour === NO_COLOUR ? '' : colour,
-          // "Women's / Tops / Blouse" when the API sends it. Same field POS
-          // filters on; /boutique/inventory does not return it yet.
+          // "Women's / Tops / Blouse" — the same field POS filters on. The
+          // `category` fallback is kept for rows from before the API settled
+          // on category_path.
           categoryPath: p.category_path ?? p.category ?? '',
           variants,
           total,
@@ -256,7 +291,7 @@ export default function Inventory() {
   function exportCsv() {
     const header = [
       t('inventory.table.product'),
-      t('inventory.table.colour', 'Colour'),
+      t('inventory.table.colour'),
       t('inventory.table.sku'),
       t('inventory.table.total'),
     ]
@@ -363,7 +398,7 @@ export default function Inventory() {
       // stale quantities and re-posting a restock twice (see the save
       // handler's comment). Swallowing its failure left pre-save numbers on
       // screen as though they were current, with that bug armed again.
-      .catch(() => toast(t('inventory.err_refresh', 'Saved, but the figures on screen could not be refreshed. Please reload before editing stock again.')))
+      .catch(() => toast(t('inventory.err_refresh')))
   }
 
   // ── Save All Changes (Stock by Variant table edits) ───────────────────────
@@ -376,7 +411,7 @@ export default function Inventory() {
     if (submitting) return
     const entries = Object.entries(changes).map(([variant_id, stock_qty]) => ({ variant_id, stock_qty }))
     if (!entries.length) {
-      toast(t('inventory.no_changes', 'No changes to save.'))
+      toast(t('inventory.no_changes'))
       return
     }
 
@@ -410,7 +445,7 @@ export default function Inventory() {
       if (results.some(r => r?.success === false)) throw new Error('stock update failed')
       // The backend message was rendered raw, so a French boutique saw whatever
       // language the API replied in. The local string is always translated.
-      setSaveMsg(t('inventory.changes_saved', 'Changes saved.'))
+      setSaveMsg(t('inventory.changes_saved'))
       setTimeout(() => setSaveMsg(''), 3000)
       setChanges({})
       refreshInventory()
@@ -431,12 +466,12 @@ export default function Inventory() {
     if (submitting) return
     if (!Number.isFinite(warnThreshold) || !Number.isFinite(critThreshold) ||
         warnThreshold < 0 || critThreshold < 0) {
-      setThresholdMsg(t('inventory.thresholds.error_invalid', 'Please enter valid, non-negative numbers.'))
+      setThresholdMsg(t('inventory.thresholds.error_invalid'))
       setTimeout(() => setThresholdMsg(''), 3000)
       return
     }
     if (warnThreshold < critThreshold) {
-      setThresholdMsg(t('inventory.thresholds.error_order', 'Warning threshold must be greater than or equal to the critical threshold.'))
+      setThresholdMsg(t('inventory.thresholds.error_order'))
       setTimeout(() => setThresholdMsg(''), 3000)
       return
     }
@@ -451,7 +486,7 @@ export default function Inventory() {
       .then(res => {
         if (res.success === false) throw new Error(res.message || 'settings save failed')
         // Was `res.message` — the raw backend string, untranslated.
-        setThresholdMsg(t('inventory.thresholds.saved', 'Thresholds saved.'))
+        setThresholdMsg(t('inventory.thresholds.saved'))
         setTimeout(() => setThresholdMsg(''), 3000)
       })
       // Previously swallowed, so a failed save looked exactly like a successful
@@ -545,7 +580,7 @@ export default function Inventory() {
     if (!restockIncreases.length && !decreaseItems.length) {
       // Was a hardcoded English literal, while the identical message in
       // saveChanges went through t() — same string, two code paths.
-      toast(t('inventory.no_changes', 'No changes to save.'))
+      toast(t('inventory.no_changes'))
       return
     }
 
@@ -624,7 +659,7 @@ export default function Inventory() {
           { cls:'ok',       lbl: t('inventory.stats.total_units'),  val: apiStats.total_units ?? '—',           sub: '' },
           // The old copy hardcoded "(≤ 2 units)", so the card below could be set
           // to 6 and this line still said 2. Read the live threshold instead.
-          { cls:'warn',     lbl: t('inventory.stats.low_stock'),    val: apiStats.low_stock_products ?? '—',    sub: t('inventory.stats.low_stock_sub_n', 'Below threshold (≤ {{n}} units)', { n: warnThreshold }) },
+          { cls:'warn',     lbl: t('inventory.stats.low_stock'),    val: apiStats.low_stock_products ?? '—',    sub: t('inventory.stats.low_stock_sub_n', { n: warnThreshold }) },
           { cls:'critical', lbl: t('inventory.stats.out_of_stock'), val: apiStats.out_of_stock_variants ?? '—', sub: t('inventory.stats.out_of_stock_sub') },
           { cls:'ok',       lbl: t('inventory.stats.avg_stock'),    val: apiStats.avg_stock_per_variant ?? '—', sub: t('inventory.stats.avg_stock_sub') },
         ].map((s, i) => (
@@ -670,15 +705,15 @@ export default function Inventory() {
         <div className="inv-cat-selector">
           <div className="inv-cat-selector-lbl">
             <span className="material-symbols-outlined">category</span>
-            {t('inventory.filter_category', 'Filter by category')}
+            {t('inventory.filter_category')}
             {!categoryFilterReady && (
-              <>{' '}<span className="inv-cat-soon">({t('common.coming_soon', 'coming soon')})</span></>
+              <>{' '}<span className="inv-cat-soon">({t('common.coming_soon')})</span></>
             )}
             {categoryFilterReady && categoryPrefix && (
               <>
                 {' '}
                 <button className="btn btn-sm btn-outline inv-cat-clear" onClick={() => setCategory(null)}>
-                  {t('inventory.clear_category', 'Clear')}
+                  {t('inventory.clear_category')}
                 </button>
               </>
             )}
@@ -759,7 +794,7 @@ export default function Inventory() {
                             />
                             {inactive && (
                               <div className="inv-cell-inactive">
-                                {t('inventory.table.inactive', 'Off')}
+                                {t('inventory.table.inactive')}
                               </div>
                             )}
                           </td>
@@ -828,9 +863,7 @@ export default function Inventory() {
               <div className="inv-autohide-title">{t('inventory.thresholds.autohide_title')}</div>
               <div className="inv-autohide-sub">{t('inventory.thresholds.autohide_sub')}</div>
             </div>
-            <div className={`toggle${autoHide ? ' on' : ''}`} onClick={toggleAutoHide}>
-              <div className="toggle-knob" />
-            </div>
+            <Toggle on={autoHide} onToggle={toggleAutoHide} />
           </div>
 
           {thresholdMsg && <div className="inv-threshold-msg">{thresholdMsg}</div>}
@@ -867,7 +900,7 @@ export default function Inventory() {
               {restocks.length === 0 && (
                 <tr>
                   <td colSpan={5} className="empty">
-                    {t('inventory.restock.empty', 'No restock entries yet.')}
+                    {t('inventory.restock.empty')}
                   </td>
                 </tr>
               )}
@@ -884,7 +917,7 @@ export default function Inventory() {
             <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
               <div className="modal-hdr">
                 <span className="modal-title">
-                  {t('inventory.restock.modal.title_add', 'Add Restock')} <em>{t('inventory.restock.modal.title_add_em', 'Entry')}</em>
+                  {t('inventory.restock.modal.title_add')} <em>{t('inventory.restock.modal.title_add_em')}</em>
                 </span>
                 <span className="modal-close" onClick={() => setShowRestockModal(false)}>
                   <span className="material-symbols-outlined">close</span>
@@ -910,7 +943,7 @@ export default function Inventory() {
               )}
               <div className="modal-footer">
                 <button className="btn btn-outline" onClick={() => setShowRestockModal(false)}>{t('common.cancel')}</button>
-                <button className="btn btn-primary" disabled={!restockGrid.productId || submitting} onClick={submitRestockGrid}>{t('inventory.restock.modal.submit_add', 'Add Restock')}</button>
+                <button className="btn btn-primary" disabled={!restockGrid.productId || submitting} onClick={submitRestockGrid}>{t('inventory.restock.modal.submit_add')}</button>
               </div>
             </div>
           </div>
@@ -924,7 +957,7 @@ export default function Inventory() {
             <div className="inv-success-emoji">✅</div>
             <div className="inv-success-title">
               {restockSuccess === 'decrease'
-                ? <>{t('inventory.stock_updated.title', 'Stock')} <em>{t('inventory.stock_updated.title_em', 'Updated')}</em></>
+                ? <>{t('inventory.stock_updated.title')} <em>{t('inventory.stock_updated.title_em')}</em></>
                 : <>{t('inventory.restock_success.title')} <em>{t('inventory.restock_success.title_em')}</em></>}
             </div>
             <div className="inv-success-sub">{t('inventory.restock_success.message')}</div>
@@ -939,18 +972,18 @@ export default function Inventory() {
           <div className="modal modal-sm inv-success-modal" onClick={e => e.stopPropagation()}>
             <div className="inv-success-emoji">⚠️</div>
             <div className="inv-success-title">
-              {t('inventory.decrease_confirm.title', 'Confirm Stock')} <em>{t('inventory.decrease_confirm.title_em', 'Decrease')}</em>
+              {t('inventory.decrease_confirm.title')} <em>{t('inventory.decrease_confirm.title_em')}</em>
             </div>
             <div className="inv-success-sub">
               {decreaseConfirm.items.map(i => (
                 <div key={i.variantId}>
-                  {t('inventory.decrease_confirm.line', '{{product}} — {{variant}}: {{from}} → {{to}} units.', { product: i.productName, variant: i.variantLabel, from: i.oldQty, to: i.newQty })}
+                  {t('inventory.decrease_confirm.line', { product: i.productName, variant: i.variantLabel, from: i.oldQty, to: i.newQty })}
                 </div>
               ))}
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setDecreaseConfirm(null)}>{t('common.cancel')}</button>
-              <button className="btn btn-primary" disabled={submitting} onClick={submitDecreaseConfirm}>{t('inventory.decrease_confirm.proceed', 'Yes, Proceed')}</button>
+              <button className="btn btn-primary" disabled={submitting} onClick={submitDecreaseConfirm}>{t('inventory.decrease_confirm.proceed')}</button>
             </div>
           </div>
         </div>

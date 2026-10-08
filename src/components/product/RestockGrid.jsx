@@ -28,14 +28,14 @@ export default function RestockGrid({ variants, values, onChange, warnThreshold 
   }
 
   if (!variants.length) {
-    return <div className="vs-empty">{t('restock_grid.no_variants', 'This product has no variants yet.')}</div>
+    return <div className="vs-empty">{t('restock_grid.no_variants')}</div>
   }
 
   return (
     <table className="variant-tbl">
       <thead>
         <tr>
-          <th>{t('restock_grid.size', 'Size')}</th>
+          <th>{t('restock_grid.size')}</th>
           {colourList.map(c => (
             <th key={c || '—'} className="vs-colour-th">{c || '—'}</th>
           ))}

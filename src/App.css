@@ -2209,6 +2209,8 @@
 .pos-cust-walkin-link .btn-ghost:hover { color: var(--deep); }
 .pos-cust-walkin-link .material-symbols-outlined { font-size: 15px; }
 
+/* Wrapper only scopes Chrome autofill to the walk-in fields; no box of its own. */
+.pos-cust-walkin-form { display: contents; }
 .pos-cust-form {
   display: flex; flex-direction: column; gap: 10px;
   margin-bottom: 14px;

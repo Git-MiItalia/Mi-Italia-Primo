@@ -1,0 +1,128 @@
+{
+  "customers": {
+    "add_modal": {
+      "creating": "Creating…"
+    }
+  },
+  "showroom": {
+    "table": {
+      "discount": "Discount",
+      "default": "(default)",
+      "category": "Category"
+    },
+    "products": {
+      "no_match": "No products match this search or filter.",
+      "load_partial": "Only {{shown}} of {{total}} products loaded — reload the page to see the rest."
+    },
+    "filter": {
+      "all": "All",
+      "on": "On Showroom",
+      "off": "Off"
+    },
+    "bulk": {
+      "enable": "Enable selected",
+      "disable": "Disable selected",
+      "partial": "{{failed}} of {{total}} products could not be updated."
+    },
+    "banner": {
+      "live": "Your Showroom is live",
+      "not_live": "Your Showroom is not live yet",
+      "live_sub": "Verified wholesale buyers can discover your boutique and order at trade prices.",
+      "not_live_sub": "Switch on at least one product below to appear to wholesale buyers.",
+      "active": "Active",
+      "inactive": "Not live",
+      "paused": "Your Showroom is paused",
+      "paused_sub": "Wholesale buyers can't see your boutique or place new orders. Your product selection is kept.",
+      "status_paused": "Paused",
+      "paused_toast": "Showroom paused — buyers can no longer see your boutique",
+      "resumed": "Your Showroom is live again",
+      "err_pause": "Could not change your Showroom status. Please try again."
+    },
+    "terms": {
+      "label": "Payment terms",
+      "opt_50": "50% deposit / 50% before dispatch",
+      "opt_30": "30% deposit / 70% before dispatch",
+      "opt_100": "100% upfront",
+      "hint": "Applies to new orders. Orders already placed keep their terms."
+    },
+    "settings": {
+      "commission_title": "Mi Italia commission",
+      "commission_note": "on wholesale orders is set by the Mi Italia team and shown on each order in your Orders tab. It is separate from your consumer commission."
+    },
+    "moq": {
+      "edit": "Edit minimum order quantity",
+      "invalid": "Minimum order quantity must be a whole number of 1 or more, or empty for no minimum.",
+      "err_save": "Could not save the minimum order quantity. Please try again."
+    }
+  },
+  "products": {
+    "bulk": {
+      "showroom_off": "Remove from Showroom"
+    },
+    "bulk_showroom_off_partial": "{{failed}} of {{total}} could not be removed from Showroom.",
+    "bulk_showroom_partial": "{{failed}} of {{total}} could not be pushed to Showroom."
+  },
+  "orders": {
+    "ws": {
+      "received_via": "Received via Showroom · {{date}}",
+      "next_step": "Next step",
+      "no_action": "Nothing more to do on this order.",
+      "confirm_q": "{{action}}? The buyer will be notified.",
+      "updated": "Order updated — {{status}}",
+      "err_update": "Could not update this order. Please try again.",
+      "err_load": "Could not load this wholesale order.",
+      "carrier": "Carrier",
+      "tracking": "Tracking number",
+      "dispatch_hint": "The buyer is emailed the carrier and tracking number.",
+      "buyer": "Trade buyer",
+      "verified": "Verified wholesale buyer",
+      "items": "Items · wholesale pricing",
+      "units_one": "{{count}} unit",
+      "units_other": "{{count}} units",
+      "payment": "Payment · trade terms",
+      "subtotal": "Goods subtotal",
+      "commission": "Mi Italia commission ({{pct}}%)",
+      "payout": "Your payout",
+      "deposit": "Deposit",
+      "balance": "Balance",
+      "paid_full": "Paid in full",
+      "balance_due": "Balance due",
+      "payout_status": "Payout",
+      "paid_on": "Paid {{date}}",
+      "due": "due {{date}}",
+      "shipment": "Shipment",
+      "timeline": "Timeline",
+      "status": {
+        "submitted": "Submitted",
+        "confirmed": "Confirmed",
+        "in_production": "In production",
+        "dispatched": "Dispatched",
+        "delivered": "Delivered",
+        "cancelled": "Cancelled"
+      },
+      "action": {
+        "confirmed": "Confirm order",
+        "in_production": "Start production",
+        "dispatched": "Dispatch",
+        "delivered": "Mark delivered"
+      },
+      "pay": {
+        "pending": "Pending",
+        "invoiced": "Invoiced",
+        "paid": "Paid",
+        "overdue": "Overdue"
+      },
+      "empty": "No wholesale orders here yet.",
+      "err_list": "Could not load wholesale orders."
+    },
+    "source": {
+      "all": "All sources",
+      "showroom": "Showroom",
+      "online": "Consumer app",
+      "new": "{{count}} new"
+    },
+    "table": {
+      "source": "Source"
+    }
+  }
+}

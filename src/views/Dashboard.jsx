@@ -45,10 +45,33 @@ export default function Dashboard() {
     let cancelled = false
     apiFetch(`${API}/boutique/dashboard/stats`)
       .then(r => r.json())
-      .then(res => {
+      .then(async res => {
         // Every other view checks `success` before trusting `data`; this one
         // didn't, so an error payload silently became an empty dashboard.
         if (!res.success) throw new Error(res.message || 'dashboard/stats failed')
+
+        // dashboard/stats resolves the customer name from user_id only, so a
+        // POS sale — which links through customer_id instead — comes back with
+        // customer_name null and the table reads "Guest". GET /boutique/orders
+        // was fixed for exactly this and does carry the name, so borrow it for
+        // the rows that are missing one.
+        //
+        // Deliberately conditional: the moment dashboard/stats resolves POS
+        // names itself, `missing` is empty and this request stops being made.
+        // Nothing to remember to remove.
+        const orders  = res.data?.recentOrders ?? []
+        const missing = orders.some(o => !o.customer_name && !o.name)
+        if (missing) {
+          const byId = await apiFetch(`${API}/boutique/orders?limit=20`)
+            .then(r => r.json())
+            .then(r => new Map((r.data?.orders ?? []).map(o => [o.id, o.name])))
+            // A failure here just means the rows stay as "Guest" — the
+            // dashboard itself must not fail over a cosmetic lookup.
+            .catch(() => new Map())
+          res.data.recentOrders = orders.map(o =>
+            (o.customer_name ?? o.name) ? o : { ...o, customer_name: byId.get(o.id) ?? null })
+        }
+
         if (!cancelled) setStatsReq({ key: reqKey, data: res.data, failed: false })
       })
       .catch(() => {
@@ -217,9 +240,9 @@ export default function Dashboard() {
           <span className="material-symbols-outlined">inventory_2</span>
           <strong>{g.product}</strong> —{' '}
           {g.outOfStock
-            ? t('dashboard.out_of_stock_sizes', 'out of stock in {{sizes}}',
+            ? t('dashboard.out_of_stock_sizes',
                 { sizes: g.sizes.map(s => s.size).join(', ') })
-            : t('dashboard.low_stock_sizes', 'low stock: {{sizes}}',
+            : t('dashboard.low_stock_sizes',
                 { sizes: g.sizes.map(s => `${s.size} (${s.qty})`).join(', ') })}
         </div>
       ))}
@@ -232,7 +255,7 @@ export default function Dashboard() {
           {/* Today's Revenue change */}
           {stats.todayRevenueChangePct != null && (
             <div className={`stat-change ${stats.todayRevenueChangePct >= 0 ? 'up' : 'dn'}`}>
-              {stats.todayRevenueChangePct >= 0 ? '↑' : '↓'} {Math.abs(stats.todayRevenueChangePct)}% {t('dashboard.vs_yesterday', 'vs yesterday')}
+              {stats.todayRevenueChangePct >= 0 ? '↑' : '↓'} {Math.abs(stats.todayRevenueChangePct)}% {t('dashboard.vs_yesterday')}
             </div>
           )}
         </div>
@@ -247,7 +270,7 @@ export default function Dashboard() {
           {/* Products change */}
           {stats.productsAddedThisWeek != null && (
             <div className={`stat-change ${stats.productsAddedThisWeek >= 0 ? 'up' : 'dn'}`}>
-              {stats.productsAddedThisWeek >= 0 ? '↑' : '↓'} {Math.abs(stats.productsAddedThisWeek)} {t('dashboard.this_week', 'this week')}
+              {stats.productsAddedThisWeek >= 0 ? '↑' : '↓'} {Math.abs(stats.productsAddedThisWeek)} {t('dashboard.this_week')}
             </div>
           )}
         </div>
@@ -257,7 +280,7 @@ export default function Dashboard() {
           {/* Pickup rate change */}
           {stats.pickupRateChangePts != null && (
             <div className={`stat-change ${stats.pickupRateChangePts >= 0 ? 'up' : 'dn'}`}>
-              {stats.pickupRateChangePts >= 0 ? '↑' : '↓'} {Math.abs(stats.pickupRateChangePts)}pts {t('dashboard.this_month', 'this month')}
+              {stats.pickupRateChangePts >= 0 ? '↑' : '↓'} {Math.abs(stats.pickupRateChangePts)}pts {t('dashboard.this_month')}
             </div>
           )}
         </div>
@@ -291,7 +314,7 @@ export default function Dashboard() {
                   <td className="db-order-id">#{String(o.id).slice(0, 8)}</td>
                   {/* A dash reads as missing data. These are till sales with no
                       customer attached, so say so — same wording as Orders. */}
-                  <td>{o.customer_name ?? o.name ?? <span className="db-guest">{t('dashboard.table.guest', 'Guest')}</span>}</td>
+                  <td>{o.customer_name ?? o.name ?? <span className="db-guest">{t('dashboard.table.guest')}</span>}</td>
                   <td>€{o.gross_amount}</td>
                   <td><span className={`status ${o.status}`}>{statusLabel(t, o.status)}</span></td>
                 </tr>
@@ -352,7 +375,7 @@ export default function Dashboard() {
       <div className="grid2">
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('dashboard.revenue', 'Revenue')} <em>{t('dashboard.this_week', 'this week')}</em></div>
+            <div className="card-title">{t('dashboard.revenue')} <em>{t('dashboard.this_week')}</em></div>
           </div>
           {revenueChart.length === 0 ? (
             <div className="db-chart-empty">
@@ -367,7 +390,7 @@ export default function Dashboard() {
                 {dayLabels.map((d, i) => <span key={i}>{d}</span>)}
               </div>
               <div className="db-chart-no-data">
-                {statsLoading ? t('common.loading') : t('dashboard.no_revenue', 'No revenue data yet')}
+                {statsLoading ? t('common.loading') : t('dashboard.no_revenue')}
               </div>
             </div>
           ) : (
@@ -393,14 +416,14 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('dashboard.looks_feed', 'Looks Feed')} <em>{t('dashboard.looks_feed_em', 'activity')}</em></div>
+            <div className="card-title">{t('dashboard.looks_feed')} <em>{t('dashboard.looks_feed_em')}</em></div>
           </div>
           <div className="grid2" style={{ gap:10, marginBottom:0 }}>
             {[
-              { val: looksActivity.communityLooks ?? '—', label:t('dashboard.community_looks', 'Community Looks'),  color:'var(--deep)'  },
-              { val: looksActivity.salesFromLooks ?? '—', label:t('dashboard.sales_from_looks', 'Sales from Looks'), color:'var(--green)' },
-              { val: looksActivity.tryOns30d      ?? '—', label:t('dashboard.tryons_30d', 'Try-Ons (30d)'),    color:'var(--deep)'  },
-              { val: looksActivity.looksRevenue != null ? `€${looksActivity.looksRevenue}` : '—', label:t('dashboard.looks_revenue', 'Looks Revenue'), color:'var(--gold)' },
+              { val: looksActivity.communityLooks ?? '—', label:t('dashboard.community_looks'),  color:'var(--deep)'  },
+              { val: looksActivity.salesFromLooks ?? '—', label:t('dashboard.sales_from_looks'), color:'var(--green)' },
+              { val: looksActivity.tryOns30d      ?? '—', label:t('dashboard.tryons_30d'),    color:'var(--deep)'  },
+              { val: looksActivity.looksRevenue != null ? `€${looksActivity.looksRevenue}` : '—', label:t('dashboard.looks_revenue'), color:'var(--gold)' },
             ].map(item => (
               <div key={item.label} className="db-looks-tile">
                 <div className="db-looks-val" style={{ color:item.color }}>{item.val}</div>

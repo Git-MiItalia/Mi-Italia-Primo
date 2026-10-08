@@ -1,0 +1,315 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * MOBILE LAYOUT — everything below 900px
+ *
+ * Loaded last so it wins ties against App.css / app-additions.css without
+ * needing !important. Apart from the one `display:none` that hides the
+ * hamburger, every rule in this file lives inside the media query, so a
+ * desktop browser parses it and applies nothing: primo.miitalia.com on a
+ * laptop renders byte-for-byte as it did before this file existed.
+ *
+ * The breakpoint is duplicated in lib/useIsMobile.js — change both together.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* Off by default: above the breakpoint the sidebar is always on screen, so
+   there is nothing for this button to open. */
+.mobile-nav-btn { display: none; }
+
+@media (max-width: 900px) {
+
+  /* ── Sidebar becomes an off-canvas drawer ───────────────────────────
+     It is already position:fixed, so sliding it out of view costs nothing
+     but a transform. `.collapsed` is neutralised here — Sidebar.jsx also
+     ignores the rail below the breakpoint, so the labels are rendered. */
+  .sidebar,
+  .sidebar.collapsed {
+    width: min(280px, 82vw);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 300;
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(10, 10, 10, 0.22);
+  }
+
+  /* The rail toggle has nothing to toggle inside a drawer. */
+  .sb-collapse-btn { display: none; }
+
+  .sb-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.42);
+    z-index: 299;
+  }
+
+  /* ── Main column takes the full width ─────────────────────────────────
+     min-width:0 is the load-bearing half. `.main` is a flex child of body,
+     and a flex item defaults to min-width:auto — it will not shrink below
+     its own min-content width. Without this the column stays as wide as the
+     widest table (787px measured on a 390px screen) and the whole page
+     scrolls sideways, which is most of what "clumsy on mobile" looked like. */
+  .main,
+  .main.sb-collapsed {
+    margin-left: 0;
+    min-width: 0;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────────
+     Title and actions on the first row, search dropped to its own row
+     underneath — a 200px search box beside a title does not fit 390px. */
+  .mobile-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-left: -8px;
+    padding: 0;
+    background: none;
+    color: var(--deep);
+    flex: none;
+  }
+  .mobile-nav-btn .material-symbols-outlined { font-size: 22px; }
+
+  .main-hdr {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .main-hdr-left { flex: 1; min-width: 0; }
+  .main-title {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .main-hdr-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .search-box {
+    order: 3;
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  /* ── Page gutter ────────────────────────────────────────────────────
+     24px of padding on each side eats 12% of a 390px screen. */
+  .content { padding: 14px; }
+  .card    { padding: 14px; margin-bottom: 14px; }
+
+  /* ── Grids collapse ─────────────────────────────────────────────────
+     Four KPI tiles at 390px are ~80px each, which is narrower than the
+     numbers in them. Two rows of two reads; one row of four does not. */
+  .stat-row,
+  .stat-row.col3,
+  .stat-row.col5   { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .grid2,
+  .grid3           { grid-template-columns: 1fr; gap: 14px; }
+  .inv-grid,
+  .photo-grid      { grid-template-columns: repeat(2, 1fr); }
+  .ai-model-grid   { grid-template-columns: repeat(4, 1fr); }
+
+  /* Collapsing the columns is only half of it. A grid item also defaults to
+     min-width:auto, so a `1fr` track still refuses to go narrower than its
+     content — the Orders detail panel held its column at 914px on a 390px
+     screen and `.content`'s overflow:clip quietly cut the rest off. */
+  .stat-row > *,
+  .grid2 > *,
+  .grid3 > *,
+  .inv-grid > *,
+  .photo-grid > * { min-width: 0; }
+
+  /* Same rule, flex edition: rows of cards and button groups that were laid
+     out nowrap on the assumption of a wide viewport. */
+  .fin-stripe-card,
+  .fin-plan-card,
+  .inv-topbar-actions,
+  .inv-table-controls,
+  .sub-ph-right,
+  .report-actions   { flex-wrap: wrap; min-width: 0; }
+
+  /* These two sub-navs already scroll sideways; they just bleed 24px past
+     each edge to sit flush with the desktop gutter, which is now 14px. */
+  .loc-subnav,
+  .crm-subnav {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    top: 0;
+  }
+
+  /* The Subscription sub-nav is a plain nowrap flex row, so it needs the
+     scrolling the other two already had. */
+  .sub-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sub-nav::-webkit-scrollbar { display: none; }
+  .sub-sni { flex: none; }
+
+  /* ── Rows that assumed a wide viewport ──────────────────────────────
+     Each of these is a nowrap flex row or a multi-column grid holding a
+     title on one side and controls on the other. Squeezed to 390px the
+     parent does not wrap, so it crushes one child to ~40px and that
+     child's own contents spill out under .content's overflow:clip —
+     visible as a form or a toolbar sliced off at the right edge. */
+  .inv-topbar,
+  .inv-table-hdr,
+  .threshold-row,
+  .report-card { flex-wrap: wrap; }
+
+  .inv-topbar > *,
+  .inv-table-hdr > *,
+  .threshold-row > *,
+  .report-card > * { min-width: 0; }
+
+  /* Shrinking the title's box is not enough — a long report name still runs
+     under the export button. Give the actions the next line to themselves. */
+  .report-actions { flex: 1 1 100%; justify-content: flex-start; }
+
+  .form-row2,
+  .form-row3,
+  .sub-usage-grid  { grid-template-columns: 1fr; }
+  .sub-plan-hero   { grid-template-columns: 1fr; padding: 20px 18px; gap: 16px; }
+
+  .form-row2 > *,
+  .form-row3 > *,
+  .sub-usage-grid > *,
+  .sub-plan-hero > * { min-width: 0; }
+
+  /* ── Tables scroll sideways instead of squashing ────────────────────
+     A card holding a data table becomes the scroll container and the table
+     keeps a readable minimum width. `.main` and `.content` are overflow-x:
+     clip, so this never turns into a page-level sideways scroll.
+
+     The named cards are listed as well as the :has() rule so the behaviour
+     does not depend on :has() support alone. */
+  .card:has(.tbl),
+  .prod-table-card,
+  .ord-table-card,
+  .res-table-card,
+  .loc-table-card,
+  .ct-table-card { overflow-x: auto; }
+
+  .card:has(.tbl) .tbl,
+  .prod-table-card .tbl,
+  .ord-table-card .tbl,
+  .res-table-card .tbl,
+  .loc-table-card .tbl,
+  .ct-table-card .tbl { min-width: 620px; }
+
+  /* Once the table scrolls sideways there is no reason to wrap a cell — a
+     product name broken across four lines is what made these unreadable. */
+  .card:has(.tbl) .tbl td,
+  .card:has(.tbl) .tbl th,
+  .prod-table-card .tbl td, .prod-table-card .tbl th,
+  .ord-table-card  .tbl td, .ord-table-card  .tbl th,
+  .res-table-card  .tbl td, .res-table-card  .tbl th,
+  .loc-table-card  .tbl td, .loc-table-card  .tbl th,
+  .ct-table-card   .tbl td, .ct-table-card   .tbl th { white-space: nowrap; }
+
+  /* A scroll container clips its absolutely positioned descendants, which
+     would swallow the Products row menu. position:fixed is not clipped by
+     an overflow ancestor, so the menu becomes a bottom sheet instead —
+     a better target on a phone than a 200px dropdown regardless. */
+  .pd-menu-overlay  { background: rgba(10, 10, 10, 0.42); z-index: 400; }
+  .pd-menu-dropdown {
+    position: fixed;
+    inset: auto 0 0 0;
+    min-width: 0;
+    z-index: 401;
+    border: none;
+    border-top: 1px solid var(--mist);
+    padding: 6px 0 14px;
+    box-shadow: 0 -8px 28px rgba(10, 10, 10, 0.18);
+  }
+  .pd-menu-item { padding: 14px 20px; font-size: 13px; }
+
+  /* ── Tab strips scroll rather than wrap into a ragged block ───────── */
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex: none; }
+
+  /* A tab strip sharing a row with an action button is a flex item with the
+     default min-width:auto, so it will not shrink and the button spills out
+     over it. Give the strip the whole row and drop the button underneath. */
+  .prod-topbar { flex-wrap: wrap; gap: 10px; }
+  .prod-topbar > .tabs { flex: 1 1 100%; min-width: 0; margin-bottom: 0; }
+  .prod-topbar > .btn { flex: none; }
+
+  /* ── Modals go full-screen ──────────────────────────────────────────
+     A centred 640px box at 95vw leaves a useless sliver of backdrop and
+     wastes the vertical space the keyboard is about to take. */
+  .modal,
+  .modal-sm,
+  .modal-lg {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    padding: 18px 16px;
+  }
+  .modal-footer { flex-direction: column-reverse; align-items: stretch; }
+  .modal-footer .btn { width: 100%; justify-content: center; }
+
+  /* ── POS ────────────────────────────────────────────────────────────
+     A tablet at the counter is a real way to run this, so the cart stays
+     beside the catalogue down to 700px — just narrower than the 420px it
+     gets on a desktop. Below that it stacks; see the block further down.
+     The product grid is left alone: `auto-fill minmax(150px, 1fr)` already
+     gives five columns on an iPad and two on a phone. */
+  .pos-body    { grid-template-columns: 1fr 320px; }
+  .pos-cat-hdr { padding: 12px 14px 10px; }
+
+  /* The topbar packs a brand, the store address, terminal status and five
+     labelled buttons into 54 fixed pixels; at 390px they pile on top of one
+     another. Everything that is repeated elsewhere on the screen goes, and
+     what is left is allowed a second row. The terminal dot stays — it is the
+     one thing here a cashier has to be able to see at a glance. */
+  .pos-topbar {
+    height: auto;
+    min-height: 52px;
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .pos-tb-left  { gap: 10px; min-width: 0; flex: 1 1 auto; }
+  .pos-tb-right { flex-wrap: wrap; gap: 6px; }
+
+  /* Store name and address are already on the receipt and in the drawer. */
+  .pos-tb-store      { display: none; }
+  .pos-tb-brand-sep,
+  .pos-tb-brand-mode { display: none; }
+
+  /* Keep the status dot, drop the words next to it. */
+  .pos-tb-terminal span:not(.pos-ts-dot) { display: none; }
+  .pos-tb-terminal { padding: 4px 7px; gap: 0; }
+
+  .pos-tb-staff-name { display: none; }
+  .pos-tb-staff-wrap { margin-left: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * PHONES ONLY — below the narrowest width a cart can sit beside a catalogue
+ * ═══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 700px) {
+
+  /* Both rows size to their content and `.pos-body` becomes the one
+     scroller. With `1fr auto` the cart's natural height ate the catalogue
+     and left the product tiles about 20px tall. */
+  .pos-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
+  .pos-catalog      { overflow: visible; }
+  .pos-product-grid { overflow-y: visible; }
+  .pos-cart-panel   { overflow: visible; border-left: none; border-top: 1px solid var(--mist); }
+}

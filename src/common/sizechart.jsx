@@ -360,8 +360,8 @@ export default function SizeChart({ l1, l2, l3 }) {
     <div className="sizechart-wrap">
       <div className="sizechart-hdr">
         <span className="material-symbols-outlined sizechart-icon">straighten</span>
-        <span className="sizechart-title">{t('sizechart.title', 'Size Chart')}</span>
-        <span className="sizechart-unit">{t('sizechart.unit', 'All measurements in cm')}</span>
+        <span className="sizechart-title">{t('sizechart.title')}</span>
+        <span className="sizechart-unit">{t('sizechart.unit')}</span>
       </div>
       <div className="sizechart-tbl-wrap">
         <table className="sizechart-tbl">

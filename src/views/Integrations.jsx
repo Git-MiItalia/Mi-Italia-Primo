@@ -8,6 +8,7 @@ import CategorySelectorDropdown from '../components/product/CategorySelectorDrop
 import { useCategoryTree, findDivision, findType, findStyle } from '../lib/categoryTree'
 import Toast, { useToast } from '../components/ui/Toast'
 import * as shopify from '../lib/shopifyIntegration'
+import Toggle from '../components/ui/Toggle'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -115,7 +116,7 @@ export default function Integrations() {
       setConn(record)
       startImport(record)
     } catch (err) {
-      show(errMsg(err, t('integrations.toast.connect_failed', 'Could not connect to Shopify. Check the store domain and access token.')), 'error')
+      show(errMsg(err, t('integrations.toast.connect_failed')), 'error')
     } finally {
       setConnecting(false)
     }
@@ -131,7 +132,7 @@ export default function Integrations() {
 
   async function finishImport(result) {
     if (result?.__error) {
-      show(errMsg(result.__error, t('integrations.toast.sync_failed', 'Connected, but could not sync product types from Shopify.')), 'error')
+      show(errMsg(result.__error, t('integrations.toast.sync_failed')), 'error')
       setStep(null)
       return
     }
@@ -141,7 +142,7 @@ export default function Integrations() {
     setMapFilter('all')
     setMapOpenIdx(null)
     setStep('mapping')
-    show(t('integrations.toast.imported', 'Catalogue imported. Now match your categories.'), 'success')
+    show(t('integrations.toast.imported'), 'success')
   }
 
   // ── Mapping step ──
@@ -158,7 +159,7 @@ export default function Integrations() {
       setMapOpenIdx(null)
       setStep('mapping')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     }
   }
 
@@ -195,7 +196,7 @@ export default function Integrations() {
         reasonLine: null,
       }))
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     } finally {
       setMapBusy(false)
     }
@@ -207,10 +208,10 @@ export default function Integrations() {
       setConn(c => c ? { ...c, mapping: rows, productCount: stats.products } : c)
       setStep(null)
       show(stats.review > 0
-        ? t('integrations.toast.mapping_some', 'products still need a category', { count: stats.review, defaultValue: '{{count}} products still need a category' })
-        : t('integrations.toast.mapping_all', 'All products are categorised'), 'success')
+        ? t('integrations.toast.mapping_some', { count: stats.review, defaultValue: '{{count}} products still need a category' })
+        : t('integrations.toast.mapping_all'), 'success')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     }
   }
 
@@ -244,9 +245,9 @@ export default function Integrations() {
         record = await shopify.setWriteback(conn.id, writeback, keep)
       }
       setConn(record)
-      show(t('integrations.toast.saved', 'Your Shopify settings are updated.'), 'success')
+      show(t('integrations.toast.saved'), 'success')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     } finally {
       setSaving(false)
     }
@@ -259,9 +260,9 @@ export default function Integrations() {
     try {
       const { stats, rows } = await shopify.syncTypes(conn.id)
       setConn(c => c ? { ...c, mapping: rows, productCount: stats.products, lastSyncAt: new Date().toISOString() } : c)
-      show(t('integrations.toast.sync_started', 'Re-checking Shopify for changes.'), 'success')
+      show(t('integrations.toast.sync_started'), 'success')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     }
   }
 
@@ -270,9 +271,9 @@ export default function Integrations() {
       await shopify.disconnect(locationId)
       setConn(null)
       setStep(null)
-      show(t('integrations.toast.disconnected', 'Shopify access has been removed.'), 'info')
+      show(t('integrations.toast.disconnected'), 'info')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     }
   }
 
@@ -297,9 +298,9 @@ export default function Integrations() {
     setCustomersBusy(true)
     try {
       const { merged, created } = await shopify.importCustomers(conn.id)
-      show(t('integrations.toast.customers_imported', '{{created}} new, {{merged}} matched to existing customers', { created, merged, defaultValue: '{{created}} new, {{merged}} matched to existing customers' }), 'success')
+      show(t('integrations.toast.customers_imported', { created, merged, defaultValue: '{{created}} new, {{merged}} matched to existing customers' }), 'success')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     } finally {
       setCustomersBusy(false)
     }
@@ -310,9 +311,9 @@ export default function Integrations() {
     try {
       const { rows } = await shopify.syncOrders(conn.id)
       setOrders(rows)
-      show(t('integrations.toast.orders_synced', 'Orders synced from Shopify.'), 'success')
+      show(t('integrations.toast.orders_synced'), 'success')
     } catch (err) {
-      show(errMsg(err, t('common.error', 'Something went wrong.')), 'error')
+      show(errMsg(err, t('common.error')), 'error')
     } finally {
       setOrdersSyncing(false)
     }
@@ -335,19 +336,19 @@ export default function Integrations() {
         <div className="shp-wrap">
           <div className="card">
             <div className="card-hdr">
-              <div className="card-title">{t('integrations.location_picker.title', 'Boutique')} <em>{t('integrations.location_picker.title_em', 'location')}</em></div>
+              <div className="card-title">{t('integrations.location_picker.title')} <em>{t('integrations.location_picker.title_em')}</em></div>
             </div>
             {locations.length === 0 ? (
               <div className="alert alert-warn shp-alert-link" role="button" tabIndex={0}
                 onClick={() => navigate('/locations/new')}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') navigate('/locations/new') }}>
                 <span className="material-symbols-outlined">info</span>
-                {t('integrations.location_picker.none', 'Add a boutique location first, then connect its Shopify store.')}
-                <span className="shp-alert-link-cta">{t('integrations.location_picker.add_btn', 'Add location')}<span className="material-symbols-outlined">arrow_forward</span></span>
+                {t('integrations.location_picker.none')}
+                <span className="shp-alert-link-cta">{t('integrations.location_picker.add_btn')}<span className="material-symbols-outlined">arrow_forward</span></span>
               </div>
             ) : (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-lbl">{t('integrations.location_picker.select_lbl', 'Connecting Shopify for')}</label>
+                <label className="form-lbl">{t('integrations.location_picker.select_lbl')}</label>
                 <select className="form-select" value={locationId} onChange={e => setLocationId(e.target.value)}>
                   {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -386,11 +387,11 @@ function NotConnectedHero({ t, onConnect }) {
       <div className="shp-logo">S</div>
       <div className="shp-hero-body">
         <div className="shp-hero-name">Shopify</div>
-        <div className="shp-hero-desc">{t('integrations.hero.desc', 'Mirror your catalogue, orders, and customers. Fulfil online orders and sell stock from Primo POS.')}</div>
-        <div className="shp-status off"><span className="shp-status-dot" />{t('integrations.status.not_connected', 'Not connected')}</div>
+        <div className="shp-hero-desc">{t('integrations.hero.desc')}</div>
+        <div className="shp-status off"><span className="shp-status-dot" />{t('integrations.status.not_connected')}</div>
       </div>
       <button className="btn btn-primary" onClick={onConnect}>
-        {t('integrations.hero.connect_btn', 'Connect')}<span className="material-symbols-outlined">arrow_forward</span>
+        {t('integrations.hero.connect_btn')}<span className="material-symbols-outlined">arrow_forward</span>
       </button>
     </div>
   )
@@ -400,61 +401,61 @@ function ConnectStep({ t, show, currentLocation, domain, setDomain, accessToken,
   function handleContinue() {
     const shop = normaliseShop(domain)
     if (!shop) {
-      show(t('integrations.toast.domain_required', 'Enter the Shopify store domain to continue.'), 'error')
+      show(t('integrations.toast.domain_required'), 'error')
       return
     }
     if (!isShopHandle(shop)) {
-      show(t('integrations.toast.domain_invalid', 'That is not a Shopify store domain. Use just the store handle — the part before .myshopify.com in your Shopify Admin address, such as sartoria-belloni. Not an email address or a web address.'), 'error')
+      show(t('integrations.toast.domain_invalid'), 'error')
       return
     }
     // Write the cleaned handle back, so what is sent is what is shown.
     if (shop !== domain) setDomain(shop)
     if (!accessToken.trim()) {
-      show(t('integrations.toast.token_required', 'Enter the Shopify Admin API access token to continue.'), 'error')
+      show(t('integrations.toast.token_required'), 'error')
       return
     }
     onContinue()
   }
   return (
     <div className="shp-wrap">
-      <div className="shp-context">{t('integrations.context.connecting_for', 'Connecting Shopify for')} <strong>{currentLocation?.name}</strong></div>
+      <div className="shp-context">{t('integrations.context.connecting_for')} <strong>{currentLocation?.name}</strong></div>
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('integrations.connect.title', 'Connect')} <em>{t('integrations.connect.title_em', 'Shopify')}</em></div>
+          <div className="card-title">{t('integrations.connect.title')} <em>{t('integrations.connect.title_em')}</em></div>
         </div>
         <div className="form-group">
-          <label className="form-lbl">{t('integrations.connect.domain_lbl', 'Shopify store domain')}</label>
+          <label className="form-lbl">{t('integrations.connect.domain_lbl')}</label>
           <div className="shp-domain-group">
             <input className="form-input shp-domain-input" value={domain} onChange={e => setDomain(e.target.value)} placeholder={slugify(currentLocation?.name) || 'sartoria-belloni'} />
             <span className="shp-domain-suffix">.myshopify.com</span>
           </div>
-          <div className="shp-hint" style={{ marginTop: 6 }}>{t('integrations.connect.domain_hint', 'The real domain of the Shopify store you’re connecting — not a suggestion. Find it in that store’s Shopify Admin URL.')}</div>
+          <div className="shp-hint" style={{ marginTop: 6 }}>{t('integrations.connect.domain_hint')}</div>
         </div>
 
         <div className="form-group">
-          <label className="form-lbl">{t('integrations.connect.token_lbl', 'Admin API access token')}</label>
+          <label className="form-lbl">{t('integrations.connect.token_lbl')}</label>
           <input className="form-input" type="password" autoComplete="off" value={accessToken} onChange={e => setAccessToken(e.target.value)} placeholder="shpat_..." />
-          <div className="shp-hint" style={{ marginTop: 6 }}>{t('integrations.connect.token_hint', 'From this store’s Shopify Admin, under Settings › Apps and sales channels › Develop apps. Primo stores this token to read and, if enabled below, write to your store.')}</div>
+          <div className="shp-hint" style={{ marginTop: 6 }}>{t('integrations.connect.token_hint')}</div>
         </div>
 
-        <div className="form-lbl" style={{ marginTop: 20 }}>{t('integrations.writeback.header', 'Primo POS write-back')}</div>
+        <div className="form-lbl" style={{ marginTop: 20 }}>{t('integrations.writeback.header')}</div>
         <ScopeRow
           on={scopes.fulfil} onClick={() => toggleScope('fulfil')}
-          label={t('integrations.scope.fulfil_lbl', 'Fulfil online orders from POS')}
-          sub={t('integrations.scope.fulfil_sub', 'Requests the write_fulfillments permission so staff can fulfil online orders at the till.')}
+          label={t('integrations.scope.fulfil_lbl')}
+          sub={t('integrations.scope.fulfil_sub')}
         />
         <ScopeRow
           on={scopes.inv} onClick={() => toggleScope('inv')}
-          label={t('integrations.scope.inv_lbl', 'Keep Shopify stock accurate on POS sales')}
-          sub={t('integrations.scope.inv_sub', 'Requests the write_inventory permission so a walk-in sale decrements the matching Shopify quantity.')}
+          label={t('integrations.scope.inv_lbl')}
+          sub={t('integrations.scope.inv_sub')}
         />
 
-        <div className="shp-hint">{t('integrations.connect.hint', 'Read access is always used so Primo can mirror your store. The two permissions above are the only writes — leave them on unless this location never sells or fulfils from Primo POS.')}</div>
+        <div className="shp-hint">{t('integrations.connect.hint')}</div>
 
         <div className="shp-actions">
-          <button className="btn btn-outline" onClick={() => setStep(null)}>{t('common.cancel', 'Cancel')}</button>
+          <button className="btn btn-outline" onClick={() => setStep(null)}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={handleContinue}>
-            {t('integrations.connect.continue_btn', 'Continue')}<span className="material-symbols-outlined">arrow_forward</span>
+            {t('integrations.connect.continue_btn')}<span className="material-symbols-outlined">arrow_forward</span>
           </button>
         </div>
       </div>
@@ -469,7 +470,7 @@ function ScopeRow({ on, onClick, label, sub }) {
         <div className="shp-scope-lbl">{label}</div>
         <div className="shp-scope-sub">{sub}</div>
       </div>
-      <div className={`toggle${on ? ' on' : ''}`}><div className="toggle-knob" /></div>
+      <Toggle on={on} />
     </div>
   )
 }
@@ -488,34 +489,34 @@ function ConsentStep({ t, domain, scopes, toggleScope, setStep, connecting, onIn
         <div className="shp-consent-bar"><span className="shp-consent-sf">S</span>{domain || 'your-store'}.myshopify.com</div>
         <div className="shp-consent-body">
           <div className="shp-consent-hdr">
-            {t('integrations.consent.title', 'Review before connecting')}
+            {t('integrations.consent.title')}
           </div>
-          <div className="shp-consent-h">{t('integrations.consent.h', 'Primo will access this store with')}</div>
-          <div className="shp-consent-p">{t('integrations.consent.p', 'the permissions below:')}</div>
+          <div className="shp-consent-h">{t('integrations.consent.h')}</div>
+          <div className="shp-consent-p">{t('integrations.consent.p')}</div>
 
           <div className="shp-perm shp-perm-req">
             <span className="material-symbols-outlined">visibility</span>
-            <div className="shp-perm-txt">{t('integrations.perm.read', 'Read products, inventory, orders, customers, and locations')}</div>
-            <span className="shp-perm-tag">{t('integrations.perm.required', 'Required')}</span>
+            <div className="shp-perm-txt">{t('integrations.perm.read')}</div>
+            <span className="shp-perm-tag">{t('integrations.perm.required')}</span>
           </div>
           <PermToggle on={scopes.fulfil} onClick={() => toggleScope('fulfil')}
-            b={t('integrations.perm.fulfil_b', 'Write fulfilments')}
-            desc={t('integrations.perm.fulfil_t', 'so you can fulfil online orders from Primo POS')} />
+            b={t('integrations.perm.fulfil_b')}
+            desc={t('integrations.perm.fulfil_t')} />
           <PermToggle on={scopes.inv} onClick={() => toggleScope('inv')}
-            b={t('integrations.perm.inv_b', 'Write inventory')}
-            desc={t('integrations.perm.inv_t', 'so walk-in POS sales keep your Shopify stock accurate')} />
+            b={t('integrations.perm.inv_b')}
+            desc={t('integrations.perm.inv_t')} />
 
           <div className="shp-consent-note">
             {readOnly
-              ? t('integrations.perm.readonly', 'Read-only access. Primo will mirror this store but cannot fulfil orders or adjust stock from POS. You can enable that later by reconnecting.')
-              : t('integrations.perm.tap', 'Tap a write permission to include or exclude it.')}
+              ? t('integrations.perm.readonly')
+              : t('integrations.perm.tap')}
           </div>
-          <div className="shp-consent-note">{t('integrations.consent.note', 'You can revoke access anytime by disconnecting in Primo.')}</div>
+          <div className="shp-consent-note">{t('integrations.consent.note')}</div>
 
           <div className="shp-actions">
-            <button className="btn btn-outline" disabled={connecting} onClick={() => setStep('connect')}>{t('common.cancel', 'Cancel')}</button>
+            <button className="btn btn-outline" disabled={connecting} onClick={() => setStep('connect')}>{t('common.cancel')}</button>
             <button className="btn btn-primary" disabled={connecting} onClick={onInstall}>
-              {connecting ? t('integrations.consent.connecting_btn', 'Connecting…') : t('integrations.consent.install_btn', 'Connect')}
+              {connecting ? t('integrations.consent.connecting_btn') : t('integrations.consent.install_btn')}
               {!connecting && <span className="material-symbols-outlined">check</span>}
             </button>
           </div>
@@ -530,7 +531,7 @@ function PermToggle({ on, onClick, b, desc }) {
     <div className={`shp-perm shp-perm-tog${on ? '' : ' off'}`} onClick={onClick}>
       <span className="material-symbols-outlined">edit</span>
       <div className="shp-perm-txt"><span className="shp-perm-strong">{b}</span> {desc}</div>
-      <div className={`toggle${on ? ' on' : ''}`}><div className="toggle-knob" /></div>
+      <Toggle on={on} />
     </div>
   )
 }
@@ -540,8 +541,8 @@ function ImportingStep({ t }) {
     <div className="shp-wrap">
       <div className="card">
         <div className="shp-import-icon"><span className="material-symbols-outlined spin">cloud_sync</span></div>
-        <div className="card-title" style={{ marginBottom: 6 }}>{t('integrations.import.title', 'Connected. Importing your')} <em>{t('integrations.import.title_em', 'catalogue')}</em></div>
-        <div className="shp-hint" style={{ marginTop: 0 }}>{t('integrations.import.sub', 'This runs in the background. When it finishes you will confirm how your Shopify types map to Mi Italia categories.')}</div>
+        <div className="card-title" style={{ marginBottom: 6 }}>{t('integrations.import.title')} <em>{t('integrations.import.title_em')}</em></div>
+        <div className="shp-hint" style={{ marginTop: 0 }}>{t('integrations.import.sub')}</div>
       </div>
     </div>
   )
@@ -553,9 +554,9 @@ function MappingStep({ t, mapRows, mapFilter, setMapFilter, mapOpenIdx, setMapOp
   const mappedCount = mapRows.length - reviewCount
 
   const tabs = [
-    { k: 'all',    label: t('integrations.mapping.tab_all', 'All types'), n: mapRows.length },
-    { k: 'review', label: t('integrations.mapping.tab_review', 'Need a category'), n: reviewCount },
-    { k: 'mapped', label: t('integrations.mapping.tab_mapped', 'Mapped'), n: mappedCount },
+    { k: 'all',    label: t('integrations.mapping.tab_all'), n: mapRows.length },
+    { k: 'review', label: t('integrations.mapping.tab_review'), n: reviewCount },
+    { k: 'mapped', label: t('integrations.mapping.tab_mapped'), n: mappedCount },
   ]
   const visible = mapRows
     .map((r, i) => ({ r, i }))
@@ -563,19 +564,19 @@ function MappingStep({ t, mapRows, mapFilter, setMapFilter, mapOpenIdx, setMapOp
 
   return (
     <div className="shp-wrap shp-wrap-wide">
-      <div className="card-title" style={{ marginBottom: 4 }}>{t('integrations.mapping.title', 'Match your')} <em>{t('integrations.mapping.title_em', 'categories')}</em></div>
+      <div className="card-title" style={{ marginBottom: 4 }}>{t('integrations.mapping.title')} <em>{t('integrations.mapping.title_em')}</em></div>
       <div className="shp-hint" style={{ marginTop: 0, marginBottom: 18 }}>
-        {t('integrations.mapping.sub', 'Shopify organises products its own way. Confirm how each Shopify product type maps into your Mi Italia categories. Set it once per type and it applies to every product in that type, now and on every future sync.')}
+        {t('integrations.mapping.sub')}
       </div>
 
       <div className="card shp-map-summary">
-        <div className="shp-map-stat"><span className="n">{fmt(totals.products)}</span><span className="l">{t('integrations.mapping.stat_products', 'Products')}</span></div>
+        <div className="shp-map-stat"><span className="n">{fmt(totals.products)}</span><span className="l">{t('integrations.mapping.stat_products')}</span></div>
         <div className="shp-map-sep" />
-        <div className="shp-map-stat"><span className="n">{fmt(totals.types)}</span><span className="l">{t('integrations.mapping.stat_types', 'Product types')}</span></div>
+        <div className="shp-map-stat"><span className="n">{fmt(totals.types)}</span><span className="l">{t('integrations.mapping.stat_types')}</span></div>
         <div className="shp-map-sep" />
-        <div className="shp-map-stat ok"><span className="n">{fmt(totals.mapped)}</span><span className="l">{t('integrations.mapping.stat_mapped', 'Mapped')}</span></div>
+        <div className="shp-map-stat ok"><span className="n">{fmt(totals.mapped)}</span><span className="l">{t('integrations.mapping.stat_mapped')}</span></div>
         <div className="shp-map-sep" />
-        <div className="shp-map-stat warn"><span className="n">{fmt(totals.review)}</span><span className="l">{t('integrations.mapping.stat_review', 'Need a category')}</span></div>
+        <div className="shp-map-stat warn"><span className="n">{fmt(totals.review)}</span><span className="l">{t('integrations.mapping.stat_review')}</span></div>
       </div>
 
       <div className="shp-map-tabs">
@@ -587,13 +588,13 @@ function MappingStep({ t, mapRows, mapFilter, setMapFilter, mapOpenIdx, setMapOp
       </div>
 
       <div className="shp-map-head">
-        <div>{t('integrations.mapping.col_type', 'Shopify product type')}</div><div />
-        <div>{t('integrations.mapping.col_cat', 'Mi Italia category')}</div>
-        <div>{t('integrations.mapping.col_status', 'Status')}</div><div />
+        <div>{t('integrations.mapping.col_type')}</div><div />
+        <div>{t('integrations.mapping.col_cat')}</div>
+        <div>{t('integrations.mapping.col_status')}</div><div />
       </div>
       <div className="card shp-map-list">
         {visible.length === 0 && (
-          <div className="shp-map-empty">{t('integrations.mapping.empty', 'Nothing here. Every type in this view is handled.')}</div>
+          <div className="shp-map-empty">{t('integrations.mapping.empty')}</div>
         )}
         {visible.map(({ r, i }) => (
           <MapRow key={r.id ?? i} r={r} i={i} open={mapOpenIdx === i} busy={mapBusy}
@@ -606,12 +607,12 @@ function MappingStep({ t, mapRows, mapFilter, setMapFilter, mapOpenIdx, setMapOp
       <div className="shp-map-foot">
         <div className="shp-map-note">
           {totals.review > 0
-            ? <><span className="material-symbols-outlined">error</span>{t('integrations.mapping.note_review', 'products stay in Needs category until their type is mapped.', { count: totals.review, defaultValue: '{{count}} products stay in Needs category until their type is mapped.' })}</>
-            : <><span className="material-symbols-outlined" style={{ color: 'var(--green)' }}>check_circle</span>{t('integrations.mapping.note_ok', 'Every product has a category.')}</>}
+            ? <><span className="material-symbols-outlined">error</span>{t('integrations.mapping.note_review', { count: totals.review, defaultValue: '{{count}} products stay in Needs category until their type is mapped.' })}</>
+            : <><span className="material-symbols-outlined" style={{ color: 'var(--green)' }}>check_circle</span>{t('integrations.mapping.note_ok')}</>}
         </div>
         <div className="shp-actions" style={{ margin: 0 }}>
-          <button className="btn btn-outline" onClick={onCancel}>{t('common.cancel', 'Cancel')}</button>
-          <button className="btn btn-primary" onClick={onApply}>{t('integrations.mapping.apply_btn', 'Apply mapping & finish')}<span className="material-symbols-outlined">check</span></button>
+          <button className="btn btn-outline" onClick={onCancel}>{t('common.cancel')}</button>
+          <button className="btn btn-primary" onClick={onApply}>{t('integrations.mapping.apply_btn')}<span className="material-symbols-outlined">check</span></button>
         </div>
       </div>
     </div>
@@ -622,20 +623,20 @@ function MapRow({ r, open, busy, onToggle, onSetCategory, t }) {
   const mapped = shopify.isMapped(r)
   const status = r.status ?? (!mapped ? 'review' : 'auto')
   const chip = status === 'auto'
-    ? <span className="shp-chip auto"><span className="dot" />{t('integrations.mapping.chip_auto', 'Auto')}</span>
+    ? <span className="shp-chip auto"><span className="dot" />{t('integrations.mapping.chip_auto')}</span>
     : status === 'over'
-      ? <span className="shp-chip over"><span className="dot" />{t('integrations.mapping.chip_over', 'Overridden')}</span>
-      : <span className="shp-chip review"><span className="dot" />{t('integrations.mapping.chip_review', 'Needs category')}</span>
+      ? <span className="shp-chip over"><span className="dot" />{t('integrations.mapping.chip_over')}</span>
+      : <span className="shp-chip review"><span className="dot" />{t('integrations.mapping.chip_review')}</span>
 
   // categoryName/typeName are the Division/Category display names; styleSlug
   // is a raw slug (e.g. "mini"), not a display name — the mapping API has
   // no Style display-name field yet, so overridden rows show the slug as-is.
   const path = mapped
     ? <div className="shp-map-path">{r.categoryName}<span className="sep">›</span>{r.typeName}{r.styleSlug && <><span className="sep">›</span><span className="item">{r.styleSlug}</span></>}</div>
-    : <div className="shp-map-path unset">{t('integrations.mapping.not_set', 'Not set')}</div>
+    : <div className="shp-map-path unset">{t('integrations.mapping.not_set')}</div>
 
-  const actionLabel = open ? t('common.close', 'Close') : mapped ? t('common.change', 'Change') : t('integrations.mapping.resolve_btn', 'Resolve')
-  const typeLabel = r.shopifyProductType || t('integrations.mapping.no_type', 'no product type')
+  const actionLabel = open ? t('common.close') : mapped ? t('common.change') : t('integrations.mapping.resolve_btn')
+  const typeLabel = r.shopifyProductType || t('integrations.mapping.no_type')
 
   return (
     <div className="shp-map-row">
@@ -643,7 +644,7 @@ function MapRow({ r, open, busy, onToggle, onSetCategory, t }) {
         <div>
           <div className={`shp-type${!r.shopifyProductType ? ' blank' : ''}`}>{typeLabel}</div>
           <div className="shp-map-meta">
-            <span>{t('integrations.mapping.n_products', 'products', { count: r.productCount, defaultValue: '{{count}} products' })}</span>
+            <span>{t('integrations.mapping.n_products', { count: r.productCount, defaultValue: '{{count}} products' })}</span>
           </div>
           {r.reasonLine && !mapped && <div className="shp-map-reason"><span className="material-symbols-outlined">info</span>{r.reasonLine}</div>}
         </div>
@@ -656,7 +657,7 @@ function MapRow({ r, open, busy, onToggle, onSetCategory, t }) {
         <div className="shp-map-editor">
           <CategorySelectorDropdown onChange={onSetCategory} />
           <div className="shp-map-editor-foot">
-            <button className="btn btn-sm btn-outline" onClick={onToggle}>{t('common.done', 'Done')}</button>
+            <button className="btn btn-sm btn-outline" onClick={onToggle}>{t('common.done')}</button>
           </div>
         </div>
       )}
@@ -674,76 +675,76 @@ function ConnectedView({
 
   return (
     <>
-      <div className="card-title" style={{ marginBottom: 4 }}>{t('integrations.connected.title', 'Shopify')} <em>{t('integrations.connected.title_em', 'connected')}</em></div>
-      <div className="shp-hint" style={{ marginTop: 0, marginBottom: 18 }}>{t('integrations.connected.sub', 'Your store is mirrored and staying in sync. Choose how Primo POS writes back.')}</div>
+      <div className="card-title" style={{ marginBottom: 4 }}>{t('integrations.connected.title')} <em>{t('integrations.connected.title_em')}</em></div>
+      <div className="shp-hint" style={{ marginTop: 0, marginBottom: 18 }}>{t('integrations.connected.sub')}</div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.connected.block_connection', 'Connection')}</div>
+        <div className="shp-set-block-h">{t('integrations.connected.block_connection')}</div>
         <div className="card shp-health">
           <div className="shp-health-dot" />
           <div className="shp-health-body">
             {conn.domain}.myshopify.com
-            <div className="shp-health-sub">{t('integrations.connected.health_sub', 'Connected · {{count}} products · last synced {{when}}', { count: conn.productCount ?? 0, when: conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleString(activeLocale()) : t('integrations.connected.never_synced', 'never') })}</div>
+            <div className="shp-health-sub">{t('integrations.connected.health_sub', { count: conn.productCount ?? 0, when: conn.lastSyncAt ? new Date(conn.lastSyncAt).toLocaleString(activeLocale()) : t('integrations.connected.never_synced') })}</div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={onSyncNow}><span className="material-symbols-outlined">sync</span>{t('integrations.connected.sync_btn', 'Sync now')}</button>
+          <button className="btn btn-outline btn-sm" onClick={onSyncNow}><span className="material-symbols-outlined">sync</span>{t('integrations.connected.sync_btn')}</button>
         </div>
       </div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.connected.block_mapping', 'Category mapping')}</div>
+        <div className="shp-set-block-h">{t('integrations.connected.block_mapping')}</div>
         <div className="card shp-recap">
           <div className="shp-health-dot" style={{ background: totals.review > 0 ? 'var(--gold)' : 'var(--green)' }} />
           <div className="shp-health-body">
-            {t('integrations.connected.recap_title', 'Shopify types mapped to Mi Italia categories')}
+            {t('integrations.connected.recap_title')}
             <div className="shp-health-sub">
               {totals.review > 0
-                ? t('integrations.connected.recap_some', '{{types}} types mapped · {{n}} products in Needs category', { types: totals.types, n: totals.review })
-                : t('integrations.connected.recap_all', '{{types}} types mapped · all products categorised', { types: totals.types })}
+                ? t('integrations.connected.recap_some', { types: totals.types, n: totals.review })
+                : t('integrations.connected.recap_all', { types: totals.types })}
             </div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={onReviewMapping}><span className="material-symbols-outlined">tune</span>{t('integrations.connected.review_btn', 'Review mapping')}</button>
+          <button className="btn btn-outline btn-sm" onClick={onReviewMapping}><span className="material-symbols-outlined">tune</span>{t('integrations.connected.review_btn')}</button>
         </div>
       </div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.connected.block_customers', 'Customers')}</div>
+        <div className="shp-set-block-h">{t('integrations.connected.block_customers')}</div>
         <div className="card shp-recap">
           <div className="shp-health-dot" style={{ background: 'var(--green)' }} />
           <div className="shp-health-body">
-            {t('integrations.customers.title', 'Shopify customers mirrored into Primo')}
-            <div className="shp-health-sub">{t('integrations.customers.sub', 'Matched by email — existing Primo customers are linked, new ones are created.')}</div>
+            {t('integrations.customers.title')}
+            <div className="shp-health-sub">{t('integrations.customers.sub')}</div>
           </div>
           <button className="btn btn-outline btn-sm" disabled={customersBusy} onClick={onImportCustomers}>
             <span className="material-symbols-outlined">group</span>
-            {customersBusy ? t('common.syncing', 'Syncing') + '…' : t('integrations.customers.import_btn', 'Import customers')}
+            {customersBusy ? t('common.syncing') + '…' : t('integrations.customers.import_btn')}
           </button>
         </div>
       </div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.connected.block_orders', 'Orders')}</div>
+        <div className="shp-set-block-h">{t('integrations.connected.block_orders')}</div>
         <div className="card shp-health" style={{ marginBottom: 12 }}>
           <div className="shp-health-dot" />
           <div className="shp-health-body">
-            {t('integrations.orders.title', 'Online orders mirrored from Shopify')}
-            <div className="shp-health-sub">{t('integrations.orders.sub', '{{count}} orders mirrored', { count: orders?.length ?? 0 })}</div>
+            {t('integrations.orders.title')}
+            <div className="shp-health-sub">{t('integrations.orders.sub', { count: orders?.length ?? 0 })}</div>
           </div>
           <button className="btn btn-outline btn-sm" disabled={ordersSyncing} onClick={onSyncOrders}>
             <span className="material-symbols-outlined">sync</span>
-            {ordersSyncing ? t('common.syncing', 'Syncing') + '…' : t('integrations.orders.sync_btn', 'Sync orders')}
+            {ordersSyncing ? t('common.syncing') + '…' : t('integrations.orders.sync_btn')}
           </button>
         </div>
         {ordersLoading ? (
           <Loading className="ld-cell" />
         ) : !orders || orders.length === 0 ? (
-          <div className="card shp-order-empty">{t('integrations.orders.empty', 'No orders mirrored yet. Sync to pull them from Shopify.')}</div>
+          <div className="card shp-order-empty">{t('integrations.orders.empty')}</div>
         ) : (
           <>
             <div className="shp-order-head">
-              <div>{t('integrations.orders.col_order', 'Order')}</div>
-              <div>{t('integrations.orders.col_customer', 'Customer')}</div>
-              <div>{t('integrations.orders.col_items', 'Items')}</div>
-              <div>{t('integrations.orders.col_status', 'Status')}</div>
+              <div>{t('integrations.orders.col_order')}</div>
+              <div>{t('integrations.orders.col_customer')}</div>
+              <div>{t('integrations.orders.col_items')}</div>
+              <div>{t('integrations.orders.col_status')}</div>
             </div>
             <div className="card shp-order-list">
               {orders.map(o => (
@@ -753,8 +754,8 @@ function ConnectedView({
                   <div className="shp-order-items">{(o.line_items ?? []).map(li => `${li.qty}× ${li.sku}`).join(', ')}</div>
                   <div>
                     {o.fulfilled_at
-                      ? <span className="shp-chip fulfilled"><span className="dot" />{t('integrations.orders.status_fulfilled', 'Fulfilled')}</span>
-                      : <span className="shp-chip unfulfilled"><span className="dot" />{t('integrations.orders.status_unfulfilled', 'Unfulfilled')}</span>}
+                      ? <span className="shp-chip fulfilled"><span className="dot" />{t('integrations.orders.status_fulfilled')}</span>
+                      : <span className="shp-chip unfulfilled"><span className="dot" />{t('integrations.orders.status_unfulfilled')}</span>}
                   </div>
                 </div>
               ))}
@@ -764,43 +765,43 @@ function ConnectedView({
       </div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.connected.block_location', 'Location mapping')}</div>
+        <div className="shp-set-block-h">{t('integrations.connected.block_location')}</div>
         <div className="card">
           <div className="form-group">
-            <label className="form-lbl">{t('integrations.connected.loc_field1', 'This Shopify store is connected for')}</label>
+            <label className="form-lbl">{t('integrations.connected.loc_field1')}</label>
             <select className="form-select" value={currentLocation?.name ?? ''} disabled><option>{currentLocation?.name}</option></select>
           </div>
           <div className="form-group" style={{ marginBottom: 8 }}>
-            <label className="form-lbl">{t('integrations.connected.loc_field2', 'Sellable stock is held at Shopify location')}</label>
+            <label className="form-lbl">{t('integrations.connected.loc_field2')}</label>
             <select className="form-select" value={shopifyLocId} onChange={e => setShopifyLocId(e.target.value)} disabled={shopifyLocations.length === 0}>
-              {shopifyLocations.length === 0 && <option value="">{t('integrations.connected.loc_none', 'No locations available — reconnect to refresh')}</option>}
+              {shopifyLocations.length === 0 && <option value="">{t('integrations.connected.loc_none')}</option>}
               {shopifyLocations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </div>
-          <div className="shp-hint">{t('integrations.connected.loc_hint', 'Inventory Primo writes back is applied to this location. Getting this right prevents stock hitting the wrong shelf.')}</div>
+          <div className="shp-hint">{t('integrations.connected.loc_hint')}</div>
         </div>
       </div>
 
       <div className="shp-set-block">
-        <div className="shp-set-block-h">{t('integrations.writeback.header', 'Primo POS write-back')}</div>
+        <div className="shp-set-block-h">{t('integrations.writeback.header')}</div>
         <WritebackRow
           on={writeback.fulfil} granted={conn.scopes.fulfil} onClick={() => toggleWriteback('fulfil')}
-          label={t('integrations.wb.fulfil_lbl', 'Fulfil online orders from POS')}
-          sub={t('integrations.wb.fulfil_sub', 'Marking an online order done at the till reports the fulfilment to Shopify and notifies the customer.')}
-          lockText={t('integrations.scope.lock', 'Turned off. Disconnect, then reconnect and approve {{scope}}, to switch this on again.', { scope: 'write_fulfillments' })}
+          label={t('integrations.wb.fulfil_lbl')}
+          sub={t('integrations.wb.fulfil_sub')}
+          lockText={t('integrations.scope.lock', { scope: 'write_fulfillments' })}
         />
         <WritebackRow
           on={writeback.inv} granted={conn.scopes.inv} onClick={() => toggleWriteback('inv')}
-          label={t('integrations.wb.inv_lbl', 'Decrement Shopify stock on POS sales')}
-          sub={t('integrations.wb.inv_sub', 'A walk-in sale at the till lowers the matching Shopify quantity, so the same unit cannot sell twice.')}
-          rec={t('integrations.wb.inv_rec', 'Recommended. Without this, a walk-in and an online buyer can be promised the same item.')}
-          lockText={t('integrations.scope.lock', 'Turned off. Disconnect, then reconnect and approve {{scope}}, to switch this on again.', { scope: 'write_inventory' })}
+          label={t('integrations.wb.inv_lbl')}
+          sub={t('integrations.wb.inv_sub')}
+          rec={t('integrations.wb.inv_rec')}
+          lockText={t('integrations.scope.lock', { scope: 'write_inventory' })}
         />
       </div>
 
       <div className="shp-actions" style={{ justifyContent: 'space-between' }}>
-        <button className="btn btn-red" disabled={saving} onClick={onDisconnect}><span className="material-symbols-outlined">link_off</span>{t('integrations.connected.disconnect_btn', 'Disconnect')}</button>
-        <button className="btn btn-primary" disabled={saving} onClick={onSave}>{saving ? t('common.saving', 'Saving…') : t('integrations.connected.save_btn', 'Save changes')}</button>
+        <button className="btn btn-red" disabled={saving} onClick={onDisconnect}><span className="material-symbols-outlined">link_off</span>{t('integrations.connected.disconnect_btn')}</button>
+        <button className="btn btn-primary" disabled={saving} onClick={onSave}>{saving ? t('common.saving') : t('integrations.connected.save_btn')}</button>
       </div>
     </>
   )
@@ -815,7 +816,7 @@ function WritebackRow({ on, granted, onClick, label, sub, rec, lockText }) {
         {granted && rec && <div className="shp-warn"><span className="material-symbols-outlined">info</span>{rec}</div>}
         {!granted && <div className="shp-warn lock"><span className="material-symbols-outlined">lock</span>{lockText}</div>}
       </div>
-      <div className={`toggle${granted && on ? ' on' : ''}`}><div className="toggle-knob" /></div>
+      <Toggle on={granted && on} />
     </div>
   )
 }

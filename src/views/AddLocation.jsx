@@ -98,13 +98,13 @@ export default function AddLocation() {
   }, [])
 
   const STEPS = [
-    t('locations.wizard.step.basic', 'Basic details'),
-    t('locations.wizard.step.catalogue', 'Catalogue & stock'),
-    t('locations.wizard.step.channels', 'Sales channels'),
-    t('locations.wizard.step.terminals', 'POS & terminals'),
-    t('locations.wizard.step.team', 'Team'),
-    t('locations.wizard.step.policies', 'Policies & tax'),
-    t('locations.wizard.step.review', 'Review & activate'),
+    t('locations.wizard.step.basic'),
+    t('locations.wizard.step.catalogue'),
+    t('locations.wizard.step.channels'),
+    t('locations.wizard.step.terminals'),
+    t('locations.wizard.step.team'),
+    t('locations.wizard.step.policies'),
+    t('locations.wizard.step.review'),
   ]
 
   function setField(key, value) { setForm(f => ({ ...f, [key]: value })) }
@@ -114,11 +114,11 @@ export default function AddLocation() {
   function next() {
     if (step === 1) {
       if (!form.name.trim() || !form.city.trim()) {
-        setBasicError(t('locations.wizard.basic_required', 'Add at least a location name and city to continue.'))
+        setBasicError(t('locations.wizard.basic_required'))
         return
       }
       if (form.phone && !isValidPhoneNumber(form.phone)) {
-        setBasicError(t('locations.wizard.invalid_phone', 'Not a valid phone number'))
+        setBasicError(t('locations.wizard.invalid_phone'))
         return
       }
     }
@@ -133,8 +133,8 @@ export default function AddLocation() {
 
   async function sendInvite() {
     const first = inviteDraft.first.trim(), last = inviteDraft.last.trim(), email = inviteDraft.email.trim()
-    if (!first || !email) { setInviteError(t('locations.wizard.invite_missing', 'Add at least a first name and email.')); return }
-    if (!/^\S+@\S+\.\S+$/.test(email)) { setInviteError(t('locations.wizard.invite_invalid_email', 'Enter a valid email address.')); return }
+    if (!first || !email) { setInviteError(t('locations.wizard.invite_missing')); return }
+    if (!/^\S+@\S+\.\S+$/.test(email)) { setInviteError(t('locations.wizard.invite_invalid_email')); return }
     setInviting(true); setInviteError(null)
     try {
       const fullName = `${first} ${last}`.trim()
@@ -142,7 +142,7 @@ export default function AddLocation() {
         method: 'POST',
         body: JSON.stringify({ email, name: fullName, role: inviteDraft.role }),
       }).then(r => r.json())
-      if (!res?.success) { setInviteError(res?.message ?? t('locations.err.invite', 'Could not send the invitation.')); return }
+      if (!res?.success) { setInviteError(res?.message ?? t('locations.err.invite')); return }
       const newStaff = { id: res.data?.id, name: fullName, role: inviteDraft.role, email, locations: [], pending: true }
       setStaffList(list => [...list, newStaff])
       if (newStaff.id) setAssigned(a => ({ ...a, [newStaff.id]: true }))
@@ -168,7 +168,7 @@ export default function AddLocation() {
         }),
       }).then(r => r.json())
 
-      if (!res?.success) { setActivateError(res?.message ?? t('locations.err.create', 'Could not create this location.')); return }
+      if (!res?.success) { setActivateError(res?.message ?? t('locations.err.create')); return }
 
       const newId = res.data?.id ?? res.data?.location?.id
       const assignedIds = Object.entries(assigned).filter(([, on]) => on).map(([id]) => id)
@@ -204,17 +204,17 @@ export default function AddLocation() {
     return (
       <div className="card locwiz-success">
         <div className="seal"><span className="material-symbols-outlined">check</span></div>
-        <h2>{t('locations.wizard.success_title', 'Location added')}</h2>
+        <h2>{t('locations.wizard.success_title')}</h2>
         <p>
-          {t('locations.wizard.success_body', '{{name}} is live and scoped into your boutique. Stock, staff, and reporting now include it.')
-            .replace('{{name}}', created.name || t('locations.wizard.unnamed', 'The location'))}
+          {t('locations.wizard.success_body')
+            .replace('{{name}}', created.name || t('locations.wizard.unnamed'))}
         </p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" onClick={restart}>{t('locations.wizard.add_another', 'Add another')}</button>
-          <button className="btn btn-primary" onClick={() => navigate('/locations')}>{t('locations.wizard.go_to_locations', 'Go to Locations')}</button>
+          <button className="btn btn-outline" onClick={restart}>{t('locations.wizard.add_another')}</button>
+          <button className="btn btn-primary" onClick={() => navigate('/locations')}>{t('locations.wizard.go_to_locations')}</button>
           {form.channel === 'shopify' && (
             <button className="btn btn-outline" onClick={() => navigate('/integrations')}>
-              <span className="material-symbols-outlined">link</span>{t('locations.wizard.go_to_integrations', 'Connect Shopify')}
+              <span className="material-symbols-outlined">link</span>{t('locations.wizard.go_to_integrations')}
             </button>
           )}
         </div>
@@ -264,15 +264,15 @@ export default function AddLocation() {
         {activateError && <div className="alert locwiz-error">{activateError}</div>}
 
         <div className="locwiz-nav-row">
-          {step > 1 ? <button className="btn btn-outline" onClick={prev}>{t('common.back', 'Back')}</button> : <span />}
+          {step > 1 ? <button className="btn btn-outline" onClick={prev}>{t('common.back')}</button> : <span />}
           {step < MAX_STEP ? (
             <button className="btn btn-primary" onClick={next}>
-              {t('locations.wizard.continue', 'Continue')}<span className="material-symbols-outlined">arrow_forward</span>
+              {t('locations.wizard.continue')}<span className="material-symbols-outlined">arrow_forward</span>
             </button>
           ) : (
             <button className="btn btn-primary" onClick={activate} disabled={activating}>
               <span className="material-symbols-outlined">add_business</span>
-              {activating ? t('locations.wizard.activating', 'Activating') + '…' : t('locations.wizard.activate', 'Activate location')}
+              {activating ? t('locations.wizard.activating') + '…' : t('locations.wizard.activate')}
             </button>
           )}
         </div>
@@ -297,31 +297,31 @@ function PanelHead({ n, label, title, lead }) {
 function StepBasic({ form, setField, t, error }) {
   return (
     <>
-      <PanelHead n={1} label={t('locations.wizard.step.basic', 'Basic details')}
-        title={t('locations.wizard.basic_title', 'Basic details')}
-        lead={t('locations.wizard.basic_lead', 'Where is this location and how should it appear on receipts and the store switcher.')} />
-      <div className="form-group"><label className="form-lbl">{t('locations.wizard.loc_name', 'Location name')}</label>
-        <input className="form-input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder={t('locations.wizard.ph_loc_name', 'e.g. Sartoria Belloni Firenze')} /></div>
-      <div className="form-group"><label className="form-lbl">{t('locations.wizard.sign', 'Shop sign / display name')}</label>
-        <input className="form-input" value={form.sign} onChange={e => setField('sign', e.target.value)} placeholder={t('locations.wizard.ph_listing', 'e.g. Sartoria Belloni')} /></div>
-      <div className="form-group"><label className="form-lbl">{t('locations.wizard.address', 'Street address')}</label>
+      <PanelHead n={1} label={t('locations.wizard.step.basic')}
+        title={t('locations.wizard.basic_title')}
+        lead={t('locations.wizard.basic_lead')} />
+      <div className="form-group"><label className="form-lbl">{t('locations.wizard.loc_name')}</label>
+        <input className="form-input" value={form.name} onChange={e => setField('name', e.target.value)} placeholder={t('locations.wizard.ph_loc_name')} /></div>
+      <div className="form-group"><label className="form-lbl">{t('locations.wizard.sign')}</label>
+        <input className="form-input" value={form.sign} onChange={e => setField('sign', e.target.value)} placeholder={t('locations.wizard.ph_listing')} /></div>
+      <div className="form-group"><label className="form-lbl">{t('locations.wizard.address')}</label>
         <input className="form-input" value={form.address} onChange={e => setField('address', e.target.value)} placeholder="Via Tornabuoni 5" /></div>
       <div className="grid3">
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.city', 'City')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.city')}</label>
           <input className="form-input" value={form.city} onChange={e => setField('city', e.target.value)} placeholder="Firenze" /></div>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.postcode', 'Postal code')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.postcode')}</label>
           <input className="form-input" value={form.postcode} onChange={e => setField('postcode', e.target.value)} placeholder="50123" /></div>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.type', 'Location type')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.type')}</label>
           <select className="form-select" value={form.type} onChange={e => setField('type', e.target.value)}>
             {LOCATION_TYPES.map(o => <option key={o.value} value={o.value}>{t(LOC_TYPE_KEY + o.value, { defaultValue: o.label })}</option>)}
           </select></div>
       </div>
       <div className="grid2">
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.country', 'Country')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.country')}</label>
           <select className="form-select" value={form.country} onChange={e => setField('country', e.target.value)}>
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{t(COUNTRY_KEY + c.key, { defaultValue: c.label })}</option>)}
           </select></div>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.phone', 'Phone')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.phone')}</label>
           <PhoneInput
             international
             defaultCountry={form.country || 'IT'}
@@ -331,20 +331,20 @@ function StepBasic({ form, setField, t, error }) {
           />
           {form.phone && !isValidPhoneNumber(form.phone) && (
             <div className="form-hint sp-phone-hint-invalid">
-              {t('locations.wizard.invalid_phone', 'Not a valid phone number')}
+              {t('locations.wizard.invalid_phone')}
             </div>
           )}
         </div>
       </div>
-      <div className="form-group"><label className="form-lbl">{t('locations.wizard.email', 'Email')}</label>
+      <div className="form-group"><label className="form-lbl">{t('locations.wizard.email')}</label>
         <input className="form-input" type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="firenze@sartoriabelloni.it" /></div>
       <div className="grid2">
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.mon_sat', 'Mon–Sat hours')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.mon_sat')}</label>
           <input className="form-input" value={form.monSat} onChange={e => setField('monSat', e.target.value)} placeholder="10:00-19:30" /></div>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.sun', 'Sunday hours')}</label>
-          <input className="form-input" value={form.sun} onChange={e => setField('sun', e.target.value)} placeholder={t('locations.hours.sun_ph', '11:00-18:00 or Closed')} /></div>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.sun')}</label>
+          <input className="form-input" value={form.sun} onChange={e => setField('sun', e.target.value)} placeholder={t('locations.hours.sun_ph')} /></div>
       </div>
-      <div className="form-group"><label className="form-lbl">{t('locations.wizard.timezone', 'Time zone')}</label>
+      <div className="form-group"><label className="form-lbl">{t('locations.wizard.timezone')}</label>
         <input className="form-input" value="Europe/Rome" readOnly /></div>
       {error && <div className="alert locwiz-error">{error}</div>}
     </>
@@ -354,30 +354,30 @@ function StepBasic({ form, setField, t, error }) {
 function StepCatalogue({ form, pick, existingLocations, t }) {
   return (
     <>
-      <PanelHead n={2} label={t('locations.wizard.step.catalogue', 'Catalogue & stock')}
-        title={t('locations.wizard.catalogue_title', 'Catalogue & stock')}
-        lead={t('locations.wizard.catalogue_lead', 'How this location’s products relate to the rest of your boutique. This is the one architectural choice that shapes everything downstream.')} />
+      <PanelHead n={2} label={t('locations.wizard.step.catalogue')}
+        title={t('locations.wizard.catalogue_title')}
+        lead={t('locations.wizard.catalogue_lead')} />
       <OptionCard selected={form.catalogue === 'share'} onClick={() => pick('catalogue', 'share')}
-        title={t('locations.wizard.catalogue_share', 'Share the boutique catalogue')} recommended={t('locations.wizard.recommended', 'Recommended')}
-        desc={t('locations.wizard.catalogue_share_desc', 'One product record across your boutique; stock is counted separately at each location.')} />
+        title={t('locations.wizard.catalogue_share')} recommended={t('locations.wizard.recommended')}
+        desc={t('locations.wizard.catalogue_share_desc')} />
       <OptionCard selected={form.catalogue === 'copy'} onClick={() => pick('catalogue', 'copy')}
-        title={t('locations.wizard.catalogue_copy', 'Copy from an existing location')}
-        desc={t('locations.wizard.catalogue_copy_desc', 'Start from another location’s catalogue, then let this one diverge.')}>
+        title={t('locations.wizard.catalogue_copy')}
+        desc={t('locations.wizard.catalogue_copy_desc')}>
         {form.catalogue === 'copy' && (
           <div className="locwiz-sub-field">
             <select className="form-select" value={form.copySource} onChange={e => { e.stopPropagation(); pick('copySource', e.target.value) }} onClick={e => e.stopPropagation()}>
-              <option value="">{t('locations.wizard.pick_location', 'Select a location') + '…'}</option>
+              <option value="">{t('locations.wizard.pick_location') + '…'}</option>
               {existingLocations.map(l => <option key={l.id} value={l.id}>{shortName(l.name)}</option>)}
             </select>
           </div>
         )}
       </OptionCard>
       <OptionCard selected={form.catalogue === 'empty'} onClick={() => pick('catalogue', 'empty')}
-        title={t('locations.wizard.catalogue_empty', 'Start empty')}
-        desc={t('locations.wizard.catalogue_empty_desc', 'Build this location’s catalogue from scratch or import it from its own Shopify store.')} />
+        title={t('locations.wizard.catalogue_empty')}
+        desc={t('locations.wizard.catalogue_empty_desc')} />
       <Callout icon="architecture">
-        <b>{t('locations.wizard.catalogue_flag_title', 'Open decision, flagged for engineering:')}</b>{' '}
-        {t('locations.wizard.catalogue_flag_body', 'a locked rule sets one Shopify store per location, so a shared master catalogue sits above the per-store mirror. This step lets you choose the model; the deep mapping of one variant to stock at many locations is Engineering’s to build — your choice here is captured but not yet wired to a backend.')}
+        <b>{t('locations.wizard.catalogue_flag_title')}</b>{' '}
+        {t('locations.wizard.catalogue_flag_body')}
       </Callout>
     </>
   )
@@ -386,15 +386,15 @@ function StepCatalogue({ form, pick, existingLocations, t }) {
 function StepChannels({ form, pick, t }) {
   return (
     <>
-      <PanelHead n={3} label={t('locations.wizard.step.channels', 'Sales channels')}
-        title={t('locations.wizard.channels_title', 'Sales channels')}
-        lead={t('locations.wizard.channels_lead', 'Each location can mirror its own Shopify store. Decide now, connect it from Integrations once this location is created.')} />
+      <PanelHead n={3} label={t('locations.wizard.step.channels')}
+        title={t('locations.wizard.channels_title')}
+        lead={t('locations.wizard.channels_lead')} />
       <OptionCard selected={form.channel === 'shopify'} onClick={() => pick('channel', 'shopify')}
-        title={t('locations.wizard.channel_shopify', 'Connect a Shopify store')}
-        desc={t('locations.wizard.channel_shopify_desc', 'One Shopify store per location. After activation, you’ll be able to connect it from Integrations.')} />
+        title={t('locations.wizard.channel_shopify')}
+        desc={t('locations.wizard.channel_shopify_desc')} />
       <OptionCard selected={form.channel === 'instore'} onClick={() => pick('channel', 'instore')}
-        title={t('locations.wizard.channel_instore', 'In-store only for now')}
-        desc={t('locations.wizard.channel_instore_desc', 'Sell at the counter today, connect online later without redoing setup.')} />
+        title={t('locations.wizard.channel_instore')}
+        desc={t('locations.wizard.channel_instore_desc')} />
     </>
   )
 }
@@ -402,11 +402,11 @@ function StepChannels({ form, pick, t }) {
 function StepTerminals({ form, pick, setField, t }) {
   return (
     <>
-      <PanelHead n={4} label={t('locations.wizard.step.terminals', 'POS & terminals')}
-        title={t('locations.wizard.terminals_title', 'POS & terminals')}
-        lead={t('locations.wizard.terminals_lead', 'Give the location a till now, or provision hardware later from Locations settings.')} />
+      <PanelHead n={4} label={t('locations.wizard.step.terminals')}
+        title={t('locations.wizard.terminals_title')}
+        lead={t('locations.wizard.terminals_lead')} />
       <OptionCard selected={form.terminalMode === 'now'} onClick={() => pick('terminalMode', 'now')}
-        title={t('locations.wizard.terminal_now', 'Add the first terminal')}>
+        title={t('locations.wizard.terminal_now')}>
         {form.terminalMode === 'now' && (
           <div className="locwiz-sub-field grid2" onClick={e => e.stopPropagation()}>
             <input className="form-input" value={form.terminalName} placeholder="Cassa 1" onChange={e => setField('terminalName', e.target.value)} />
@@ -417,10 +417,10 @@ function StepTerminals({ form, pick, setField, t }) {
         )}
       </OptionCard>
       <OptionCard selected={form.terminalMode === 'later'} onClick={() => pick('terminalMode', 'later')}
-        title={t('locations.wizard.terminal_later', 'Set up later')}
-        desc={t('locations.wizard.terminal_later_desc', 'Finish now and add terminals from Locations settings when the hardware arrives.')} />
+        title={t('locations.wizard.terminal_later')}
+        desc={t('locations.wizard.terminal_later_desc')} />
       <Callout icon="info">
-        {t('locations.wizard.terminal_flag', 'Terminal pairing isn’t available yet — the location will be created without a terminal; your choice here is captured but not sent anywhere until this is built.')}
+        {t('locations.wizard.terminal_flag')}
       </Callout>
     </>
   )
@@ -430,32 +430,32 @@ function StepTeam({ t, staffList, assigned, toggleAssign, manager, setManager, i
   const assignedList = staffList.filter(s => assigned[s.id])
   return (
     <>
-      <PanelHead n={5} label={t('locations.wizard.step.team', 'Team')}
-        title={t('locations.wizard.team_title', 'Team')}
-        lead={t('locations.wizard.team_lead', 'Assign existing staff to this location, invite anyone new, and name a manager.')} />
-      {staffList.length === 0 && <div className="state-empty">{t('locations.wizard.no_staff', 'No staff members yet.')}</div>}
+      <PanelHead n={5} label={t('locations.wizard.step.team')}
+        title={t('locations.wizard.team_title')}
+        lead={t('locations.wizard.team_lead')} />
+      {staffList.length === 0 && <div className="state-empty">{t('locations.wizard.no_staff')}</div>}
       <div className="loc-assign-list">
         {staffList.map(s => (
           <label key={s.id} className="loc-assign-item">
             <input type="checkbox" className="loc-assign-checkbox" checked={!!assigned[s.id]} onChange={() => toggleAssign(s.id)} />
-            {s.name}{s.pending && <span className="loc-primary-badge-sm">{t('locations.wizard.invited', 'Invited')}</span>} · {s.role}
+            {s.name}{s.pending && <span className="loc-primary-badge-sm">{t('locations.wizard.invited')}</span>} · {s.role}
           </label>
         ))}
       </div>
 
       {inviteOpen ? (
         <div className="loc-danger-zone locwiz-invite-box">
-          <div className="locwiz-eyebrow" style={{ marginBottom: 12 }}>{t('locations.wizard.new_invite', 'New invitation')}</div>
+          <div className="locwiz-eyebrow" style={{ marginBottom: 12 }}>{t('locations.wizard.new_invite')}</div>
           <div className="grid2">
-            <div className="form-group"><label className="form-lbl">{t('locations.wizard.first_name', 'First name')}</label>
-              <input className="form-input" value={inviteDraft.first} onChange={e => setInviteDraft(d => ({ ...d, first: e.target.value }))} placeholder={t('locations.wizard.ph_first', 'e.g. Elena')} /></div>
-            <div className="form-group"><label className="form-lbl">{t('locations.wizard.last_name', 'Last name')}</label>
-              <input className="form-input" value={inviteDraft.last} onChange={e => setInviteDraft(d => ({ ...d, last: e.target.value }))} placeholder={t('locations.wizard.ph_last', 'e.g. Conti')} /></div>
+            <div className="form-group"><label className="form-lbl">{t('locations.wizard.first_name')}</label>
+              <input className="form-input" value={inviteDraft.first} onChange={e => setInviteDraft(d => ({ ...d, first: e.target.value }))} placeholder={t('locations.wizard.ph_first')} /></div>
+            <div className="form-group"><label className="form-lbl">{t('locations.wizard.last_name')}</label>
+              <input className="form-input" value={inviteDraft.last} onChange={e => setInviteDraft(d => ({ ...d, last: e.target.value }))} placeholder={t('locations.wizard.ph_last')} /></div>
           </div>
           <div className="grid2">
-            <div className="form-group"><label className="form-lbl">{t('locations.wizard.email', 'Email')}</label>
+            <div className="form-group"><label className="form-lbl">{t('locations.wizard.email')}</label>
               <input className="form-input" type="email" value={inviteDraft.email} onChange={e => setInviteDraft(d => ({ ...d, email: e.target.value }))} placeholder="nome@sartoriabelloni.it" /></div>
-            <div className="form-group"><label className="form-lbl">{t('locations.wizard.role', 'Role')}</label>
+            <div className="form-group"><label className="form-lbl">{t('locations.wizard.role')}</label>
               <select className="form-select" value={inviteDraft.role} onChange={e => setInviteDraft(d => ({ ...d, role: e.target.value }))}>
                 <option value="staff">{t(ROLE_KEY + 'staff', { defaultValue: 'Staff' })}</option><option value="manager">{t(ROLE_KEY + 'manager', { defaultValue: 'Manager' })}</option>
               </select></div>
@@ -463,24 +463,24 @@ function StepTeam({ t, staffList, assigned, toggleAssign, manager, setManager, i
           {inviteError && <div className="alert locwiz-error">{inviteError}</div>}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={inviting}>
-              <span className="material-symbols-outlined">send</span>{inviting ? t('locations.wizard.sending', 'Sending') + '…' : t('locations.wizard.send_invite', 'Send invite')}
+              <span className="material-symbols-outlined">send</span>{inviting ? t('locations.wizard.sending') + '…' : t('locations.wizard.send_invite')}
             </button>
-            <button className="btn btn-outline btn-sm" onClick={cancelInvite}>{t('common.cancel', 'Cancel')}</button>
+            <button className="btn btn-outline btn-sm" onClick={cancelInvite}>{t('common.cancel')}</button>
           </div>
         </div>
       ) : (
         <button className="btn btn-ghost" style={{ paddingLeft: 0, marginTop: 6 }} onClick={openInvite}>
-          <span className="material-symbols-outlined">person_add</span>{t('locations.wizard.invite_new', 'Invite someone new')}
+          <span className="material-symbols-outlined">person_add</span>{t('locations.wizard.invite_new')}
         </button>
       )}
 
       <div className="form-group" style={{ marginTop: 16 }}>
-        <label className="form-lbl">{t('locations.wizard.manager', 'Location manager')}</label>
+        <label className="form-lbl">{t('locations.wizard.manager')}</label>
         <select className="form-select" value={manager} onChange={e => setManager(e.target.value)}>
-          <option value="">{t('locations.wizard.no_manager', 'No manager assigned')}</option>
+          <option value="">{t('locations.wizard.no_manager')}</option>
           {assignedList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <div className="form-hint">{t('locations.wizard.manager_hint', 'Display only for now — roles in this app are set per staff member, not per location.')}</div>
+        <div className="form-hint">{t('locations.wizard.manager_hint')}</div>
       </div>
     </>
   )
@@ -489,25 +489,25 @@ function StepTeam({ t, staffList, assigned, toggleAssign, manager, setManager, i
 function StepPolicies({ form, pick, setField, t }) {
   return (
     <>
-      <PanelHead n={6} label={t('locations.wizard.step.policies', 'Policies & tax')}
-        title={t('locations.wizard.policies_title', 'Policies & tax')}
-        lead={t('locations.wizard.policies_lead', 'The new location inherits your boutique’s returns default. Adjust tax to the local regime.')} />
+      <PanelHead n={6} label={t('locations.wizard.step.policies')}
+        title={t('locations.wizard.policies_title')}
+        lead={t('locations.wizard.policies_lead')} />
       <OptionCard selected={form.returns === 'inherit'} onClick={() => pick('returns', 'inherit')}
-        title={t('locations.wizard.returns_inherit', 'Inherit boutique returns policy')} recommended={t('locations.wizard.recommended', 'Recommended')}
-        desc={t('locations.wizard.returns_inherit_desc', 'Standard policy, with returns classes and exemptions already configured for your boutique.')} />
+        title={t('locations.wizard.returns_inherit')} recommended={t('locations.wizard.recommended')}
+        desc={t('locations.wizard.returns_inherit_desc')} />
       <OptionCard selected={form.returns === 'custom'} onClick={() => pick('returns', 'custom')}
-        title={t('locations.wizard.returns_custom', 'Set a location-specific policy')}
-        desc={t('locations.wizard.returns_custom_desc', 'Not available yet — the location will use the boutique default until this is built.')} />
+        title={t('locations.wizard.returns_custom')}
+        desc={t('locations.wizard.returns_custom_desc')} />
       <div className="grid2" style={{ marginTop: 16 }}>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.vat_rate', 'VAT rate')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.vat_rate')}</label>
           <select className="form-select" value={form.vatRate} onChange={e => setField('vatRate', e.target.value)}>
             <option value="22">22% (standard)</option><option value="10">10%</option><option value="4">4%</option>
           </select></div>
-        <div className="form-group"><label className="form-lbl">{t('locations.wizard.currency', 'Currency')}</label>
+        <div className="form-group"><label className="form-lbl">{t('locations.wizard.currency')}</label>
           <input className="form-input" value="EUR (€)" readOnly /></div>
       </div>
       <Callout icon="info">
-        {t('locations.wizard.policies_flag', 'Returns policy and VAT rate choices here are captured for review but not yet persisted to the backend.')}
+        {t('locations.wizard.policies_flag')}
       </Callout>
     </>
   )
@@ -515,44 +515,44 @@ function StepPolicies({ form, pick, setField, t }) {
 
 function StepReview({ t, form, staffList, assigned, manager, goStep, existingLocations }) {
   const catalogueLabels = {
-    share: t('locations.wizard.catalogue_share', 'Share the boutique catalogue'),
-    copy: `${t('locations.wizard.catalogue_copy', 'Copy from an existing location')} — ${shortName(existingLocations.find(l => l.id === form.copySource)?.name) || '—'}`,
-    empty: t('locations.wizard.catalogue_empty', 'Start empty'),
+    share: t('locations.wizard.catalogue_share'),
+    copy: `${t('locations.wizard.catalogue_copy')} — ${shortName(existingLocations.find(l => l.id === form.copySource)?.name) || '—'}`,
+    empty: t('locations.wizard.catalogue_empty'),
   }
   const channelLabels = {
-    shopify: t('locations.wizard.channel_shopify', 'Connect a Shopify store'),
-    instore: t('locations.wizard.channel_instore', 'In-store only for now'),
+    shopify: t('locations.wizard.channel_shopify'),
+    instore: t('locations.wizard.channel_instore'),
   }
   const assignedList = staffList.filter(s => assigned[s.id])
   const managerName = staffList.find(s => s.id === manager)?.name
 
   const rows = [
-    [t('locations.wizard.rev_location', 'Location'), `${form.name || t('locations.wizard.unnamed', '(unnamed)')} · ${form.city || '—'}`, 1],
-    [t('locations.wizard.rev_address', 'Address'), [form.address, form.city, form.postcode].filter(Boolean).join(', ') || '—', 1],
-    [t('locations.wizard.rev_catalogue', 'Catalogue'), catalogueLabels[form.catalogue], 2],
-    [t('locations.wizard.rev_channel', 'Sales channel'), channelLabels[form.channel], 3],
-    [t('locations.wizard.rev_terminal', 'Terminal'), form.terminalMode === 'now' ? form.terminalName : t('locations.wizard.terminal_later', 'Set up later'), 4],
-    [t('locations.wizard.rev_team', 'Team'), `${assignedList.length} ${t('locations.wizard.assigned', 'assigned')}${managerName ? ' · ' + t('locations.wizard.manager', 'Manager') + ' ' + managerName : ''}`, 5],
-    [t('locations.wizard.rev_returns', 'Returns'), form.returns === 'inherit' ? t('locations.wizard.returns_inherit', 'Inherit boutique returns policy') : t('locations.wizard.returns_custom', 'Set a location-specific policy'), 6],
-    [t('locations.wizard.rev_tax', 'Tax'), `${form.vatRate}% · EUR`, 6],
+    [t('locations.wizard.rev_location'), `${form.name || t('locations.wizard.unnamed')} · ${form.city || '—'}`, 1],
+    [t('locations.wizard.rev_address'), [form.address, form.city, form.postcode].filter(Boolean).join(', ') || '—', 1],
+    [t('locations.wizard.rev_catalogue'), catalogueLabels[form.catalogue], 2],
+    [t('locations.wizard.rev_channel'), channelLabels[form.channel], 3],
+    [t('locations.wizard.rev_terminal'), form.terminalMode === 'now' ? form.terminalName : t('locations.wizard.terminal_later'), 4],
+    [t('locations.wizard.rev_team'), `${assignedList.length} ${t('locations.wizard.assigned')}${managerName ? ' · ' + t('locations.wizard.manager') + ' ' + managerName : ''}`, 5],
+    [t('locations.wizard.rev_returns'), form.returns === 'inherit' ? t('locations.wizard.returns_inherit') : t('locations.wizard.returns_custom'), 6],
+    [t('locations.wizard.rev_tax'), `${form.vatRate}% · EUR`, 6],
   ]
 
   return (
     <>
-      <PanelHead n={7} label={t('locations.wizard.step.review', 'Review & activate')}
-        title={t('locations.wizard.review_title', 'Review & activate')}
-        lead={t('locations.wizard.review_lead', 'One last look. Activating creates the location and scopes stock, staff, and reporting to it.')} />
+      <PanelHead n={7} label={t('locations.wizard.step.review')}
+        title={t('locations.wizard.review_title')}
+        lead={t('locations.wizard.review_lead')} />
       <div className="locwiz-rev-grid">
         {rows.map(([k, v, n]) => (
           <div key={k} className="locwiz-rev-row">
             <div className="k">{k}</div>
             <div className="v">{v}</div>
-            <div className="ed" onClick={() => goStep(n)}>{t('common.edit', 'Edit')}</div>
+            <div className="ed" onClick={() => goStep(n)}>{t('common.edit')}</div>
           </div>
         ))}
       </div>
       <Callout icon="verified">
-        {t('locations.wizard.review_flag', 'Currency is EUR and time zone Europe/Rome. Catalogue architecture, terminal provisioning, and location-specific tax/returns overrides shown above are captured for review only — they are not yet sent to the backend.')}
+        {t('locations.wizard.review_flag')}
       </Callout>
     </>
   )

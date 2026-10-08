@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
 import Loading from '../components/ui/Loading'
+import { imgUrl } from '../lib/imageUrl'
 
 const API = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 // Notifies other mounted components (e.g. Sidebar's own avatar) that the
 // logged-in user's photo changed, without a shared store or full reload.
@@ -27,7 +27,7 @@ export default function ViewProfile() {
       .then(json => {
         if (json.success) {
           setProfile(json.data)
-          setPhotoPreview(json.data.my_photo_url ? `${IMG_BASE}${json.data.my_photo_url}` : null)
+          setPhotoPreview(imgUrl(json.data.my_photo_url))
         }
       })
       .catch(() => {})
@@ -55,7 +55,7 @@ export default function ViewProfile() {
       const data = await res.json()
       if (data.success) {
         const url = data.data.my_photo_url ?? data.data.founder_photo_url
-        setPhotoPreview(url ? `${IMG_BASE}${url}` : null)
+        setPhotoPreview(imgUrl(url))
         window.dispatchEvent(new CustomEvent(MY_PHOTO_UPDATED_EVENT, { detail: url }))
       } else {
         setPhotoError(data.message || 'Failed to upload photo.')

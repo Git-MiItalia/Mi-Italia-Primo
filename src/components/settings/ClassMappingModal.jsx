@@ -17,8 +17,8 @@ export default function ClassMappingModal({ klass, policies, storeDefaultId, onS
   const [pendingMap, setPendingMap] = useState(klass.map)
 
   function winText(p) {
-    if (p.none) return t('returns_policy.window_none', 'No returns')
-    return `${p.days} ${t('returns_policy.days', 'days')}`
+    if (p.none) return t('returns_policy.window_none')
+    return `${p.days} ${t('returns_policy.days')}`
   }
 
   const storeDefault = findById(policies, storeDefaultId)
@@ -31,7 +31,7 @@ export default function ClassMappingModal({ klass, policies, storeDefaultId, onS
       title={t('returns_classes.mapping_modal.title', { className, defaultValue: 'Change mapping — {{className}}' })}
     >
       <p className="modal-intro">
-        {t('returns_classes.mapping_modal.intro', 'Products of this class inherit this policy unless a product overrides it. In-store-only policies fall back to the store default when a product is listed online.')}
+        {t('returns_classes.mapping_modal.intro')}
       </p>
 
       <div
@@ -40,7 +40,7 @@ export default function ClassMappingModal({ klass, policies, storeDefaultId, onS
       >
         <div className="rp-opt-radio" />
         <div className="rp-opt-body">
-          <div className="rp-opt-name">{t('returns_classes.mapping_modal.follow_default', 'Follow store default')}</div>
+          <div className="rp-opt-name">{t('returns_classes.mapping_modal.follow_default')}</div>
           <div className="rp-opt-sub">
             {storeDefault ? `${lang === 'it' ? storeDefault.it : storeDefault.en} · ${winText(storeDefault)}` : ''}
           </div>
@@ -64,7 +64,7 @@ export default function ClassMappingModal({ klass, policies, storeDefaultId, onS
             {instoreOnly && (
               <div className="rp-opt-badge muted">
                 <span className="material-symbols-outlined">storefront</span>
-                {t('returns_classes.mapping_modal.instore_only', 'In-store only')}
+                {t('returns_classes.mapping_modal.instore_only')}
               </div>
             )}
           </div>
@@ -73,10 +73,10 @@ export default function ClassMappingModal({ klass, policies, storeDefaultId, onS
 
       <div className="modal-footer">
         <button type="button" onClick={onClose} className="btn btn-outline">
-          {t('common.cancel', 'Cancel')}
+          {t('common.cancel')}
         </button>
         <button type="button" onClick={() => { onSave(pendingMap); onClose() }} className="btn btn-primary">
-          {t('returns_classes.mapping_modal.save_btn', 'Save mapping')}
+          {t('returns_classes.mapping_modal.save_btn')}
         </button>
       </div>
     </Modal>

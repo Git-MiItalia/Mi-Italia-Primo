@@ -6,9 +6,13 @@ import { apiFetch } from '../../lib/api'
 import PrimoLogo from '../../assets/PrimoLogo.svg'
 import useNotifStore from '../../store/notifStore'
 import useSidebarStore from '../../store/sidebarStore'
+import useIsMobile from '../../lib/useIsMobile'
+import { imgUrl } from '../../lib/imageUrl'
+// The Orders tab fires WS_NEW_EVENT with the number of wholesale orders waiting
+// for confirmation whenever it reloads them, so the badge moves on Confirm.
+import { WS_NEW_EVENT } from '../../lib/wholesaleOrders'
 
 const BASE_URL = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 // Shows the ORO / Royalty entry in Settings. Off while the loyalty programme is
 // out of scope — see the note beside the entry below.
@@ -34,11 +38,15 @@ function getRouteUnread(notifications, route) {
   ).length
 }
 
-function SbItem({ to, icon, label, badge, onClick }) {
+function SbItem({ to, icon, label, badge, badgeGreen, onClick }) {
   return (
     <NavLink to={to} className={({ isActive }) => `sb-item${isActive ? ' act' : ''}`} onClick={onClick}>
       <span className="material-symbols-outlined">{icon}</span>
       {label}
+      {/* Green: wholesale orders waiting for confirmation (Showroom design).
+          Kept apart from the red unread-notification badge — they count
+          different things. */}
+      {badgeGreen > 0 && <span className="sb-badge sb-badge-green">{badgeGreen > 99 ? '99+' : badgeGreen}</span>}
       {badge > 0 && <span className="sb-badge">{badge > 99 ? '99+' : badge}</span>}
     </NavLink>
   )
@@ -92,13 +100,21 @@ function Sidebar() {
   const [profile,      setProfile]      = useState(null)
   const [myPhotoUrl,   setMyPhotoUrl]   = useState(null)
   const [openFlyout,   setOpenFlyout]   = useState(null) // { key, top } | null
+  const [wsNew,        setWsNew]        = useState(0)
   const navigate = useNavigate()
   const { t }    = useTranslation()
 
-  const collapsed       = useSidebarStore(s => s.collapsed)
+  const isMobile        = useIsMobile()
   const toggleCollapsed = useSidebarStore(s => s.toggleCollapsed)
   const openSections    = useSidebarStore(s => s.openSections)
   const toggleSection   = useSidebarStore(s => s.toggleSection)
+  const mobileOpen      = useSidebarStore(s => s.mobileOpen)
+  const closeMobile     = useSidebarStore(s => s.closeMobile)
+
+  /* Inside the drawer the icon rail makes no sense — the drawer already costs
+     a tap to open, so it may as well show the labels. The stored preference is
+     left untouched, so the rail comes back as it was on a wide screen. */
+  const collapsed = useSidebarStore(s => s.collapsed) && !isMobile
 
   const notifications = useNotifStore(s => s.notifications)
 
@@ -109,6 +125,21 @@ function Sidebar() {
       .catch(() => {})
   }, [])
 
+  // Wholesale orders still "submitted" for this boutique. Quiet on failure —
+  // a missing badge is not worth an error on every page.
+  useEffect(() => {
+    apiFetch(`${BASE_URL}/boutique/showroom/orders?status=submitted&page=1&limit=1`)
+      .then(r => r.json())
+      .then(json => {
+        if (!json?.success || !json.data) return
+        setWsNew(Number(json.data.counts?.submitted ?? json.data.pagination?.total ?? 0))
+      })
+      .catch(() => {})
+    const onWsNew = (e) => setWsNew(Number(e.detail) || 0)
+    window.addEventListener(WS_NEW_EVENT, onWsNew)
+    return () => window.removeEventListener(WS_NEW_EVENT, onWsNew)
+  }, [])
+
   useEffect(() => {
     const onPhotoUpdated = (e) => setMyPhotoUrl(e.detail)
     window.addEventListener(MY_PHOTO_UPDATED_EVENT, onPhotoUpdated)
@@ -117,7 +148,7 @@ function Sidebar() {
 
   const boutiqueName = profile?.name || '—'
   const boutiqueCity = [profile?.city, profile?.country].filter(Boolean).join(', ') || '—'
-  const coverPhoto   = profile?.cover_photo_url ? `${IMG_BASE}${profile.cover_photo_url}` : null
+  const coverPhoto   = imgUrl(profile?.cover_photo_url)
 
   // Sidebar bottom widget: owner sees the boutique's Founder Card identity;
   // non-owner staff see their own name/role from the login-time snapshot.
@@ -142,7 +173,7 @@ function Sidebar() {
         { to: '/products',     icon: 'inventory_2',     label: t('sidebar.products') },
         { to: '/inventory',    icon: 'warehouse',       label: t('sidebar.inventory'),    badge: invBadge },
         { to: '/reservations', icon: 'event_available', label: t('sidebar.reservations'), badge: rsvBadge },
-        { to: '/orders',       icon: 'local_shipping',  label: t('sidebar.orders'),       badge: ordBadge },
+        { to: '/orders',       icon: 'local_shipping',  label: t('sidebar.orders'),       badge: ordBadge, badgeGreen: wsNew },
         { to: '/void-cil',     icon: 'block',           label: t('sidebar.void_cil') },
         { to: '/pos',          icon: 'point_of_sale',   label: t('sidebar.pos') },
         // Messages is a WhatsApp-only inbox, so it is dropped entirely for a
@@ -156,9 +187,9 @@ function Sidebar() {
       icon: 'group',
       items: [
         { to: '/customers',  icon: 'group',    label: t('sidebar.customers') },
-        { to: '/engagement', icon: 'campaign', label: t('sidebar.engagement', 'Engagement') },
+        { to: '/engagement', icon: 'campaign', label: t('sidebar.engagement') },
         { to: '/discounts',  icon: 'local_offer', label: t('sidebar.discounts') },
-        { to: '/promotions', icon: 'sell',     label: t('sidebar.promotions', 'Promotions') },
+        { to: '/promotions', icon: 'sell',     label: t('sidebar.promotions') },
       ],
     },
     {
@@ -168,7 +199,7 @@ function Sidebar() {
       items: [
         { to: '/analytics',    icon: 'travel_explore',    label: t('sidebar.analytics') },
         { to: '/financials',   icon: 'account_balance',   label: t('sidebar.financials') },
-        { to: '/markdowns',    icon: 'sell',               label: t('sidebar.markdowns', 'Aging & Markdowns') },
+        { to: '/markdowns',    icon: 'sell',               label: t('sidebar.markdowns') },
         { to: '/reports',      icon: 'summarize',         label: t('sidebar.reports') },
         { to: '/subscription', icon: 'workspace_premium', label: t('sidebar.subscription') },
       ],
@@ -181,7 +212,7 @@ function Sidebar() {
         { to: '/locations',     icon: 'store',              label: t('sidebar.locations') },
         { to: '/showroom',      icon: 'business_center',    label: t('sidebar.showroom') },
         { to: '/store',         icon: 'storefront',         label: t('sidebar.store_profile') },
-        { to: '/integrations',  icon: 'cable',               label: t('sidebar.integrations', 'Integrations') },
+        { to: '/integrations',  icon: 'cable',               label: t('sidebar.integrations') },
         // ORO / Royalty is hidden — the page is still a mockup (no endpoints at
         // all: the customer, the balance and the whole history are typed into
         // OroPoints.jsx) and the programme is not a near-term requirement. The
@@ -190,20 +221,20 @@ function Sidebar() {
         ...(SHOW_ORO ? [{ to: '/oro-points', icon: 'toll', label: t('sidebar.oro_royalty') }] : []),
         { to: '/price-tags',    icon: 'label',               label: t('sidebar.price_tags') },
         { to: '/notifications', icon: 'notifications',      label: t('sidebar.notifications') },
-        { to: '/tryon',         icon: 'person_raised_hand', label: t('sidebar.ai_model_studio', 'AI Model Studio') },
+        { to: '/tryon',         icon: 'person_raised_hand', label: t('sidebar.ai_model_studio') },
         { to: '/support',       icon: 'help',                label: t('sidebar.support') },
       ],
     },
   ]
 
   return (
-    <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
+    <aside className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
 
       {/* Brand */}
       <div className="sb-brand">
         <img src={PrimoLogo} alt="Primo by Mi Italia" className="sb-logo" />
         <span className="material-symbols-outlined sb-collapse-btn" onClick={() => { setOpenFlyout(null); toggleCollapsed() }}
-          title={collapsed ? t('sidebar.expand', 'Expand') : t('sidebar.collapse', 'Collapse')}>
+          title={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
           {collapsed ? 'chevron_right' : 'chevron_left'}
         </span>
       </div>
@@ -240,7 +271,9 @@ function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="sb-nav">
+      {/* Layout closes the drawer on every route change; this also catches a
+          tap on the entry you are already on, which changes no route. */}
+      <nav className="sb-nav" onClick={(e) => { if (e.target.closest('a')) closeMobile() }}>
         {NAV_SECTIONS.map(section => (
           <NavSection
             key={section.key}
@@ -263,7 +296,7 @@ function Sidebar() {
       <div className="sb-bottom">
         <div className="sb-user">
           {myPhotoUrl ? (
-            <div className="sb-user-av" style={{ backgroundImage:`url('${IMG_BASE}${myPhotoUrl}')`, backgroundSize:'cover', backgroundPosition:'center' }}
+            <div className="sb-user-av" style={{ backgroundImage:`url('${imgUrl(myPhotoUrl)}')`, backgroundSize:'cover', backgroundPosition:'center' }}
               onClick={collapsed ? () => setUserMenuOpen(o => !o) : undefined} />
           ) : (
             <div className="sb-user-av sb-user-av-icon" onClick={collapsed ? () => setUserMenuOpen(o => !o) : undefined}>

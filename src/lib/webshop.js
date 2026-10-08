@@ -1,24 +1,32 @@
 // Links from the portal out to the public storefront ("view as customer").
 //
-// Each environment names its portal and its storefront in lockstep:
+// The storefront host is DERIVED at runtime from the hostname the portal is
+// served from, so the bundle carries no environment of its own: the same
+// artifact can be promoted between environments without a rebuild, and a
+// deploy box with no .env cannot ship a broken link. That was the original
+// bug — VITE_WEBSHOP_URL was undefined at build time, the old code produced
+// the relative URL "undefined/<id>", and the browser resolved it against the
+// portal, landing on primodev.revoltution.com/undefined/<id>.
 //
-//   primodev.revoltution.com  ->  webdev.revoltution.com
-//   primoqa.revoltution.com   ->  webqa.revoltution.com
+// There are two naming conventions, not one, so there are two rules:
 //
-// so the storefront host is DERIVED at runtime from the hostname the portal is
-// currently served from, by swapping the leading "primo" for "web". The bundle
-// therefore carries no environment of its own: the same artifact can be
-// promoted dev -> qa without a rebuild, and a deploy box with no .env can no
-// longer ship a broken link. That was the original bug — VITE_WEBSHOP_URL was
-// undefined at build time, the old code produced the relative URL
-// "undefined/<id>", and the browser resolved it against the portal, landing on
-// primodev.revoltution.com/undefined/<id>.
+//   dev / QA   primo<env>.<domain>  ->  web<env>.<domain>     swap primo->web
+//                primodev.revoltution.com -> webdev.revoltution.com
+//                primoqa.revoltution.com  -> webqa.revoltution.com
 //
-// VITE_WEBSHOP_BASE_URL is only consulted when the hostname is NOT a primo*
-// host — localhost, an IP, a preview URL — since there is nothing to derive
-// from there. On a real environment the derived value always wins, because the
-// host you are on is the truth about which environment you are in; a stale
-// .env baked into the build is not.
+//   production primo.<domain>       ->  <domain>              drop the label
+//                primo.miitalia.com       -> miitalia.com
+//
+// The two cannot collide: "primodev." does not match the production pattern,
+// because that one requires a dot immediately after "primo".
+//
+// An earlier version had only the first rule, written as a bare /^primo/ test.
+// On production that would have derived web.miitalia.com — a host that does
+// not exist — and, because derivation takes precedence, it would have done so
+// while ignoring a correct VITE_WEBSHOP_BASE_URL sitting in the config.
+//
+// VITE_WEBSHOP_BASE_URL remains the fallback for anything that matches neither
+// rule: localhost, an IP, a preview URL.
 //
 // The path template is shared by every environment. `:id` is substituted the
 // way a Postman path variable is; `{{id}}` is accepted too, so a route pasted
@@ -46,15 +54,20 @@ function normalise(value) {
   return base
 }
 
-// primodev.revoltution.com -> https://webdev.revoltution.com
-// Any non-primo host (localhost, an IP) yields '' and falls through to .env.
-// The port is deliberately dropped: the storefront is a different host and
-// does not share the portal's dev-server port.
+// primodev.revoltution.com -> webdev.revoltution.com   (dev / QA)
+const PRIMO_ENV_HOST = /^primo(dev|qa)\./i
+// primo.miitalia.com       -> miitalia.com             (production)
+const PRIMO_ROOT_HOST = /^primo\./i
+
+// Returns '' for anything matching neither rule, which falls through to
+// VITE_WEBSHOP_BASE_URL. The port is deliberately dropped: the storefront is
+// a different host and does not share the portal's dev-server port.
 function derivedBase() {
   if (typeof window === 'undefined') return ''
   const { protocol, hostname } = window.location
-  if (!/^primo/i.test(hostname)) return ''
-  return `${protocol}//${hostname.replace(/^primo/i, 'web')}`
+  if (PRIMO_ENV_HOST.test(hostname)) return `${protocol}//${hostname.replace(/^primo/i, 'web')}`
+  if (PRIMO_ROOT_HOST.test(hostname)) return `${protocol}//${hostname.replace(/^primo\./i, '')}`
+  return ''
 }
 
 const ENV_BASE = normalise(

@@ -38,10 +38,10 @@ export default function ResetPassword() {
           setSuccess(true)
           setTimeout(() => navigate('/login'), 2500)
         } else {
-          setError(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
+          setError(res.message ?? t('common.error_generic'))
         }
       })
-      .catch(() => { setLoading(false); setError(t('common.error_network', 'Network error. Please check your connection.')) })
+      .catch(() => { setLoading(false); setError(t('common.error_network')) })
   }
 
   return (
@@ -61,7 +61,7 @@ export default function ResetPassword() {
           </h2>
           <p className="auth-subtitle">{t('reset_password.subtitle', 'Choose a secure password for your account')}</p>
 
-          {success && <div className="alert alert-info auth-alert">{t('reset_password.success', 'Password set! Redirecting to login') + '…'}</div>}
+          {success && <div className="alert alert-info auth-alert">{t('reset_password.success', 'Password set! Redirecting to login…')}</div>}
           {error && <div className="alert alert-urgent auth-alert">{error}</div>}
 
           <form onSubmit={handleSubmit}>
@@ -76,7 +76,7 @@ export default function ResetPassword() {
                 placeholder={t('reset_password.confirm_placeholder', 'Repeat password')} />
             </div>
             <button className="btn btn-primary auth-submit-btn" type="submit" disabled={loading || success}>
-              {loading ? t('common.saving', 'Saving…') : t('reset_password.submit', 'Set Password')}
+              {loading ? t('common.saving') : t('reset_password.submit', 'Set Password')}
             </button>
           </form>
 

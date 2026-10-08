@@ -175,7 +175,7 @@ export default function Financials() {
 
       {overviewFailed && (
         <div className="fin-load-error">
-          {t('financials.err_overview', 'Could not load your figures — the amounts below are not your real totals. Reload the page to try again.')}
+          {t('financials.err_overview')}
         </div>
       )}
 
@@ -464,7 +464,7 @@ export default function Financials() {
             {payoutsLoading ? (
               <div className="empty"><span className="material-symbols-outlined">hourglass_empty</span>{t('common.loading')}</div>
             ) : payoutsFailed ? (
-              <div className="fin-load-error">{t('financials.err_payouts', 'Could not load your payout history.')}</div>
+              <div className="fin-load-error">{t('financials.err_payouts')}</div>
             ) : payouts.length === 0 ? (
               <div className="empty">
                 <span className="material-symbols-outlined">account_balance</span>

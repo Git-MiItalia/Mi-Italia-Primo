@@ -1,14 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { sortSizeLabels } from '../../common/sizechart'
-
-function Toggle({ on, onToggle }) {
-  return (
-    <div className={`toggle${on ? ' on' : ''}`} onClick={onToggle}>
-      <div className="toggle-knob" />
-    </div>
-  )
-}
+import Toggle from '../ui/Toggle'
 
 export default function VariantsStock({ sizes, colours, onStockChange, initialStock = [], variants = [], warnThreshold = 3 }) {
   const { t } = useTranslation()
@@ -104,7 +97,7 @@ export default function VariantsStock({ sizes, colours, onStockChange, initialSt
   return (
     <div className="card">
       <div className="card-hdr">
-        <div className="card-title">{t('variants_stock.title', 'Variants &')} <em>{t('variants_stock.title_em', 'Stock')}</em></div>
+        <div className="card-title">{t('variants_stock.title')} <em>{t('variants_stock.title_em')}</em></div>
         {hasData && (
           <button className="btn btn-sm btn-primary vs-save-btn" onClick={saveStock}>
             {saved

@@ -40,7 +40,8 @@
     "expand": "Expand",
     "integrations": "Integrations",
     "markdowns": "Aging & Markdowns",
-    "promotions": "Promotions"
+    "promotions": "Promotions",
+    "open_menu": "Open menu"
   },
   "header": {
     "search_placeholder": "Search products, orders, customers...",
@@ -1884,7 +1885,9 @@
       "sent": "Sent"
     },
     "template_ref": "Sent via template: {{name}}",
+    "today_divider": "{{date}}",
     "unknown_contact": "Unknown contact",
+    "wa_label": "WhatsApp",
     "window_warn": "This conversation is outside the 24-hour reply window — only template messages can be sent until the customer replies.",
     "yesterday": "Yesterday"
   },
@@ -2186,6 +2189,100 @@
     "printer_setup": "Printer Setup",
     "print_selected": "Print Selected Tags",
     "no_products_alert": "Please select at least one product.",
+    "printer_cards": {
+      "dymo": {
+        "type": "Thermal · USB / Wireless",
+        "badge": "⭐ Most popular",
+        "desc": "No ink needed. Fast, quiet. Direct Primo integration available."
+      },
+      "brother": {
+        "type": "Thermal · Wi-Fi / Bluetooth",
+        "badge": "📶 Wireless",
+        "desc": "Print from iPad or phone. Great for boutiques without a fixed desk."
+      },
+      "zebra": {
+        "type": "Thermal · USB / Ethernet",
+        "badge": "Pro",
+        "desc": "Industry standard for multi-location retail. High volume, durable."
+      },
+      "avery": {
+        "type": "Laser / Inkjet · A4 Sheet",
+        "badge": "No special hardware",
+        "desc": "Use Avery label sheets. Any office printer. Full colour available."
+      }
+    },
+    "printers": {
+      "dymo": {
+        "connection": "USB / Wi-Fi · Thermal",
+        "stock": "Dymo 30334 (57×32), 30336 (25×54), 30299 (19×51)",
+        "setup": "Connect USB or pair via Wi-Fi. Primo connects via Dymo Connect SDK (Windows/Mac). No driver installation needed on Mac OS 12+.",
+        "sizes": {
+          "57x32": {
+            "use": "Standard price tag · item labels"
+          },
+          "25x54": {
+            "use": "Narrow hanging tag"
+          },
+          "19x51": {
+            "use": "Jewellery / small accessories"
+          },
+          "89x28": {
+            "use": "Long narrow label"
+          }
+        }
+      },
+      "brother": {
+        "connection": "Wi-Fi · Bluetooth · USB · Thermal",
+        "stock": "Brother DK-11209 (29mm), DK-11209 (62mm). Pre-cut rolls only.",
+        "setup": "Connect via Wi-Fi or Bluetooth. Primo uses AirPrint on iPad. Install Brother iPrint&Label for direct wireless printing.",
+        "sizes": {
+          "62x29": {
+            "use": "Standard price tag"
+          },
+          "62x100": {
+            "use": "Full product label"
+          },
+          "29x90": {
+            "use": "Narrow price tag"
+          }
+        }
+      },
+      "zebra": {
+        "connection": "USB · Ethernet · Bluetooth · Thermal",
+        "stock": "Zebra Z-Select 2000D direct thermal. Order in rolls of 2580 (51×25) or 1890 (76×51).",
+        "setup": "Connect via USB or Ethernet. Install Zebra ZPL driver. Primo sends ZPL commands directly. No print dialog shown — labels print immediately.",
+        "sizes": {
+          "51x25": {
+            "use": "Standard retail tag · barcode labels"
+          },
+          "57x32": {
+            "use": "Price tag with more info"
+          },
+          "76x51": {
+            "use": "Full label · shipping / product"
+          }
+        }
+      },
+      "avery": {
+        "connection": "Any laser or inkjet printer",
+        "stock": "Avery L7159 (38×21), Avery J8651 (38×21), Avery L7168 (70×37). Available at any office supplier.",
+        "setup": "No special setup. Download the matching Avery Word/PDF template to align labels precisely. Use at 100% scale. Laser or inkjet both work — inkjet gives colour.",
+        "sizes": {
+          "38x21": {
+            "use": "65 labels / A4 sheet · Avery L7159"
+          },
+          "70x37": {
+            "use": "24 labels / A4 sheet · price tag size"
+          },
+          "35x35": {
+            "use": "40 labels / A4 sheet · square tag"
+          },
+          "55x85": {
+            "use": "Hang tag / 10 per A4 sheet"
+          }
+        }
+      }
+    },
     "setup": {
       "select_printer": "Select Your Printer",
       "label_size": "Label Size",
@@ -2196,6 +2293,7 @@
       "next_design": "Next: Design Your Tag"
     },
     "designer": {
+      "sample_product": "Sample Product",
       "tag_style": "Tag Style",
       "fields": "Fields to Include",
       "price_display": "Price Display",
@@ -2240,6 +2338,7 @@
       "unavailable_at_size": "Not available at this label size"
     },
     "select": {
+      "load_failed": "Your products could not be loaded, so there is nothing to print. Check your connection and reload the page.",
       "search": "Search products…",
       "all_cats": "All categories",
       "select_all": "Select All",
@@ -2289,6 +2388,7 @@
     }
   },
   "products": {
+    "webshop_not_configured": "The webshop address is not set up for this boutique, so the product cannot be opened on the storefront.",
     "add_btn": "Add Product",
     "stock_age": "Stock Age",
     "full_report": "Full aging report",
@@ -3019,6 +3119,8 @@
   },
   "sup": {
     "just_now": "just now",
+    "err_load_tickets": "Could not load your tickets.",
+    "err_load_ticket": "Could not load this ticket.",
     "form": {
       "title": "New",
       "title_em": "Support Request",
@@ -3107,7 +3209,9 @@
       "new": "New",
       "open": "Open",
       "progress": "In progress",
-      "resolved": "Resolved"
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "spam": "Spam"
     },
     "help": {
       "title": "Quick",
@@ -3758,6 +3862,7 @@
       "status_sent": "Sent",
       "status_draft": "Draft",
       "status_scheduled": "Scheduled",
+      "status_sending": "Sending",
       "status_in_review": "In Review",
       "status_recurring": "Recurring",
       "date_scheduled": "Scheduled {{date}}",
@@ -4571,7 +4676,10 @@
       "err_media": "Could not load your photo library — any photos you have already uploaded are not shown."
     },
     "categories": {
-      "title": "Categories (By your Products)"
+      "title": "Categories (By your Products)",
+      "loading": "Loading categories",
+      "error": "Could not load your categories. Please refresh the page.",
+      "empty": "No categories yet — they appear here automatically once you add products."
     },
     "language": {
       "title": "Language &",

@@ -63,35 +63,35 @@ export default function CategorySelectorDropdown({ onChange }) {
 
       {/* L1 */}
       <SelectWrap
-        label={t('catsel.division', 'Division')}
+        label={t('catsel.division')}
         value={state.l1}
         onChange={selectL1}
         options={l1Options}
         placeholder={loading
-          ? t('catsel.loading_divisions', 'Loading divisions') + '…'
-          : t('catsel.division_placeholder', 'Select division…')}
+          ? t('catsel.loading_divisions') + '…'
+          : t('catsel.division_placeholder')}
         disabled={loading}
       />
 
       {/* L2 */}
       {state.l1 && (
         <SelectWrap
-          label={t('catsel.category', 'Category')}
+          label={t('catsel.category')}
           value={state.l2}
           onChange={selectL2}
           options={l2Options}
-          placeholder={t('catsel.category_placeholder', 'Select category…')}
+          placeholder={t('catsel.category_placeholder')}
         />
       )}
 
       {/* L3 */}
       {state.l2 && (
         <SelectWrap
-          label={t('catsel.style', 'Style')}
+          label={t('catsel.style')}
           value={state.l3}
           onChange={selectL3}
           options={l3Options}
-          placeholder={t('catsel.style_placeholder', 'Select style…')}
+          placeholder={t('catsel.style_placeholder')}
         />
       )}
 
@@ -107,7 +107,7 @@ export default function CategorySelectorDropdown({ onChange }) {
             {state.l4.length > 0 && <div className="catsel-result-attrs">{state.l4.join(', ')}</div>}
           </div>
           <button className="btn btn-xs btn-outline catsel-reset" onClick={reset}>
-            <span className="material-symbols-outlined" style={{ fontSize:13 }}>refresh</span>{t('common.reset', 'Reset')}
+            <span className="material-symbols-outlined" style={{ fontSize:13 }}>refresh</span>{t('common.reset')}
           </button>
         </div>
       )}
@@ -115,7 +115,7 @@ export default function CategorySelectorDropdown({ onChange }) {
       {/* L4 chips — second line, right of result */}
       {state.l3 && l4Options.length > 0 && (
         <div className="catsel-row">
-          <label className="catsel-lbl">{t('catsel.occasion', 'Occasion')} <span className="catsel-optional">{t('catsel.optional', '(optional)')}</span></label>
+          <label className="catsel-lbl">{t('catsel.occasion')} <span className="catsel-optional">{t('catsel.optional')}</span></label>
           <div className="catsel-chips">
             {l4Options.map(a => (
               <div key={a} className={`catsel-chip${state.l4.includes(a) ? ' sel' : ''}`} onClick={() => toggleAttr(a)}>

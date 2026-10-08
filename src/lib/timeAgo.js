@@ -17,7 +17,7 @@
 //             noise and "Today" is the useful answer.
 
 const dayTail = (t, days) => {
-  if (days === 1) return t('eng.time.yesterday', 'Yesterday')
+  if (days === 1) return t('eng.time.yesterday')
   if (days < 7)   return t('eng.time.days_ago',   { count: days, defaultValue: '{{count}} days ago' })
   if (days < 30)  return t('eng.time.weeks_ago',  { count: Math.floor(days / 7),   defaultValue: '{{count}} week(s) ago' })
   if (days < 365) return t('eng.time.months_ago', { count: Math.floor(days / 30),  defaultValue: '{{count}} month(s) ago' })
@@ -34,7 +34,7 @@ export function timeAgo(t, iso) {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const mins = Math.floor((Date.now() - then) / 60000)
-  if (mins < 1)  return t('common.time.just_now', 'just now')
+  if (mins < 1)  return t('common.time.just_now')
   if (mins < 60) return t('common.time.minutes_ago', { count: mins, defaultValue: '{{count}} min ago' })
   const hours = Math.floor(mins / 60)
   if (hours < 24) return t('common.time.hours_ago', { count: hours, defaultValue: '{{count}}h ago' })
@@ -47,6 +47,6 @@ export function dayAgo(t, iso) {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const days = Math.floor((Date.now() - then) / 86400000)
-  if (days <= 0) return t('eng.time.today', 'Today')
+  if (days <= 0) return t('eng.time.today')
   return dayTail(t, days)
 }

@@ -2582,6 +2582,12 @@
 .shw-product-sku{font-size:9px;color:var(--stone);}
 .shw-retail{font-size:11px;}
 .shw-actions{white-space:nowrap;}
+.shw-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--mist);margin-bottom:12px;}
+.shw-tabs{border-bottom:none;margin-bottom:0;}
+/* The shared .tab-ct is white on --mist, which is unreadable until the tab is
+   active (gold). Inactive counts here read in stone instead. */
+.shw-tabs .tab:not(.act) .tab-ct{color:var(--stone);}
+.shw-toolbar .prod-search{margin-bottom:6px;}
 
 /* ═══ SUBSCRIPTION ═══ */
 .sub-plans-grid{margin-bottom:22px;}
@@ -3436,7 +3442,9 @@
 /* ═══ SUBSCRIPTION SETUP (locked plan picker) ═══ */
 .ssu-wrap{min-height:100vh;background:var(--cream);display:flex;flex-direction:column;align-items:center;padding:40px 24px 60px;box-sizing:border-box;width:100%;}
 .ssu-logo-wrap{width:100%;max-width:1200px;margin-bottom:32px;}
-.ssu-logo{height:36px;}
+/* 64px, not the old 36px: the logo now stacks the MI ITALIA box over PRIMO, so
+   at 36px tall the wordmark was too small to read. */
+.ssu-logo{height:64px;}
 .ssu-hdr{width:100%;max-width:1200px;text-align:center;margin-bottom:28px;}
 .ssu-title{font-family:'Bodoni Moda',Georgia,serif;font-size:36px;font-weight:500;margin-bottom:8px;}
 .ssu-title em{color:var(--gold);font-style:italic;}
@@ -7828,3 +7836,63 @@
 /* Own Label is a real answer, not missing data — shown muted and italic
    so it reads differently from an actual designer brand name. */
 .prod-brand-own { color:var(--stone); font-style:italic; }
+
+/* ── Wholesale (Showroom) order panel — components/orders/WholesaleOrderPanel ── */
+.ws-action{display:flex;flex-direction:column;gap:8px;}
+.ws-action-btn{width:100%;justify-content:center;}
+/* Blocked step (next_action.blocked_reason): the portal has no generic disabled
+   button style, so a blocked button looked clickable. */
+.ws-action-btn:disabled{opacity:.4;cursor:not-allowed;}
+.ws-blocked{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--stone);background:var(--cream);border:1px solid var(--mist);padding:8px 10px;}
+.ws-blocked .material-symbols-outlined{font-size:14px;color:var(--gold);}
+.ws-dispatch{margin-bottom:0;}
+.ws-dispatch-hint{grid-column:1 / -1;margin-top:-4px;}
+.ws-confirm{border:1px solid var(--gold);background:rgba(184,149,90,0.06);padding:10px;}
+.ws-confirm-q{font-size:12px;color:var(--deep);margin-bottom:8px;}
+.ws-confirm-btns{display:flex;gap:8px;justify-content:flex-end;}
+.ws-verified{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--green);font-weight:600;}
+.ws-verified .material-symbols-outlined{font-size:13px;}
+
+/* ── Orders: source chips + badges (wholesale orders in the same list) ── */
+.ord-src-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+.ord-src-chip{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1.5px solid var(--mist);background:var(--white);font-family:'Jost',system-ui,sans-serif;font-size:10px;font-weight:600;letter-spacing:.3px;color:var(--stone);cursor:pointer;border-radius:0;}
+.ord-src-chip .material-symbols-outlined{font-size:13px;}
+.ord-src-chip.act{background:var(--deep);border-color:var(--deep);color:var(--gold);}
+.ord-src-new{background:var(--red);color:#fff;font-size:8px;font-weight:700;padding:1px 5px;margin-left:2px;}
+.ord-src-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:600;padding:2px 7px;background:var(--cream);color:var(--stone);white-space:nowrap;}
+.ord-src-badge.ws{background:rgba(0,108,53,0.08);color:var(--green);}
+.ord-src-badge .material-symbols-outlined{font-size:11px;}
+.ord-dep{font-size:9px;color:var(--gold);margin-top:2px;}
+.ord-dep.paid{color:var(--green);}
+.ord-cust-sub{font-size:9px;color:var(--stone);}
+
+/* ── Showroom status banner (Showroom.jsx) — pause switch locked until wired ── */
+.shw-banner{display:flex;align-items:center;gap:16px;background:linear-gradient(120deg,#1A1209,#2E2112);padding:20px 24px;margin-bottom:18px;color:var(--cream);}
+.shw-banner-icon{width:44px;height:44px;background:rgba(184,149,90,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.shw-banner-icon .material-symbols-outlined{font-size:24px;color:var(--gold);}
+.shw-banner-text{flex:1;min-width:0;}
+.shw-banner-title{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600;}
+.shw-banner-sub{font-size:11px;color:rgba(245,240,232,.6);margin-top:2px;}
+.shw-banner-url{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--gold);margin-top:8px;word-break:break-all;}
+.shw-banner-url .material-symbols-outlined{font-size:14px;}
+.shw-banner-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;}
+.shw-banner-status{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.shw-banner-dot{width:8px;height:8px;border-radius:50%;background:var(--stone);}
+.shw-banner-dot.on{background:#4CAF7D;box-shadow:0 0 0 3px rgba(76,175,125,.25);}
+.shw-banner-note{font-size:9px;color:rgba(245,240,232,.5);max-width:170px;text-align:right;}
+.shw-terms{max-width:420px;margin-top:6px;}
+@media (max-width:640px){.shw-banner{flex-wrap:wrap;}.shw-banner-right{align-items:flex-start;}.shw-banner-note{text-align:left;}}
+.shw-banner.paused{background:linear-gradient(120deg,#3a3530,#4a443d);}
+/* Inline MOQ edit (Showroom.jsx) */
+.shw-moq-value{display:inline-flex;align-items:center;gap:4px;background:none;border:1px dashed transparent;padding:3px 6px;font-family:inherit;font-size:11px;color:var(--deep);cursor:pointer;}
+.shw-moq-value .material-symbols-outlined{font-size:12px;color:var(--stone);opacity:0;transition:opacity .15s;}
+.shw-moq-value:hover{border-color:var(--mist);}
+.shw-moq-value:hover .material-symbols-outlined{opacity:1;}
+.shw-moq-edit{display:flex;align-items:center;gap:4px;}
+.shw-moq-input{width:64px;padding:4px 6px;font-size:11px;}
+.shw-moq-btn{background:none;border:1px solid var(--mist);width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.shw-moq-btn .material-symbols-outlined{font-size:14px;}
+.shw-commission{margin-top:12px;align-items:flex-start;}
+/* Sidebar: green badge = wholesale orders awaiting confirmation (Showroom design) */
+.sb-badge.sb-badge-green{background:var(--green);color:#fff;}
+.sb-badge.sb-badge-green + .sb-badge{margin-left:4px;}

@@ -1,9 +1,46 @@
 PRIMO — BACKEND ISSUES, BY TAB
-Date: 10 September 2026
-Boutique used for testing: 77f822c1-1507-4174-ad83-7d087b17a51c
+First written 10 September 2026. Revised 24 September 2026.
 
 Everything below needs a backend change. Anything fixable in the portal has
 already been fixed and is not listed.
+
+################################################################################
+URGENT — PRODUCTION: BOUTIQUES CANNOT BE PAID
+################################################################################
+
+  Stripe Connect is not enabled on the production Stripe account.
+
+  POST /boutique/stripe/onboard   on primo.miitalia.com   400
+
+      { "success": false,
+        "message": "Stripe error: You can only create new accounts if you've
+                    signed up for Connect, which you can do at
+                    https://dashboard.stripe.com/connect." }
+
+  Stripe is saying the production Stripe account is a normal account, not a
+  Connect platform account. Until Connect is enabled on it, Primo cannot
+  create a connected account for any boutique, so no boutique can be paid.
+
+  (Nothing to do with Primo's own "Connect" plan — same word, different
+  thing. Reproduced while ON the Connect plan; it would happen on any plan.)
+
+    NEEDED: enable Connect on the production Stripe account, then confirm and
+    we will re-test the onboarding flow end to end.
+
+  Dev is fine — the dev boutique has a working connected account
+  (acct_1UB83..., charges_enabled true, payouts_enabled true), so production
+  was stood up without the Stripe setup dev already has.
+
+  FIXED 25 SEPTEMBER, thank you: plan selection used to fail with
+  "Stripe error: No such price: 'price_REPLACE_ME'" — the production price
+  IDs were placeholders. A boutique could not get past "Choose your plan".
+  Now working.
+
+
+WHAT CHANGED IN THIS REVISION
+  Items you have already fixed have been removed from the body and reduced to
+  one line each under ALREADY FIXED at the end, so what is left is only what
+  is still outstanding. Where we could not re-test something, it says so.
 
 
 ################################################################################
@@ -12,31 +49,56 @@ DASHBOARD
 
 --- GET /boutique/dashboard/stats -------------------------------------------
 
-  pickupRateChangePts is always null
-    The pickup-rate tile has no up/down trend arrow because there is no
-    previous-period value to compare against.
-    NEEDED: populate it, or tell us it is not coming and we will drop the arrow.
+  STILL OPEN — both trend fields are always null
+    pickupRateChangePts and todayRevenueChangePct both come back null, so
+    neither tile can show its up/down arrow:
 
-  No expiringSoon field
-    We calculate "reservations expiring soon" ourselves from the first 100
-    reservations. A boutique with more than 100 active reservations will
-    under-count.
-    NEEDED: an expiringSoon count in the stats response.
+      "todayRevenue": 0,      "todayRevenueChangePct": null,
+      "pickupRate": 91.7,     "pickupRateChangePts":   null
 
+    NEEDED: populate both, or tell us they are not coming and we will drop
+    the two arrows rather than leave dead code behind them.
 
---- GET /boutique/reservations ------------------------------------------------
+  activeReservations and expiringSoon appear to exclude 'pending'
+    The earlier "no expiringSoon field" note is withdrawn — the field is in the
+    response. The question is what it counts.
 
-  No status field on the list rows
-    The Dashboard needs both pending and confirmed reservations, and cannot
-    tell them apart from a single response — so it makes two separate calls
-    (three requests in total where one would do).
-    NEEDED: include status on each row.
+    Captured the same session, same boutique:
 
+      GET /boutique/dashboard/stats
+        "activeReservations": 0,   "expiringSoon": 0
 
---- Opening a reservation from the Dashboard ---------------------------------
+      GET /boutique/reservations?status=pending&limit=100
+        1 row — 5d664b17-…, status "pending", expires 2026-09-24T11:40Z
 
-  See RESERVATIONS below — there is no GET /boutique/reservations/:id, so the
-  "View" button has to search all five status lists to find one record.
+    One live pending reservation, and the stats tile says zero active. So both
+    figures look like they count 'confirmed' only.
+
+    "Active" should mean anything not yet collected, expired or cancelled —
+    that is 'pending' + 'confirmed'. Because of this the portal ignores both
+    fields and derives its own from two capped list calls, which under-counts
+    any boutique with more than 100 reservations.
+
+    NEEDED: please confirm what the two count, and if it is confirmed-only,
+    widen them to pending + confirmed. We will then drop our workaround.
+
+  recentOrders still shows POS sales as "Guest"
+    You fixed this on GET /boutique/orders — thank you, POS sales with a
+    customer attached now carry the name there. The same fix has not reached
+    dashboard/stats, so the Dashboard's Recent Orders table still says Guest
+    for the very same sale.
+
+    From one response, today:
+
+      { "channel": "pos",  "customer_name": null        }   <- POS sale, has a customer
+      { "channel": "ship", "customer_name": "boya boya" }   <- web orders, fine
+
+    Same cause as before: the name is resolved from user_id only. A POS sale
+    has no user_id — it links to the boutique's own customer record through
+    customer_id.
+
+    NEEDED: the same fallback you added to /boutique/orders, applied to
+    dashboard/stats.recentOrders — use customer_id when user_id is null.
 
 
 ################################################################################
@@ -45,40 +107,60 @@ PRODUCTS
 
 --- GET /boutique/products ----------------------------------------------------
 
-  days_in_stock is counted from created_at, not from when stock arrived
+  first_received_at — working for portal products, still null on Shopify ones
 
-    WHAT WE SEE
-      "days_in_stock":     3
-      "first_received_at": null      <-- null on every product
+    Mostly fixed, thank you. Products created in Primo now carry it, and
+    days_in_stock is calculated from it:
 
-    first_received_at is never populated, so days_in_stock appears to count
-    from created_at — the day the product was typed into Primo.
+      "Super"        first_received_at 2026-09-07   days_in_stock 17
+      "ff"           first_received_at 2026-09-04   days_in_stock 20
+      "Strom Jacket" first_received_at 2026-09-02   days_in_stock 22
 
-    A boutique that enters stock it has already owned for months sees every
-    item as "Fresh - 3d". It never ages, never enters a markdown bracket, and
-    the Aging & Markdowns tab stays permanently empty. Nothing looks broken,
-    which is why this has not been noticed.
+    The fallback works as asked too: the 17 Shopify-imported products have
+    first_received_at null and age from created_at instead.
 
-    NEEDED: make first_received_at settable when a product is created, or
-    default it to the first stock movement. Base days_in_stock on it, falling
-    back to created_at only when genuinely unknown.
+    TWO THINGS LEFT
 
-    (This same field drives Inventory's stock-age badges and the entire
-    Aging & Markdowns feature.)
+    (a) Shopify imports never get one. All 17 show:
+
+          "first_received_at": null,   "days_in_stock": 3
+
+        An import is usually stock the boutique already owns, often for
+        months. On import day the whole catalogue reads "Fresh - 3d", never
+        ages into a markdown bracket, and Aging & Markdowns stays empty for
+        it. Could the import set first_received_at from the Shopify variant's
+        created_at, or from its inventory history?
+
+    (b) It cannot be set at all — not on create, not on update. We tested
+        both rather than asking.
+
+          POST /boutique/products  { "first_received_at": "2026-03-15…" }
+            -> created product comes back without the field at all
+
+          PUT /boutique/products/:id  { "first_received_at": "2026-01-15…" }
+            -> responds "Product updated successfully"
+            -> the row still reads  first_received_at: null,  days_in_stock: 0
+
+        The PUT is the worse of the two: it reports success while silently
+        discarding the value.
+
+        So a boutique entering stock it has owned since March cannot say so,
+        and we have no way to backdate anything — which also means Aging &
+        Markdowns cannot be demonstrated at all. Every screen on that tab is
+        empty because nothing in the catalogue is old enough to age.
+
+        NEEDED: accept first_received_at on POST and on PUT. We will add the
+        date input to the form as soon as it does.
+
+    (c) SMALL, WHILE YOU ARE IN THERE: first_received_at and days_in_stock
+        appear on GET /boutique/products but not on GET /boutique/products/:id.
+        Same product, different fields. Nothing depends on it today — it just
+        cost us an hour working out why a test read null.
+
+    (This field drives Inventory's stock-age badges and the whole
+    Aging & Markdowns feature, which is why we keep coming back to it.)
 
 
-  No product_limit / max_products
-    The "3 / 10" product counter falls back to a build-time constant, so it may
-    show the wrong cap for the boutique's plan.
-    NEEDED: the plan's product cap on the products response (null = unlimited).
-
-  No category_path on the list rows
-    The Print Tag feature cannot show a product's category.
-    NEEDED: category_path in the same "Men's / Jackets & Outerwear / Coats"
-    format the product detail endpoint already uses.
-
-  variant_count is returned as the string "3", not the number 3
-    Cosmetic; we coerce it. Flagging for consistency.
 
 
 --- GET /boutique/brands ------------------------------------------------------
@@ -103,22 +185,17 @@ INVENTORY
 
 --- GET /boutique/inventory ---------------------------------------------------
 
-  Is this endpoint paginated?
-    GET /boutique/products caps at 20 per page, so the portal loads every page
-    explicitly. The Inventory page assumes /boutique/inventory returns
-    everything in one response.
+  Both questions here are now answered. NOTHING NEEDED FROM YOU.
 
-    If it also pages, a boutique with more products than the page size is
-    seeing partial stock — and every total on that page is wrong.
+  Does it paginate? Yes, at 20 — answered, and the bug it exposed is ours.
+    The response carries "total": 21, "page": 1, "limit": 20 while returning
+    20 products. Our Inventory page made a single call and used whatever came
+    back, so the 21st product was invisible. That is our fix, not yours, and
+    it is on our list.
 
-    NEEDED: confirmation of whether it pages, and the page size if so.
-
-  Is category_path included?
-    The Inventory category filter only renders when at least one row carries
-    category_path. If the field is absent the filter silently hides itself,
-    which looks like a missing feature rather than missing data.
-
-    NEEDED: category_path on each product, same format as above.
+  Is category_path included? Yes.
+    Present on the rows in the right format, so the category filter now
+    switches itself on. Thank you.
 
 
 --- Stock age badges ----------------------------------------------------------
@@ -133,147 +210,32 @@ RESERVATIONS
 
 --- GET /boutique/reservations?status=<status>&limit=100 ----------------------
 
-  The list is capped at 100 with no pagination
-    There are no page/limit parameters, so the portal asks for 100 and shows
-    whatever comes back. A boutique with more than 100 reservations in one
-    status silently sees only the first 100.
-
-    This is worse here than elsewhere: the tab counts come from
-    GET /boutique/reservations/stats, which returns the true totals. So a tab
-    could read "Confirmed (137)" above a list of 100 rows, with nothing
-    explaining the difference.
-
-    NEEDED: page / limit parameters and a pagination block, same shape as
-    /boutique/orders:
-      "pagination": { "page": 1, "limit": 20, "total": 137, "total_pages": 7 }
+  NOTHING NEEDED FROM YOU HERE — one note only, below.
 
 
 --- GET /boutique/reservations/stats ------------------------------------------
 
-  Field names are inverted relative to the statuses
+  A NOTE, NOT A REQUEST. The stats field names do not match the status values:
 
       stats.pending   ->  the "Active" tab      (status = pending)
       stats.active    ->  the "Confirmed" tab   (status = confirmed)
 
-    So "active" in the stats response does NOT mean status:active. The portal
-    handles it, but it is a trap for whoever touches this next.
+  So "active" in this response does not mean status:active. The portal handles
+  it, but it is a trap for whoever touches this next.
 
-    NEEDED: nothing urgent. If the names can be aligned with the status values
-    (pending / confirmed / collected / expired / cancelled), please tell us
-    before changing them so both sides ship together.
-
-
---- No endpoint to fetch one reservation by id --------------------------------
-
-  Opening a reservation from a notification, or from the Dashboard's View
-  button, gives us only the id. With no by-id endpoint the portal asks all five
-  status lists at once and uses whichever contains it — five requests to open
-  one record.
-
-  NEEDED: GET /boutique/reservations/:id returning the same object shape as a
-  list row.
+  No change wanted right now. If you do align the names with the status values
+  (pending / confirmed / collected / expired / cancelled), please tell us first
+  so both sides ship together — silently renaming them would break the tab
+  counts.
 
 
 ################################################################################
 ORDERS
 ################################################################################
 
---- GET /boutique/orders  AND  GET /boutique/orders/:id -----------------------
-
-  POS orders show as "Guest" — the customer name is not resolved
-
-    WHAT WE SEE
-      Order ed322bcf-392c-4c93-acb8-449bf95e8a5d
-
-        "user_id":     null
-        "customer_id": "d79f1c0b-28bb-42cf-8de9-5fe8315b904c"   <-- correct
-        "name":        null
-        "email":       null
-        "phone":       null
-
-    Attaching a customer at POS works — customer_id is saved correctly. But
-    name / email / phone come back null, so the Orders tab shows "Guest".
-
-    It looks like those three are joined from user_id only. A POS sale has no
-    user_id (the shopper is not a Mi Italia app user) — it links through
-    customer_id to the boutique's own customer record.
-
-    NEEDED: fall back to customer_id when user_id is null, so name/email/phone
-    populate either way. Required on BOTH endpoints — the Orders table reads
-    name from the list, not the detail.
-
-    NOTE: we have a temporary workaround in the portal — the order detail panel
-    calls GET /boutique/customers/:id when name is null. The LIST still shows
-    "Guest". We will remove the workaround once this is fixed.
-
-
---- Nothing creates the DHL shipment -------------------------------------------
-
-  Thank you for GET /boutique/orders/:id/tracking — it is wired and working.
-  We confirmed it reaches DHL for real: a bad number came back with DHL's own
-  400 (minLength=10, maxLength=11), and a valid-format one returned
-  shipments: [] as expected. That half is done.
-
-  The step BEFORE it is what is missing: nothing ever asks DHL to create the
-  shipment, so there is never a tracking number or a label to look up.
-
-    EVIDENCE — a brand new order, created 07:39:35, set to shipped 07:40:00:
-
-      order  13246e3e-89e8-4c96-a8a1-817e867d9015
-      status                 "shipped"
-      dhl_shipment_id        null
-      dhl_tracking_number    null
-      dhl_status             null
-      dhl_label_url          null
-
-    Same on e4418b18-2c4e-4971-bda3-b61953a575a7. Moving an order to shipped
-    populates none of the four dhl_* columns, so they stay null forever and
-    the portal's DHL Label button has nothing to open.
-
-  Everything the DHL call needs is already on the order:
-
-      shipping_address_snapshot   name, address_line1, city, postal_code,
-                                  country_code, phone, email
-      shipping_method             "N"  — the DHL service code the customer
-                                  chose; your tracking response returns the
-                                  same value as service_code
-      four dhl_* columns          already there, waiting to be filled
-
-  NEEDED: a call to DHL's create-shipment API when an order is marked shipped
-  (or an endpoint we can trigger), storing what DHL returns:
-
-      dhl_shipment_id, dhl_tracking_number, dhl_label_url
-
-  DHL returns the tracking number and the label PDF together in that one call,
-  which is why a hand-typed tracking number can never produce a label — nobody
-  ever booked the shipment.
-
-  RESOLVED — you sent POST /boutique/orders/:id/ship { "service_code": "I" },
-  and confirmed it returns the DHL label URL. That is exactly the missing step.
-  It is now wired: the Shipped button calls it instead of PATCH /status, then
-  re-reads the order so the label, tracking number and status come from the
-  order's own dhl_* columns rather than from field names we would have had to
-  guess. A failed booking leaves the status unchanged rather than showing
-  "Shipped" over a parcel DHL never accepted.
-
-
-  TESTED AND WORKING — order 43fefb26-716b-4cf7-b9f9-6e1ce3f4087a:
-
-      status                 "shipped"
-      dhl_shipment_id        "2844953112"
-      dhl_tracking_number    "2844953112"
-      dhl_status             "created"
-      dhl_label_url          .../uploads/labels/43fefb26-….pdf
-
-    The label opens, survives a reload, and the 10-character tracking number
-    passes the length check. Weight came back as 1.0 kg on the label, so you
-    are defaulting it server-side — that answers our weight question. Thank
-    you. This item is closed.
-
-
 --- DHL is still on test credentials --------------------------------------------
 
-  The label that came back is stamped "DO NOT PRINT — SAMPLE ONLY", so /ship
+  The label that comes back is stamped "DO NOT PRINT — SAMPLE ONLY", so /ship
   is pointed at DHL's test environment. Correct for now, and safer — nothing
   is being charged and no courier is being booked.
 
@@ -285,37 +247,10 @@ ORDERS
     config change on your side only? We would rather not find out on the
     morning of a demo. Nothing changes in the portal either way.
 
-
-  SETTLED — service_code is the delivery service the customer chooses at
-  checkout on the webshop, stored on the order as shipping_method. The portal
-  sends that value straight through to /ship, so the shopper gets the service
-  they paid for. On 43fefb26 that was "7" and DHL booked a domestic service
-  for a Rome-to-Rome parcel, as expected.
-
-  (Only remaining oddity: our packing slip prints shipping_method through a
-  small map that knows "I" = International and "D" = Domestic, so a "7" prints
-  as a bare "7". Cosmetic, and ours to fix once we have the full list of codes
-  the webshop can produce — no action needed from you beyond that list.)
-
-  (The customer question is answered too: the tracking number already shows on
-  the webshop, so the shopper can see it there. Nothing needed from the
-  portal.)
-
-  You are already integrated with DHL for tracking, so this should be the same
-  credentials and the same client, one more endpoint.
-
-  MEANWHILE, on our side:
-    - the tracking number field is manual entry only, validated to DHL's 10-11
-      characters so a bad number is caught on entry rather than surfacing later
-      as a raw DHL 400
-    - the DHL Label button is disabled until a tracking number or label exists,
-      with the reason shown underneath
-    - "Generate DHL Label" is now just "DHL Label", and the timeline no longer
-      says "Generate label to continue" — there was never a Generate button
-
-  If creating shipments is out of scope for now, say so and we will hide the
-  label button entirely rather than leave a promise on screen.
-
+    ALSO NEEDED, small: the full list of service_code values the webshop can
+    produce. Our packing slip maps "I" to International and "D" to Domestic,
+    so a code like "7" prints as a bare "7". Cosmetic, and ours to fix once
+    we have the list.
 
 ################################################################################
 POS
@@ -336,20 +271,70 @@ POS
 
 --- GET /boutique/products?search=... -----------------------------------------
 
-  Does the search match barcodes?
-    A barcode scanner is a keyboard device — it types the barcode into the POS
-    search box, which posts straight to ?search=.
+  CONFIRMED BY TEST: ?search= does not match barcodes
 
-    If the search only covers name and SKU, scanning a product finds nothing
-    and the cashier sees an empty result with no explanation.
+    A barcode scanner is a keyboard device — it types the number into the POS
+    search box, which posts straight to ?search=. So scanning a product today
+    returns nothing at all, with no error and no explanation to the cashier.
 
-    NEEDED: confirmation that ?search= also matches the barcode column, and if
-    not, please add it.
+    WHAT WE DID
+      Saved a barcode on two products, then searched for each one:
+
+        product "Super"  barcode 2569509849117
+        product "ff"     barcode 1234567890123
+
+        GET /boutique/products?search=2569509849117  ->  0 results
+        GET /boutique/products?search=1234567890123  ->  0 results
+
+      Both barcodes are stored correctly — GET /boutique/products/:id returns
+      them — so saving works. Only the search does not look at the column.
+
+    NEEDED: include the barcode column in the ?search= match, alongside name
+    and SKU. Nothing changes in the portal; the POS search box already posts
+    to this endpoint.
 
 
---- POS orders and the customer name ------------------------------------------
+################################################################################
+STORE PROFILE
+################################################################################
 
-  See ORDERS above — POS is where those "Guest" orders originate.
+--- GET /boutique/media returns rows whose files are gone ---------------------
+
+  Store Profile > Store Photography shows "2/10 photos" and renders two empty
+  grey tiles. Both image requests 404.
+
+  The two URLs, taken from the browser's Network tab:
+    /uploads/boutiques/media/media-e59e655b-6f78-40fd-91bd-f86d8d332067
+      -1787729381016-fks3d6.webp
+    /uploads/boutiques/media/media-e59e655b-6f78-40fd-91bd-f86d8d332067
+      -1787729387778-9cczal.webp
+
+  This is not a portal bug. What we checked:
+
+    - The URL the portal builds is correct. /uploads/ is served fine on both
+      hosts — /uploads/categories/men-1787575000547.png returns 200 and a real
+      PNG on primodev and on apidev alike.
+    - The directory exists. /uploads/boutiques/ returns 403 (listing
+      forbidden), not 404 — so nginx is serving that tree.
+    - The two .webp files themselves return 404 on BOTH hosts.
+
+  So GET /boutique/media is returning two rows whose files are not on disk.
+  The database records survived; the uploaded files did not. Both were
+  uploaded within 7 seconds of each other, which looks like one upload batch.
+
+  NOT YET REPRODUCED: we have not tested whether a fresh upload still does
+  this. If a new photo uploads and displays correctly, these two rows are
+  historical and only need cleaning up. We will test and tell you.
+
+  NEEDED:
+    1. Why did the files vanish but the rows remain? If an upload can half-fail
+       (row written, file never persisted or the .webp conversion failed), the
+       row should not be committed until the file is on disk.
+    2. Please delete these two orphan rows, or tell us it is safe to delete
+       them from the portal.
+    3. Ideally GET /boutique/media should not return a row whose file is
+       missing — otherwise every boutique that ever had a failed upload shows
+       permanent blank tiles.
 
 
 ################################################################################
@@ -358,58 +343,69 @@ ENGAGEMENT
 
 --- The saver count has two different names ------------------------------------
 
-  GET /boutique/marketing/favorites/products  returns  saver_count
-  GET /boutique/markdowns/preview             returns  savers_count
+  Still true, and it is three names rather than two:
 
-    Same number, two spellings. We handle both, but one of them is probably
-    a typo and will bite whoever touches it next.
+    GET /boutique/marketing/favorites/products   saver_count    (confirmed today)
+    GET /boutique/markdowns/preview              savers_count
+    GET /boutique/markdowns/approvals            savers
 
-    NEEDED: one name on both endpoints.
+  The same idea — how many customers saved this product — spelled three ways.
+  The portal reads whichever name each endpoint sends, so nothing is broken;
+  it is a trap for whoever touches this next, and at least one is a typo.
 
-
---- GET /boutique/marketing/dashboard -----------------------------------------
-
-  No range parameter
-    The Overview tab shows a "Channel Performance" panel: open rate and click
-    rate per channel. That data only comes from this endpoint, and this
-    endpoint always returns one fixed window.
-
-    There was a "Last 30 days / Last 90 days" picker sitting on that panel. It
-    did nothing at all — it could not, because there is no parameter to send.
-    We have removed it rather than leave a control that lies.
-
-    NEEDED: ?range=30d|90d on this endpoint, same values the analytics
-    endpoint already accepts. Then we put the picker back.
+    NEEDED: one name across all three. We will follow whichever you pick —
+    just tell us before it changes so we ship together.
 
 
---- GET /boutique/marketing/analytics -----------------------------------------
+--- Marketing range picker and per-channel rates — NOTHING NEEDED, thank you --
 
-  No per-channel open/click rates
-    This endpoint returns kpis, id_rate, revenue_by_channel, engagement_funnel
-    and campaign_roi — but not the per-channel open/read and click/reply rates
-    the Overview panel needs.
+  Two items here are withdrawn. We found we can do it without you.
 
-    That is why the panel is stuck on the dashboard endpoint above. If these
-    rates were added here instead, both problems close at once.
+  GET /boutique/marketing/analytics already accepts a range and returns
+  campaign_roi with a channel, recipients, open_rate and click_rate on every
+  row. Grouping those by channel reproduces channel_performance exactly:
 
-    NEEDED: either the range parameter above, or channel_performance added to
-    this response.
+    dashboard.channel_performance   email, 4 campaigns, 22 recipients, 0%, 0%
+    analytics.campaign_roi (email)  8+3+3+8 = 22 recipients, 4 campaigns, 0%, 0%
 
+  So we will derive the Channel Performance panel from the analytics endpoint
+  and put the 30d/90d picker back ourselves. No ?range= needed on
+  /boutique/marketing/dashboard, and no channel_performance needed on
+  /boutique/marketing/analytics.
 
---- Campaign status values ----------------------------------------------------
+  ONE SMALL QUESTION: what is the channel value for WhatsApp campaigns?
+  Everything in this boutique is "email". The portal currently looks for
+  "wa". If yours is "whatsapp" we will match it — just tell us which.
 
-  Please confirm the full list
-    We map: sent, draft, scheduled, in_review, recurring. Anything outside
-    that list is shown as-is, tidied up, which will look wrong in Italian.
+--- Campaign status and channel values — ANSWERED, nothing needed ------------
 
-    NEEDED: the complete set of values status can take.
+  We got these from your own validator rather than asking:
+
+    status  must be one of: draft, scheduled, sending, sent, failed
+    channel must be one of: email, whatsapp, push
+
+  Both turned up bugs on our side, now fixed:
+
+    - we were mapping in_review and recurring, which your API cannot produce,
+      and had no label for sending — it printed as English "Sending"
+    - the Overview Channel Performance panel looked for channel "wa" while
+      you send "whatsapp", so the WhatsApp bar always read "—" no matter how
+      many WhatsApp campaigns had been sent
+
+  ONE THING TO FLAG, not a request: we do not yet render the "push" channel
+  anywhere — a push campaign would currently be drawn as email. Are push
+  campaigns actually in use, or is the enum reserved for later? If they are
+  coming we will build the tab and icon for them.
 
 
 --- Template change requests --------------------------------------------------
 
   GET /boutique/email-templates/:id/change-requests
-    Same question — we only know 'open'. What else can status be?
 
+  We only know status "open". We could not learn the rest the same way —
+  this boutique has no change requests, so the list is empty.
+
+    NEEDED: the complete set of values status can take here.
 
 ################################################################################
 AGING & MARKDOWNS
@@ -423,23 +419,30 @@ AGING & MARKDOWNS
 
 --- GET /boutique/markdowns/approvals -----------------------------------------
 
-  Decimals are returned as strings
+  Decimals are returned as strings — COULD NOT RE-TEST
     "current_price": "88.00", "discount_pct": "35.00", "margin_pct": "-602.99"
 
     while GET /boutique/markdowns/preview returns real numbers for the same
     data. We handle both; flagging for consistency.
 
+    We could not check whether this is still true: the approval queue is
+    empty and the preview proposes nothing, because no product is old enough
+    to reach a markdown bracket. See first_received_at under PRODUCTS.
+
 
 --- PATCH /boutique/markdowns/rules -------------------------------------------
 
-  Is this a merge or a replace?
-    We send only the field that changed, e.g. { "rules": [{ "bracket": "aging",
-    "apply_mode": "approval" }] }.
+  ANSWERED BY TEST — it merges. Nothing needed from you.
 
-    If the handler replaces the whole rule rather than merging, changing the
-    apply-mode dropdown would silently wipe that bracket's discount_pct.
+    We sent only one field and checked what survived:
 
-    NEEDED: confirmation that it merges.
+      before   { bracket: "fresh", enabled: true, discount_pct: 15, apply_mode: "auto" }
+      PATCH    { rules: [{ bracket: "fresh", apply_mode: "approval" }] }
+      after    { bracket: "fresh", enabled: true, discount_pct: 15, apply_mode: "approval" }
+
+    discount_pct and enabled both survived, so sending only the changed field
+    is safe and the apply-mode dropdown cannot wipe a bracket's discount.
+    (The rule was restored to auto afterwards.)
 
 
 --- GET /boutique/markdowns/preview -------------------------------------------
@@ -459,59 +462,6 @@ REPORTS
 
   Thank you for top-products and the payouts pointer — both are wired now and
   downloading correctly. All 8 reports work.
-
-
---- GET /boutique/reports/top-products -----------------------------------------
-
-  views and try_ons come back as 0 on every row
-
-    WHAT WE SEE
-      name           units_sold   revenue     views   try_ons
-      Strom Jacket   15           14699.80    0       0
-      ff             5            440         0       0
-
-    Fifteen of that jacket sold and nobody viewed it, which cannot be true.
-
-    You already compute per-product views: GET /boutique/analytics/matrix
-    returns viewsNormalized per product, which is what the "Visibility vs
-    Conversion" chart plots. So the underlying data exists.
-
-    We deliberately did NOT copy that figure into this report — it is
-    normalised for charting, not a raw count, and it comes from a different
-    period window. Two endpoints disagreeing on the same column is worse than
-    an empty one.
-
-    On try_ons you have already answered this yourself. The Looks Feed export
-    carries:
-
-      Note          try_ons, shares and look-attributed revenue require event
-                    tracking that is not yet recorded.
-      Unavailable   try_ons; shares; revenue
-
-    So try_ons is not measured anywhere — the 0 in this report is not a count.
-
-    NEEDED:
-      - views:   populate as a raw count for the requested period, from the
-                 same source /analytics/matrix already uses.
-      - try_ons: either drop the column, or declare it the way Looks Feed
-                 does (below) until event tracking exists.
-
-
---- Please use the Looks Feed "unavailable" pattern everywhere ------------------
-
-  Every figure in every report is printed as-is, so a field you do not send
-  arrives in the CSV as 0. A boutique cannot tell "genuinely zero" from "not
-  measured" — and zero is a number people act on.
-
-  Looks Feed already solves this, and solves it well: it sends `note` and
-  `unavailable`, and the export prints both. On that report, Looks 0 and
-  Likes 0 read as true zeros precisely because they are absent from the
-  unavailable list. Nothing is ambiguous.
-
-  NEEDED: the same `unavailable` array on the other reports — sales, vat,
-  inventory, returns, top-products, payouts. No new measurement required, just
-  a declaration of what each endpoint cannot currently fill. We already render
-  it; nothing changes on our side.
 
 
 --- Scheduled reports: built, two things outstanding ---------------------------
@@ -564,12 +514,14 @@ REPORTS
     Nothing is required from you here. If you ever do want ?format= honoured
     server-side we will switch to it, but it is not blocking anything.
 
-    NEEDED (2): how is a schedule removed? There is no DELETE in what you sent.
-    We have assumed is_active:false is the intended way to stop one, so the
-    edit dialog offers it as a switch and paused rows are greyed in the table
-    with a "Paused" tag. If there is a DELETE, say so and we will add a proper
-    remove button — a merchant who has scheduled the wrong report currently
-    has to leave the row there, switched off, rather than tidy it away.
+    ANSWERED — DELETE /boutique/reports/schedules/:id exists. We probed it
+    rather than asking: it returns 401 (auth required) where an unregistered
+    route returns "Route DELETE:... not found". PATCH on the same path exists
+    too; PUT does not.
+
+    So nothing is needed from you here. Adding the remove button is our work,
+    and it is on our list — at the moment a merchant who schedules the wrong
+    report can only switch it off, not tidy it away.
 
 
 ################################################################################
@@ -595,6 +547,43 @@ FINANCIALS
     NEEDED: just a yes/no. If pickup is NOT meant to be charged, then
     applied_on is wrong and we will change it back.
 
+    RE-CHECKED 25 SEPTEMBER — the arithmetic still holds exactly:
+
+      revenue.ecommerce       7,780.68
+      revenue.reserve_pickup  4,201.90
+                             ----------
+                             11,982.58  = ecommerce_commission.applied_on
+      11,982.58 x 8%        =    958.61  vs 958.59 charged (per-order rounding)
+
+    So the e-commerce row reconciles. We still need the yes/no on intent.
+
+
+  A SECOND THING, found while checking the above: the POS row does not
+  reconcile.
+
+      pos_commission   rate 0.03   applied_on 12,124.08   amount 137.53
+      12,124.08 x 3% = 363.72, not 137.53
+
+    137.53 is 1.13% of the stated base. The cause is that six POS orders carry
+    no commission at all — gross equals net on each:
+
+      244463af, 39729c37, c4078f73, e0e3b846, d611a428, 94f42e82
+      (all 4-7 September, all 1220.00 or 220.00)
+
+    The seven POS orders that DO charge commission sum to exactly 137.53, so
+    the amount is right. It is applied_on that is wrong: it counts revenue
+    that was never charged.
+
+    The screen therefore reads "3% su 12.124,08" beside a charge of 137.53 —
+    the same mismatch that was fixed on the e-commerce row.
+
+    These six are probably historic test sales from before commission was
+    applied, so it may self-correct. But:
+
+    NEEDED: should applied_on count only the revenue that actually carried
+    commission? Otherwise the rate and the amount disagree whenever an order
+    is exempt, and the boutique cannot check its own fees.
+
 
 --- Italian bundle: "on" is translated as "il" ---------------------------------
 
@@ -602,6 +591,12 @@ FINANCIALS
   It should read:           "8% su €9513,05"
 
     "il" means "the". The key is financials.on.
+
+  STILL TRUE ON 25 SEPTEMBER. Read straight from the live bundle:
+
+      GET /auth/boutique/translations   (preferred_locale "it")
+      translationsVersion  0f03c7ee4521
+      financials.on        "il"
 
 
 ################################################################################
@@ -640,70 +635,6 @@ LOCATIONS
 INTEGRATIONS — SHOPIFY
 ################################################################################
 
---- 1. Disconnect does not disconnect ----------------------------------------
-
-  DELETE /boutique/shopify/locations/:locationId/connection
-
-  answers cleanly:
-
-      {"success":true,"message":"Disconnected","data":{"ok":true}}
-
-  but the row survives, and GET .../connection keeps returning it on every
-  reload:
-
-      "shop_domain":   "strom@mailinator.com"
-      "access_token":  null
-      "connected_at":  null
-      "status":        "not_connected"
-
-  So the boutique disconnects, sees the success toast, reloads, and the store
-  is connected again — with no token behind it, so every action then fails.
-  There was no way to get out of it from the UI.
-
-  We have fixed our half: GET's record is now treated as "no connection" when
-  status is one of not_connected / disconnected / revoked / error / failed /
-  pending / inactive, so Disconnect sticks.
-
-    QUESTION, so our check cannot drift out of date: what is the full set of
-    values `status` can take, and which of them mean connected? We have never
-    seen a successful connect, so we do not know the connected word — we match
-    the unusable ones and treat anything unknown as connected, so that a live
-    store is never hidden. That means a new word for "off" reopens this bug.
-
-    ALSO WORTH CONSIDERING: if the row is kept deliberately (audit trail, or
-    to preserve the mapping for a reconnect), GET could simply 404 while it is
-    in that state. We already handle 404 as "not connected". Either way suits
-    us — we just need to know which.
-
-
---- 1b. A FAILED connect also leaves a row behind -----------------------------
-
-  Same shape of problem, and the reason the status list above had to grow.
-
-  POST /boutique/shopify/locations/:locationId/connect with shop "strom"
-  answered, correctly:
-
-      {"success": false,
-       "message": "Shopify shop not found for \"strom.myshopify.com\" — the
-                   store may not exist, may have been deleted/renamed, …"}
-
-  Nothing was connected, and we showed the boutique that error. But the next
-  GET .../connection returned a saved row anyway:
-
-      "shop_domain":  "strom"
-      "status":       "error"
-      "connected_at": null
-
-  So the row is written BEFORE the shop is verified, and a connect the
-  boutique was just told had failed shows as connected on the next reload.
-
-    NEEDED: verify first, write only on success. A connect that returns
-    success:false should leave no row at all.
-
-  Combined with issue 1, there was no way out of this from the UI: connecting
-  failed but stuck, and disconnecting succeeded but did not stick.
-
-
 --- 1c. SECURITY: the access token is returned in plaintext -------------------
 
   GET /boutique/shopify/locations/:locationId/connection returns:
@@ -721,35 +652,13 @@ INTEGRATIONS — SHOPIFY
   We noticed it only because the DELETE response happens to null it, which is
   what made it visible as a difference between two responses.
 
+  STILL TRUE ON 24 SEPTEMBER. The same GET returned a real live Shopify token
+  today, prefixed shpat_. The one in the example above was a test value; this
+  one was a working credential and has had to be rotated.
+
     NEEDED: do not return access_token. If the UI ever needs to show that a
     token exists, a boolean (has_token) or a last-4 suffix is enough — we ask
     for neither today.
-
-
---- 2. An unusable shop domain is accepted and stored -------------------------
-
-  POST /boutique/shopify/locations/:locationId/connect
-
-  accepted shopDomain "strom@mailinator.com" — an email address — and saved
-  the connection. The failure only surfaced later, on sync-types:
-
-      500  "Request cannot be constructed from a URL that includes
-            credentials:
-            https://strom@mailinator.com.myshopify.com/admin/api/2026-07/
-            graphql.json"
-
-  Everything before the '@' is read as a username, so the request could never
-  be built. The connection was stored in a permanently broken state, and the
-  message gives a boutique no way to know that the domain field was at fault.
-
-  Our half is fixed: the field now normalises what is pasted (strips
-  https://, a trailing .myshopify.com, /admin/..., capitals, whitespace) and
-  refuses anything that is not a Shopify handle before it is sent.
-
-    NEEDED: reject the domain at connect time rather than storing it. A
-    Shopify handle is lowercase letters, digits and hyphens — no '@', dots,
-    spaces or scheme. Your own 400 with a readable message would be ideal,
-    since the portal is not the only client.
 
 
 --- 3. Smaller: no way to list a store's Shopify locations --------------------
@@ -767,57 +676,10 @@ INTEGRATIONS — SHOPIFY
   to print the raw slug ("mini") where the other two levels print names.
 
 
---- 4. The import brings no product images ------------------------------------
-
-  POST /boutique/shopify/connections/:id/mapping/apply
-
-  imports the products correctly — name, SKU, price, stock, variant count all
-  arrive — but every imported product comes in with no photo. On the Products
-  table the whole Shopify catalogue is a column of blank grey tiles.
-
-  GET /boutique/products, same boutique, same response: every SHOPIFY- product
-  has main_photo null, and the three products created by hand in the portal
-  have a real one.
-
-      "name":       "The Collection Snowboard: Liquid"
-      "sku":        "SHOPIFY-gid://shopify/Product/9305627689098"
-      "main_photo": null            ← every imported product
-
-      "name":       "Clover Pendant"
-      "sku":        "WQE-5674"
-      "main_photo": "https://apidev.revoltution.com/uploads/products/8912…png"
-
-  Nothing to fix on our side: the portal draws main_photo when it is there and
-  an empty tile when it is not, which is what it is doing. The field is null in
-  your response, so there is no image to draw.
-
-  Checked at source before reporting this: the products do have images in
-  Shopify. The store is the dev store primo-test-uw6ao3l9, created with
-  Shopify's generated test data, and its products carry photos in the Shopify
-  admin. So there is something to import and it is not arriving.
-
-    NEEDED: carry the images across during the import. Shopify returns them on
-    the same product query the import already makes — `featuredImage { url }`
-    and `media(first: n)` / `images(first: n)` — so no extra Shopify call and
-    no new scope is needed.
-
-    ONE THING TO DECIDE, because it changes the size of the job: every photo
-    in Primo today is re-hosted under /uploads/products/, so matching that
-    means downloading each Shopify CDN image and storing a copy, then writing
-    the product_photos rows with one marked main. Storing Shopify's CDN URL
-    directly is much less work and the portal handles it either way — imgSrc()
-    passes an absolute http(s) URL straight through and only prefixes the
-    relative ones — but then the image disappears if the product is deleted in
-    Shopify or the store disconnects. Your call; we need no change for either.
-
-    CONFIRMED, so this is not just a missing main flag: GET
-    /boutique/products/:id/photos on an imported product comes back with no
-    photos. Nothing is stored — the images are never fetched from Shopify in
-    the first place, and the Photos section of an imported product is empty
-    when you open it in the portal.
-
-
 --- 4b. Customer import returns a wall of raw Shopify error --------------------
+
+  STILL EXACTLY AS BELOW ON 24 SEPTEMBER — re-tested, the sentence still
+  arrives four times in one string, each copy carrying the admin URL.
 
   Not a fault in the import itself. The catalogue side is fine — this is only
   about what comes back when Shopify refuses.
@@ -851,62 +713,6 @@ INTEGRATIONS — SHOPIFY
   PII to the Shopify, Advanced and Plus plans, so a boutique on Shopify Basic
   can never use this button at all. If that is a plan we expect to support, the
   button should say so up front rather than fail on click.
-
-
---- 5. The mapped category never reaches the products -------------------------
-
-  Same endpoint, separate problem, and this one is the bigger of the two: the
-  whole point of the mapping screen is that the boutique places each Shopify
-  product type into the Primo category tree. That placement is not applied.
-
-  The mapping row is set, overridden by hand, and reports 14 products on it:
-
-      "shopifyProductType": "snowboard"
-      "categoryTypeId":     "ab4f9214-5b93-40ac-be19-10bb0a656bd4"
-      "categoryName":       "Men"
-      "typeName":           "Knitwear"
-      "styleSlug":          "turtlenecks"
-      "productCount":       14
-      "status":             "over"
-
-  Apply then answers:
-
-      "message":  "Mapping applied — catalogue imported"
-      "imported": 17
-
-  But GET /boutique/products afterwards has, on all 17 imported products:
-
-      "category_path": null
-
-  Not one of the 14 carries "Men / Knitwear / Turtlenecks". By contrast the
-  hand-made products in the same response carry theirs
-  ("Accessories / Jewelry / Necklaces", "Women / Dresses / Maxi"), so the field
-  and the list query are both fine — the import is not writing it.
-
-  The 3 rows still in review are correctly null; they have no category yet.
-  It is the 14 mapped ones that should not be.
-
-    NEEDED: apply writes the row's categoryTypeId and styleSlug onto every
-    product of that Shopify product type.
-
-
---- 5b. Re-running apply changes nothing, but still reports success -----------
-
-  Noticed while testing issue 5. The products were first imported on
-  17 September at 13:34. The category override was set afterwards, so we
-  re-ran apply to pick it up. It answered "Mapping applied — catalogue
-  imported", "imported": 17 — and nothing changed: category_path still null on
-  all 17, and created_at still 2026-09-17T13:34:31 on every row, so no record
-  was rewritten.
-
-  So "imported": 17 appears to be the number of products the mapping covers,
-  not the number of records created or updated. A boutique that corrects a
-  mapping and re-applies is told it worked and gets no change.
-
-    NEEDED: apply should update products that already exist, not skip them —
-    correcting a mapping is exactly when a boutique will use this. If a
-    re-apply is deliberately a no-op, the count should not be called
-    "imported", and the message should say nothing was changed.
 
 
 ################################################################################
@@ -1099,19 +905,49 @@ AI MODEL STUDIO
 ALL TABS — TRANSLATIONS
 ################################################################################
 
-  Please load the new primo5.json (5,002 keys) and BUMP translationsVersion.
+  Please load the new primo5.json (5,061 keys) and BUMP translationsVersion.
   The portal caches the bundle keyed on that version string, so browsers keep
   serving the old bundle until it changes.
 
   Changes since the last file: 125 keys added, 17 removed, 0 existing values
   modified — nothing already translated is affected.
 
-  FIVE MORE were added after this document was first sent, so please take the
-  current primo5.json rather than the copy you may already have:
+  FIFTY-FIVE MORE were added after this document was first sent, so please take
+  the current primo5.json rather than the copy you may already have:
 
     ais.common.quota_resets                              (1)
     ais_legacy.all_models_pre / all_models_em            (2)
     ais.hub.show_less / load_more                        (2)
+    messages.today_divider / wa_label                    (2)
+    products.webshop_not_configured                      (1)
+    pt.printers.*                                       (26)
+    pt.printer_cards.*                                  (12)
+    pt.designer.sample_product / pt.select.load_failed    (2)
+    sup.err_load_tickets / err_load_ticket                (2)
+    sup.ticket_status.closed / spam                       (2)
+    store_profile.categories.loading / error / empty      (3)
+
+  On those last two: your own schema lists ticket status as
+  new|open|progress|resolved|closed|spam, but the bundle only had the first
+  four. A ticket in either of the missing states printed the literal text
+  "sup.ticket_status.closed" on screen. Both are added now, and the portal also
+  falls back to a readable word rather than a key path if a new state appears.
+  A QUESTION RATHER THAN A REQUEST, about the login bundle. You keep the login /
+  forgot_password / reset_password / stripe_connect keys in a second file, separate
+  from primo5.json, and those screens are translated correctly today — nothing is
+  wrong with them.
+
+  We would like to know which file should own them from now on, because we cannot
+  see the split from our side: a check of the code against primo5.json alone
+  reports those 47 keys as missing, when in fact your other file supplies them.
+
+  Either answer suits us. If the two files stay separate, we will leave primo5.json
+  alone and check both when we look for gaps. If you would rather have one file,
+  we can fold them in — but then the login file should stop being loaded, so the
+  same key is never defined in two places.
+
+  What we cannot do is guess, because two copies of the same key will drift the
+  first time one of them is edited.
 
   PLEASE DO NOT TRANSLATE clm.* (103 keys). An earlier version of this note
   listed 16 new clm.* keys — ignore that. The only screen that used them was a
@@ -1142,10 +978,10 @@ ALL TABS — TRANSLATIONS
 ALREADY FIXED — THANK YOU
 ################################################################################
 
-  Shopify catalogue import — product images
-    Issues 4 above: imported products arrived with main_photo null and no
-    product_photos rows. Images now come across. The enum error QA threw on the
-    way (invalid input value for enum photo_source: "shopify") is also gone.
+  Shopify catalogue import — product images (was Shopify issue 4)
+    Imported products arrived with main_photo null and no product_photos rows.
+    Images now come across. The enum error QA threw on the way (invalid input
+    value for enum photo_source: "shopify") is also gone.
 
   Shopify mapping/apply — 500
     Now returns cleanly.
@@ -1182,3 +1018,114 @@ ALREADY FIXED — THANK YOU
   Variant reconciliation
     Removing a colour and updating an existing variant's stock now persist
     correctly on PUT /boutique/products/:id.
+
+  GET /boutique/reservations — status on the list rows
+    Rows now carry status, so the Dashboard can take pending and confirmed
+    from one call instead of two. Collapsing those calls is our work.
+
+  GET /boutique/reservations/:id
+    The by-id endpoint exists now. The portal still uses the old five-list
+    workaround; updating it is ours.
+
+  POST /boutique/orders/:id/ship — DHL shipment creation
+    Books the shipment and returns the label URL. Tested end to end on order
+    43fefb26: label opens, survives a reload, tracking number passes the
+    length check, weight defaulted server-side.
+
+  GET /boutique/categories/tree — product_count scoping
+    product_count is now per-boutique and total_product_count carries the
+    platform-wide figure. Store Profile's "Categories (By your Products)"
+    card is correct again.
+
+  GET /boutique/products — product_limit
+    "product_limit": 50 now comes back on the response, so the product counter
+    shows the boutique's real plan cap instead of a build-time constant.
+
+  GET /boutique/products — category_path on the list rows
+    Present and in the right format ("Men's / Jackets & Outerwear / Coats").
+    Print Price Tags and the Inventory category filter both work off it now.
+    (It is still null on unmapped Shopify products — that is Shopify issue 5,
+    not this one.)
+
+  GET /boutique/orders and /orders/:id — POS customer name
+    POS sales with a customer attached now carry name/email on the list, so
+    the Orders table shows the real name instead of "Guest". Verified on
+    order ed322bcf, the one quoted in the original report, which now returns
+    "name": "yes2". The POS orders still showing no name have customer_id
+    null — genuine walk-ins, correctly "Guest". Our temporary customer lookup
+    in the order detail panel has been deleted.
+    (dashboard/stats.recentOrders still needs the same fix — see DASHBOARD.)
+
+  GET /boutique/reports/top-products — views and try_ons are now declared
+    The report carries the Looks Feed pattern:
+
+      "unavailable": ["views", "try_ons"],
+      "note": "views and try_ons require view/try-on event tracking, which is
+               not yet recorded."
+
+    So a 0 in those columns no longer reads as a measured zero. We already
+    render both — the preview and the CSV each print the note and an
+    "Unavailable metrics" line. Exactly what was asked for. Thank you.
+
+    (One small thing, not a request: we had thought /boutique/analytics/matrix
+    already held per-product views, since it returns viewsNormalized for the
+    Visibility vs Conversion chart. Your note says view events are not
+    recorded, so presumably that figure is derived rather than counted. No
+    action needed — we would just like to know which, in case we are wrong
+    about what that chart is showing.)
+
+  Scheduled reports — DELETE exists
+    DELETE /boutique/reports/schedules/:id is registered. Wiring up a remove
+    button is our work.
+
+  Shopify connect / disconnect (was issues 1, 1b and 2)
+    Disconnect now sticks — the store no longer comes back on reload. A failed
+    connect no longer leaves a row behind. An unusable shop domain is rejected
+    rather than stored. All three re-tested and working.
+
+    ONE QUESTION STILL OPEN from issue 1, and it is the last Shopify item
+    besides the three below. The portal decides "is this store connected?" by
+    matching status against a list of words meaning NOT connected:
+
+      not_connected, disconnected, revoked, error, failed, pending, inactive
+
+    Anything outside that list is treated as connected, so that a live store is
+    never hidden. That guess was necessary because we had never seen a
+    successful connect and did not know the connected word.
+
+    Please send the full set of values status can take, and which of them mean
+    connected. As it stands, a new word for "off" would quietly reopen the
+    disconnect bug. (Related: connections here have read "importing" since
+    21 September — does that state ever complete?)
+
+  Shopify mapping — the category now reaches the products (was issue 5)
+    Mapping "snowboard" to Unisex / Streetwear and pressing Apply now writes
+    the category onto all 14 products of that type. Confirmed: 19 Shopify
+    products in Primo, exactly 14 carrying a category_path, matching the
+    mapping. This was the biggest item in the Shopify list.
+
+  Shopify apply — re-applying updates existing products (was issue 5b)
+    Apply used to report success and change nothing. It now rewrites products
+    that already exist, so correcting a mapping works.
+
+  Shopify import — all 19 products now arrive (was issue 4c)
+    The import previously brought 17 of the 19 products the mapping counted,
+    with no mention of the two missing. Apply now reports "imported": 19 and
+    all 19 are present.
+
+  GET /boutique/reservations?status=… — pagination
+    The list now returns the pagination block we asked for, in exactly the
+    shape suggested:
+
+      "pagination": { "page": 1, "limit": 20, "total": 1, "total_pages": 1 }
+
+    The portal already pages off it, so a boutique with more than 100
+    reservations in one status no longer loses the rest.
+
+  GET /boutique/inventory — category_path
+    Present on the rows, so the Inventory category filter switches itself on.
+
+  GET /boutique/products — first_received_at, for portal-created products
+    Populated now, and days_in_stock is calculated from it. Two follow-ups
+    remain under PRODUCTS: Shopify imports still get null, and we would like
+    to know whether the field can be set at creation.

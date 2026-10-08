@@ -39,10 +39,10 @@ export default function Login() {
           setWhatsappEnabled(res.data.whatsapp_enabled)
           navigate('/')
         } else {
-          setError(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
+          setError(res.message ?? t('common.error_generic'))
         }
       })
-      .catch(() => { setLoading(false); setError(t('common.error_network', 'Network error. Please check your connection.')) })
+      .catch(() => { setLoading(false); setError(t('common.error_network')) })
   }
 
   return (
@@ -83,7 +83,7 @@ export default function Login() {
               {t('login.forgot_password', 'Forgot password?')}
             </div>
             <button className="btn btn-primary auth-submit-btn" type="submit" disabled={loading}>
-              {loading ? t('common.loading', 'Loading...') : t('login.sign_in', 'Sign In')}
+              {loading ? t('common.loading') : t('login.sign_in', 'Sign In')}
             </button>
           </form>
         </div>

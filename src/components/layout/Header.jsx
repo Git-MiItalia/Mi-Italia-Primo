@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import useLangStore from '../../store/langStore'
 import useNotifStore from '../../store/notifStore'
+import useSidebarStore from '../../store/sidebarStore'
 
 const titleKeys = {
   '/dashboard':         'sidebar.dashboard',
@@ -56,6 +57,7 @@ function Header() {
   const lang       = useLangStore(state => state.lang)
   const setLang    = useLangStore(state => state.setLang)
   const unreadCount = useNotifStore(s => s.unreadCount)
+  const openMobileNav = useSidebarStore(s => s.openMobile)
 
   const titleKey = titleKeys[pathname] ?? 'Primo'
 
@@ -63,6 +65,12 @@ function Header() {
   return (
     <div className="main-hdr">
       <div className="main-hdr-left">
+        {/* Opens the nav drawer. `display:none` above the breakpoint — the
+            sidebar is permanently on screen there, so there is nothing to open. */}
+        <button className="mobile-nav-btn" onClick={openMobileNav}
+          aria-label={t('sidebar.open_menu')}>
+          <span className="material-symbols-outlined">menu</span>
+        </button>
         <h2 className="main-title">{t(titleKey, titleDefaults[pathname])}</h2>
       </div>
       <div className="main-hdr-actions">

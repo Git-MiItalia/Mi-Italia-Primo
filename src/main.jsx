@@ -1,17 +1,17 @@
 
-// The `material-symbols` package's stylesheet used to be imported here. It
-// pulls in the complete 3.9 MB icon font — every icon Google publishes — of
-// which this app renders 211. The subset and the class rules it provided now
-// live in styles/fonts.css alongside Jost and Bodoni.
-//import './lib/i18n.js'
+
+// Order matters: index.css defines the :root variables and the element reset,
+// so it loads first and everything after it builds on top. mobile.css loads
+// last so its breakpoint rules win ties without needing !important.
+import './index.css'
 import './app-additions.css'
 import './App.css'
 import './styles/fonts.css'
+import './styles/mobile.css'
 
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './index.css'
 import App from './App.jsx'
 
 

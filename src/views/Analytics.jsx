@@ -273,7 +273,7 @@ function KpiStrip({ stats, deltas, loading, loc, t }) {
    matching the design source exactly) ── */
 function TrendChart({ trend, loading, t, loc }) {
   if (!loading && (!trend || trend.length === 0)) {
-    return <EmptyState icon="show_chart">{t('analytics.no_trend_data', 'No trend data available yet.')}</EmptyState>
+    return <EmptyState icon="show_chart">{t('analytics.no_trend_data')}</EmptyState>
   }
   if (loading || !trend) return null
 
@@ -329,7 +329,7 @@ function funnelLabel(f, t) {
 }
 function DiscoveryFunnel({ funnel, loading, t, loc }) {
   if (!loading && (!funnel || funnel.length === 0)) {
-    return <EmptyState icon="filter_alt">{t('analytics.no_funnel_data', 'No funnel data available yet.')}</EmptyState>
+    return <EmptyState icon="filter_alt">{t('analytics.no_funnel_data')}</EmptyState>
   }
   if (loading || !funnel) return null
   let biggestDrop = null
@@ -369,7 +369,7 @@ function stageKey(stage) {
 
 /* ── Geography + traffic (shared row-list layout) ── */
 function GeoList({ geo, loading, t, loc }) {
-  if (!loading && (!geo || geo.length === 0)) return <EmptyState icon="public">{t('analytics.no_geo_data', 'No geography data available yet.')}</EmptyState>
+  if (!loading && (!geo || geo.length === 0)) return <EmptyState icon="public">{t('analytics.no_geo_data')}</EmptyState>
   if (loading || !geo) return null
   return (
     <div className="an-rl-list">
@@ -381,7 +381,7 @@ function GeoList({ geo, loading, t, loc }) {
             </span>
             <div>
               <div className="an-rl-name">
-                {g.unknown ? t('analytics.geo.unknown_city', 'Unknown location') : g.cityName}
+                {g.unknown ? t('analytics.geo.unknown_city') : g.cityName}
               </div>
               <div className="an-rl-track"><div className="an-rl-fill" style={{ width: `${g.pct}%` }} /></div>
             </div>
@@ -394,7 +394,7 @@ function GeoList({ geo, loading, t, loc }) {
 }
 const TRAFFIC_SOURCE_LABELS = { app: 'App', web: 'Web', search: 'Search', referral: 'Referral', social: 'Social', external: 'App & Web', direct: 'Direct' }
 function TrafficList({ traffic, loading, t, loc }) {
-  if (!loading && (!traffic || traffic.length === 0)) return <EmptyState icon="alt_route">{t('analytics.no_traffic_data', 'No traffic data available yet.')}</EmptyState>
+  if (!loading && (!traffic || traffic.length === 0)) return <EmptyState icon="alt_route">{t('analytics.no_traffic_data')}</EmptyState>
   if (loading || !traffic) return null
   return (
     <div className="an-rl-list">
@@ -414,7 +414,7 @@ function TrafficList({ traffic, loading, t, loc }) {
 
 /* ── Most-viewed pieces ── */
 function ProductsList({ products, loading, t, loc }) {
-  if (!loading && (!products || products.length === 0)) return <EmptyState icon="visibility">{t('analytics.no_product_data', 'No product data available yet.')}</EmptyState>
+  if (!loading && (!products || products.length === 0)) return <EmptyState icon="visibility">{t('analytics.no_product_data')}</EmptyState>
   if (loading || !products) return null
   return (
     <div>
@@ -425,8 +425,8 @@ function ProductsList({ products, loading, t, loc }) {
             <div className="an-prod-name">{p.name}</div>
             <div className="an-prod-meta">{p.category ?? '—'}</div>
           </div>
-          <div className="an-prod-stat"><div className="an-prod-stat-v">{fmtNum(p.views, loc)}</div><div className="an-prod-stat-l">{t('analytics.products.views', 'Views')}</div></div>
-          <div className="an-prod-stat"><div className="an-prod-stat-v res">{p.reserves ?? '—'}</div><div className="an-prod-stat-l">{t('analytics.products.reserves', 'Reserves')}</div></div>
+          <div className="an-prod-stat"><div className="an-prod-stat-v">{fmtNum(p.views, loc)}</div><div className="an-prod-stat-l">{t('analytics.products.views')}</div></div>
+          <div className="an-prod-stat"><div className="an-prod-stat-v res">{p.reserves ?? '—'}</div><div className="an-prod-stat-l">{t('analytics.products.reserves')}</div></div>
         </div>
       ))}
     </div>
@@ -471,38 +471,38 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
         <div className="an-card-hdr-l">
           <span className="material-symbols-outlined an-card-icon">search_off</span>
           <div>
-            <div className="card-title">{t('analytics.lost_demand.title_pre', 'Lost')} <em>{t('analytics.lost_demand.title_em', 'Demand')}</em></div>
-            <div className="an-card-sub">{t('analytics.lost_demand.sub', "What customers wanted but couldn't get.")}</div>
+            <div className="card-title">{t('analytics.lost_demand.title_pre')} <em>{t('analytics.lost_demand.title_em')}</em></div>
+            <div className="an-card-sub">{t('analytics.lost_demand.sub')}</div>
           </div>
         </div>
         <button className="btn btn-primary btn-sm" onClick={downloadBuySheet}>
-          <span className="material-symbols-outlined">download</span>{t('analytics.lost_demand.buy_sheet', 'Download Buy Sheet')}
+          <span className="material-symbols-outlined">download</span>{t('analytics.lost_demand.buy_sheet')}
         </button>
       </div>
 
       <div className="an-ld-grid3">
         <div>
-          <div className="an-ld-sublabel">{t('analytics.lost_demand.searches', 'Unstocked Searches')}</div>
-          {searches.length === 0 ? <EmptyState icon="search_off">{t('analytics.no_search_data', 'No search data available yet.')}</EmptyState> : (
+          <div className="an-ld-sublabel">{t('analytics.lost_demand.searches')}</div>
+          {searches.length === 0 ? <EmptyState icon="search_off">{t('analytics.no_search_data')}</EmptyState> : (
             <>
               {searches.map(s => (
                 <div className="an-ld-search-row" key={s.term}>
-                  <div><div className="an-ld-term">{s.term}</div><div className="an-ld-term-sub">{fmtNum(s.count, loc)} {t('analytics.lost_demand.searches_unit', 'searches')}</div></div>
+                  <div><div className="an-ld-term">{s.term}</div><div className="an-ld-term-sub">{fmtNum(s.count, loc)} {t('analytics.lost_demand.searches_unit')}</div></div>
                   <div className="an-ld-count">{s.count}</div>
                   <div className="an-ld-trend">{s.trendPct != null ? `↑ ${s.trendPct}%` : '—'}</div>
                 </div>
               ))}
-              <div className="an-ld-floor-note">{t('analytics.lost_demand.floor_note', 'Only showing search terms with meaningful volume.')}</div>
+              <div className="an-ld-floor-note">{t('analytics.lost_demand.floor_note')}</div>
             </>
           )}
         </div>
 
         <div>
-          <div className="an-ld-sublabel">{t('analytics.lost_demand.oos', 'Out-of-Stock Views')}</div>
-          {!oos ? <EmptyState icon="visibility_off">{t('analytics.no_oos_data', 'No out-of-stock view data available yet.')}</EmptyState> : (
+          <div className="an-ld-sublabel">{t('analytics.lost_demand.oos')}</div>
+          {!oos ? <EmptyState icon="visibility_off">{t('analytics.no_oos_data')}</EmptyState> : (
             <>
               <div className="an-ld-oos-count">{fmtNum(oos.total, loc)}</div>
-              <div className="an-ld-oos-sub">{t('analytics.lost_demand.oos_sub', 'Views on products that were sold out at the time.')}</div>
+              <div className="an-ld-oos-sub">{t('analytics.lost_demand.oos_sub')}</div>
               <div className="an-ld-oos-items">
                 {(oos.items ?? []).map((o, i) => (
                   <div className="an-ld-oos-item" key={i}><span>{o.productName}{o.variant ? ` · ${o.variant}` : ''}</span><b>{o.views}</b></div>
@@ -514,14 +514,14 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
 
         <div>
           <div className="an-ld-sublabel">
-            <span>{t('analytics.lost_demand.sizes', 'Size Misses')}</span>{' '}
-            <span className="an-ld-v2tag">{t('analytics.lost_demand.sizes_pending_tag', 'Coming Soon')}</span>
+            <span>{t('analytics.lost_demand.sizes')}</span>{' '}
+            <span className="an-ld-v2tag">{t('analytics.lost_demand.sizes_pending_tag')}</span>
           </div>
           {sizePending ? (
-            <PendingBanner>{t('analytics.pending.size_misses', 'Size-miss tracking is coming soon.')}</PendingBanner>
+            <PendingBanner>{t('analytics.pending.size_misses')}</PendingBanner>
           ) : (
             <>
-              <div className="an-ld-size-row hdr"><div>{t('analytics.lost_demand.sizes_piece', 'Piece')}</div><div style={{ textAlign: 'center' }}>{t('analytics.lost_demand.sizes_size', 'Size')}</div><div style={{ textAlign: 'right' }}>{t('analytics.lost_demand.sizes_missed', 'Missed')}</div></div>
+              <div className="an-ld-size-row hdr"><div>{t('analytics.lost_demand.sizes_piece')}</div><div style={{ textAlign: 'center' }}>{t('analytics.lost_demand.sizes_size')}</div><div style={{ textAlign: 'right' }}>{t('analytics.lost_demand.sizes_missed')}</div></div>
               {sizeMisses.map((z, i) => (
                 <div className="an-ld-size-row" key={i}>
                   <div>{z.piece}</div>
@@ -531,7 +531,7 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
               ))}
             </>
           )}
-          <div className="an-consent-note"><span className="material-symbols-outlined">lock</span><span>{t('analytics.lost_demand.sizes_note', 'Size data is only shown once enough customers have opted in.')}</span></div>
+          <div className="an-consent-note"><span className="material-symbols-outlined">lock</span><span>{t('analytics.lost_demand.sizes_note')}</span></div>
         </div>
       </div>
     </div>
@@ -539,9 +539,11 @@ function LostDemandCard({ lostDemand, matrixReorder, days, loc, t }) {
 }
 
 /* ── Visibility vs conversion matrix ── */
-const MATRIX_VERDICT_LABELS = { reorder: 'Reorder', fix: 'Fix', expose: 'Expose', markdown: 'Markdown', early: 'Too Early' }
+/* The quadrant names this build knows how to label. Only a membership test —
+   the words themselves live in the translation bundle, as everywhere else. */
+const MATRIX_VERDICTS = new Set(['reorder', 'fix', 'expose', 'markdown', 'early'])
 function MatrixChart({ matrix, thresholds, loading, t }) {
-  if (!loading && (!matrix || matrix.length === 0)) return <EmptyState icon="scatter_plot">{t('analytics.no_matrix_data', 'No visibility/conversion data available yet.')}</EmptyState>
+  if (!loading && (!matrix || matrix.length === 0)) return <EmptyState icon="scatter_plot">{t('analytics.no_matrix_data')}</EmptyState>
   if (loading || !matrix) return null
 
   const W = 520, H = 300, pad = 40, iw = W - pad - 18, ih = H - pad - 14
@@ -556,7 +558,14 @@ function MatrixChart({ matrix, thresholds, loading, t }) {
   const xAt = v => pad + iw * Math.min(v, maxViews) / maxViews
   const yAt = s => 14 + ih - ih * s / 100
   const initials = name => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-  const verdictLabel = q => t(`analytics.matrix.verdict.${q}`, MATRIX_VERDICT_LABELS[q])
+  /* `q` is the server's quadrant for a product, so it can be missing or a name
+     this build does not know. The dot beside it already handles that —
+     QUADRANT_META[...] ?? QUADRANT_META.early — and the label now follows it,
+     rather than rendering `analytics.matrix.verdict.undefined` at the user.
+     Falling back to `early` is honest: it is the muted "not enough data to
+     place this yet" bucket, which is exactly what an unknown quadrant is. */
+  const verdictLabel = q =>
+    t(`analytics.matrix.verdict.${MATRIX_VERDICTS.has(q) ? q : 'early'}`)
 
   return (
     <>
@@ -577,8 +586,8 @@ function MatrixChart({ matrix, thresholds, loading, t }) {
             </g>
           )
         })}
-        <text className="an-axis-lbl" x={pad + iw / 2} y={H - 2} textAnchor="middle">{t('analytics.matrix.axis_views', 'Views')} →</text>
-        <text className="an-axis-lbl" x="12" y={14 + ih / 2} transform={`rotate(-90 12 ${14 + ih / 2})`} textAnchor="middle">{t('analytics.matrix.axis_sell', 'Sell-Through %')} →</text>
+        <text className="an-axis-lbl" x={pad + iw / 2} y={H - 2} textAnchor="middle">{t('analytics.matrix.axis_views')} →</text>
+        <text className="an-axis-lbl" x="12" y={14 + ih / 2} transform={`rotate(-90 12 ${14 + ih / 2})`} textAnchor="middle">{t('analytics.matrix.axis_sell')} →</text>
       </svg>
       <div className="an-mx-legend">
         {matrix.map(m => {
@@ -586,12 +595,12 @@ function MatrixChart({ matrix, thresholds, loading, t }) {
           return (
             <div className="an-mx-leg-row" key={m.productId}>
               <div className="an-mx-leg-dot" style={{ background: meta.dashed ? 'var(--mist)' : meta.color, color: meta.dashed ? 'var(--stone)' : 'var(--white)', border: meta.dashed ? '1px dashed var(--stone)' : undefined }}>{initials(m.name)}</div>
-              <div>{m.name} · {m.viewsNormalized} {t('analytics.matrix.axis_views', 'Views').toLowerCase()} · {m.sellThroughPct}% · {m.daysOnPlatform}{t('common.days_abbrev', 'd')}</div>
+              <div>{m.name} · {m.viewsNormalized} {t('analytics.matrix.axis_views').toLowerCase()} · {m.sellThroughPct}% · {m.daysOnPlatform}{t('common.days_abbrev')}</div>
               <div className={`an-mx-verdict ${m.quadrant}`}>{verdictLabel(m.quadrant)}</div>
             </div>
           )
         })}
-        <div className="an-mx-note">{t('analytics.matrix.threshold_note', 'Dashed line marks the median split between high and low performers.')}</div>
+        <div className="an-mx-note">{t('analytics.matrix.threshold_note')}</div>
       </div>
     </>
   )
@@ -608,7 +617,7 @@ function bucketLabel(b, i) {
   return /^\d+(-\d+|\+)$/.test(String(raw)) ? `${String(raw).replace('-', '–')} days` : String(raw)
 }
 function SavesAging({ savesAging, loading, t }) {
-  if (!loading && !savesAging) return <EmptyState icon="history">{t('analytics.no_aging_data', 'No saves-aging data available yet.')}</EmptyState>
+  if (!loading && !savesAging) return <EmptyState icon="history">{t('analytics.no_aging_data')}</EmptyState>
   if (loading || !savesAging) return null
   const buckets  = savesAging.buckets ?? []
   const callList = savesAging.callList ?? []
@@ -622,20 +631,20 @@ function SavesAging({ savesAging, loading, t }) {
           </div>
         ))}
       </div>
-      <div className="an-ld-sublabel">{t('analytics.aging.call_list', 'Call List')}</div>
-      {callList.length === 0 ? <div className="an-card-sub">{t('analytics.no_call_list', 'No customers to call right now.')}</div> : callList.map((c, i) => (
+      <div className="an-ld-sublabel">{t('analytics.aging.call_list')}</div>
+      {callList.length === 0 ? <div className="an-card-sub">{t('analytics.no_call_list')}</div> : callList.map((c, i) => (
         <div className="an-call-row" key={c.customerId ?? i}>
           <div><div className="an-call-name">{c.name}</div><div className="an-call-item">{c.item}{c.variant ? ` · ${c.variant}` : ''}</div></div>
-          <div className="an-call-days">{c.daysSaved} {t('analytics.aging.days', 'days')}</div>
+          <div className="an-call-days">{c.daysSaved} {t('analytics.aging.days')}</div>
           <div className="an-call-channels">{(c.channels ?? []).filter(ch => ch !== 'whatsapp' || isWhatsappEnabled()).map(ch => <span key={ch} className="material-symbols-outlined">{CHANNEL_ICON[ch] ?? 'chat'}</span>)}</div>
         </div>
       ))}
       {savesAging.backInStockConversionPct != null && (
         <div className="an-bis-line">
-          <b>{t('analytics.aging.bis_line_label', 'Back-in-stock conversion:')}</b>{' '}
-          {t('analytics.aging.bis_line_mid', 'of notified customers,')}{' '}
+          <b>{t('analytics.aging.bis_line_label')}</b>{' '}
+          {t('analytics.aging.bis_line_mid')}{' '}
           <b>{savesAging.backInStockConversionPct}%</b>{' '}
-          {t('analytics.aging.bis_line_end', 'went on to purchase within 30 days.')}
+          {t('analytics.aging.bis_line_end')}
         </div>
       )}
       {/* The API says WHY each saver is withheld — suppressedBreakdown splits
@@ -655,7 +664,7 @@ function SavesAging({ savesAging, loading, t }) {
 /** Why savers were withheld from the call list, using the API's own breakdown. */
 function suppressedNote(t, savesAging) {
   const total = savesAging?.suppressedCount
-  if (total == null || total === 0) return t('analytics.aging.note_none', 'Every saver who can be contacted is listed above.')
+  if (total == null || total === 0) return t('analytics.aging.note_none')
   const noConsent    = savesAging?.suppressedBreakdown?.noConsent
   const notACustomer = savesAging?.suppressedBreakdown?.notACustomer
   if (noConsent > 0 && notACustomer > 0) {
@@ -670,7 +679,7 @@ function suppressedNote(t, savesAging) {
     return t('analytics.aging.note_no_consent', { count: noConsent,
       defaultValue: '{{count}} saver(s) hidden — they have not given marketing consent.' })
   }
-  return `${total} ${t('analytics.aging.note', 'customers suppressed to protect individual privacy (below reporting threshold).')}`
+  return `${total} ${t('analytics.aging.note')}`
 }
 
 /* ── Walk-in heatmap (v1 transactions+pickups, v2 gated app-presence) ── */
@@ -717,7 +726,7 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
         <div className="an-card-hdr-l">
           <span className="material-symbols-outlined an-card-icon">schedule</span>
           <div>
-            <div className="card-title">{t('analytics.heatmap.title_pre', 'Walk-In')} <em>{t('analytics.heatmap.title_em', 'Heatmap')}</em></div>
+            <div className="card-title">{t('analytics.heatmap.title_pre')} <em>{t('analytics.heatmap.title_em')}</em></div>
             <div className="an-card-sub">
               {t('analytics.heatmap.sub', {
                 range: heatmap ? `${fmtDateLong(heatmap.windowStart, loc)} – ${fmtDateLong(heatmap.windowEnd, loc)}` : '…',
@@ -728,16 +737,16 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
         </div>
         <div className="an-hm-src-toggle">
           <div className={`an-hm-src-chip${hmSource === 'tx' ? ' act' : ''}`} onClick={() => setHmSource('tx')}>
-            <span className="material-symbols-outlined">point_of_sale</span>{t('analytics.heatmap.src_tx', 'Transactions')}
+            <span className="material-symbols-outlined">point_of_sale</span>{t('analytics.heatmap.src_tx')}
           </div>
           <div className={`an-hm-src-chip${hmSource === 'presence' ? ' act' : ''}`} onClick={() => setHmSource('presence')}>
-            <span className="material-symbols-outlined">location_on</span>{t('analytics.heatmap.src_presence', 'App Presence')}<span className="an-ld-v2tag">V2</span>
+            <span className="material-symbols-outlined">location_on</span>{t('analytics.heatmap.src_presence')}<span className="an-ld-v2tag">V2</span>
           </div>
         </div>
       </div>
 
       {hmSource === 'tx' ? (
-        !loading && !heatmap ? <EmptyState icon="schedule">{t('analytics.no_heatmap_data', 'No heatmap data available yet.')}</EmptyState> : loading || !heatmap ? null : (
+        !loading && !heatmap ? <EmptyState icon="schedule">{t('analytics.no_heatmap_data')}</EmptyState> : loading || !heatmap ? null : (
           <>
             <div className="an-hm-grid" style={{ '--an-hm-cols': hours.length }}>
               <div className="an-hm-lbl" />
@@ -790,7 +799,7 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
             <div className="an-hm-gate-overlay">
               <div className="an-hm-gate-card">
                 <span className="material-symbols-outlined">lock</span>
-                <div className="an-hm-gate-t">{t('analytics.heatmap.gate_title', 'Unlock App Presence Data')}</div>
+                <div className="an-hm-gate-t">{t('analytics.heatmap.gate_title')}</div>
                 {/* These two are not a fraction. Live data returns
                     opted_in 30 / identified_base 3 / pct 10 — the opted-in
                     pool is the bigger number, so rendering "30 / 3" read as
@@ -810,7 +819,7 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
                 <div className="an-hm-gate-s">
                   {presence.message || (presence.k_floor
                     ? t('analytics.presence.gate_hint', { k: presence.k_floor, defaultValue: 'An hour appears once at least {{k}} opted-in customers have been seen in it. Below that it stays hidden, so no single visitor can be identified.' })
-                    : t('analytics.presence.gate_hint_generic', 'Too few opted-in customers so far. Hours appear once enough people have been seen to keep them anonymous.'))}
+                    : t('analytics.presence.gate_hint_generic'))}
                 </div>
               </div>
             </div>
@@ -844,13 +853,13 @@ function WalkInHeatmap({ heatmap, presence, hmSource, setHmSource, loading, pres
 function ReservePickupCard({ reserve, loading, t, loc }) {
   return (
     <div className="an-reserve-card">
-      <div className="an-reserve-tag">{t('analytics.reserve.tag', 'Reserve & Pickup')}</div>
-      <div className="an-reserve-title">{t('analytics.reserve.title_pre', 'Reserve &')} <em>{t('analytics.reserve.title_em', 'Pickup')}</em></div>
-      <div className="an-reserve-sub">{t('analytics.reserve.sub', 'Customers who reserved items to try or buy in-store.')}</div>
+      <div className="an-reserve-tag">{t('analytics.reserve.tag')}</div>
+      <div className="an-reserve-title">{t('analytics.reserve.title_pre')} <em>{t('analytics.reserve.title_em')}</em></div>
+      <div className="an-reserve-sub">{t('analytics.reserve.sub')}</div>
       <div className="an-reserve-stats">
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtNum(reserve.requests, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.requests', 'Requests')}</div></div>
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtEUR(reserve.reservedValue, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.value', 'Reserved Value')}</div></div>
-        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : `${reserve.pickupRatePct}%`}</div><div className="an-reserve-stat-l">{t('analytics.reserve.pickup_rate', 'Pickup Rate')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtNum(reserve.requests, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.requests')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : fmtEUR(reserve.reservedValue, loc)}</div><div className="an-reserve-stat-l">{t('analytics.reserve.value')}</div></div>
+        <div><div className="an-reserve-stat-v">{loading || !reserve ? '—' : `${reserve.pickupRatePct}%`}</div><div className="an-reserve-stat-l">{t('analytics.reserve.pickup_rate')}</div></div>
       </div>
     </div>
   )
@@ -970,11 +979,11 @@ export default function Analytics() {
           <span className="material-symbols-outlined">error</span>
           <div style={{ flex: 1 }}>
             {failedCount >= totalCount
-              ? t('analytics.err_all', 'Could not load analytics. Please try again.')
+              ? t('analytics.err_all')
               : t('analytics.err_partial', { count: failedCount, defaultValue: '{{count}} section(s) failed to load — the panels below may be incomplete.' })}
           </div>
           <button className="btn btn-outline btn-sm" onClick={() => setReloadKey(k => k + 1)}>
-            {t('common.retry', 'Retry')}
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -993,13 +1002,13 @@ export default function Analytics() {
           <div className="an-card-hdr-l">
             <span className="material-symbols-outlined an-card-icon">show_chart</span>
             <div>
-              <div className="card-title">{t('analytics.trend.title_pre', 'Discovery')} <em>{t('analytics.trend.title_em', 'Trend')}</em></div>
-              <div className="an-card-sub">{t('analytics.trend.sub', 'Daily views and saves over time.')}</div>
+              <div className="card-title">{t('analytics.trend.title_pre')} <em>{t('analytics.trend.title_em')}</em></div>
+              <div className="an-card-sub">{t('analytics.trend.sub')}</div>
             </div>
           </div>
           <div className="an-legend">
-            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--gold)' }} />{t('analytics.trend.views', 'Views')}</div>
-            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--porpora)' }} />{t('analytics.trend.saves', 'Saves')}</div>
+            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--gold)' }} />{t('analytics.trend.views')}</div>
+            <div className="an-legend-item"><span className="an-legend-swatch" style={{ background: 'var(--porpora)' }} />{t('analytics.trend.saves')}</div>
           </div>
         </div>
         <TrendChart trend={dailyTrend} loading={loadingMain} t={t} loc={loc} />
@@ -1007,22 +1016,22 @@ export default function Analytics() {
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="filter_alt" title={<>{t('analytics.funnel.title_pre', 'Discovery')} <em>{t('analytics.funnel.title_em', 'Funnel')}</em></>} sub={t('analytics.funnel.sub', 'From view to reserve request.')} />
+          <CardHead icon="filter_alt" title={<>{t('analytics.funnel.title_pre')} <em>{t('analytics.funnel.title_em')}</em></>} sub={t('analytics.funnel.sub')} />
           <DiscoveryFunnel funnel={funnel} loading={loadingMain} t={t} loc={loc} />
         </div>
         <div className="card">
-          <CardHead icon="public" title={<>{t('analytics.geo.title_pre', 'Views by')} <em>{t('analytics.geo.title_em', 'Geography')}</em></>} sub={t('analytics.geo.sub', 'Where your online visitors are coming from.')} />
+          <CardHead icon="public" title={<>{t('analytics.geo.title_pre')} <em>{t('analytics.geo.title_em')}</em></>} sub={t('analytics.geo.sub')} />
           <GeoList geo={geo} loading={loadingMain} t={t} loc={loc} />
         </div>
       </div>
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="alt_route" title={<>{t('analytics.traffic.title_pre', 'Traffic')} <em>{t('analytics.traffic.title_em', 'Sources')}</em></>} sub={t('analytics.traffic.sub', 'How customers are discovering your boutique.')} />
+          <CardHead icon="alt_route" title={<>{t('analytics.traffic.title_pre')} <em>{t('analytics.traffic.title_em')}</em></>} sub={t('analytics.traffic.sub')} />
           <TrafficList traffic={traffic} loading={loadingMain} t={t} loc={loc} />
         </div>
         <div className="card">
-          <CardHead icon="visibility" title={<>{t('analytics.products.title_pre', 'Most-Viewed')} <em>{t('analytics.products.title_em', 'Products')}</em></>} sub={t('analytics.products.sub', 'Your most-viewed pieces this period.')} />
+          <CardHead icon="visibility" title={<>{t('analytics.products.title_pre')} <em>{t('analytics.products.title_em')}</em></>} sub={t('analytics.products.sub')} />
           <ProductsList products={topProducts} loading={loadingMain} t={t} loc={loc} />
         </div>
       </div>
@@ -1031,11 +1040,11 @@ export default function Analytics() {
 
       <div className="an-grid2">
         <div className="card">
-          <CardHead icon="scatter_plot" title={<>{t('analytics.matrix.title_pre', 'Visibility vs.')} <em>{t('analytics.matrix.title_em', 'Conversion')}</em></>} sub={t('analytics.matrix.sub', 'Views vs. sell-through rate, by product.')} />
+          <CardHead icon="scatter_plot" title={<>{t('analytics.matrix.title_pre')} <em>{t('analytics.matrix.title_em')}</em></>} sub={t('analytics.matrix.sub')} />
           <MatrixChart matrix={matrixData} thresholds={matrix?.thresholds} loading={loadingMain} t={t} />
         </div>
         <div className="card">
-          <CardHead icon="history" title={<>{t('analytics.aging.title_pre', 'Saves')} <em>{t('analytics.aging.title_em', 'Aging')}</em></>} sub={t('analytics.aging.sub', 'How long saved items sit before selling or aging out.')} />
+          <CardHead icon="history" title={<>{t('analytics.aging.title_pre')} <em>{t('analytics.aging.title_em')}</em></>} sub={t('analytics.aging.sub')} />
           <SavesAging savesAging={savesAgingData} loading={loadingMain} t={t} />
         </div>
       </div>
@@ -1051,7 +1060,7 @@ export default function Analytics() {
 
       <div className="an-foot-note">
         <span className="material-symbols-outlined">tips_and_updates</span>
-        <div>{t('analytics.footer.note', 'Data updates daily. Figures reflect the selected date range.')}</div>
+        <div>{t('analytics.footer.note')}</div>
       </div>
     </>
   )

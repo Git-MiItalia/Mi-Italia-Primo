@@ -199,7 +199,7 @@ export default function PrintTagModal({
 
     const opened = openPrintWindow(tags, sizeId)
     if (!opened) {
-      alert(t('ptm.popup_blocked', 'Popup blocked — please allow popups for this site to print tags.'))
+      alert(t('ptm.popup_blocked'))
     }
   }
 
@@ -209,7 +209,7 @@ export default function PrintTagModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal ptm-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
-          <div className="modal-title">{t('ptm.title', 'Print')} <em>{t('ptm.title_em', 'Product Tag')}</em></div>
+          <div className="modal-title">{t('ptm.title')} <em>{t('ptm.title_em')}</em></div>
           <div className="modal-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
           </div>
@@ -219,10 +219,10 @@ export default function PrintTagModal({
 
           {/* ── LEFT: Preview ─────────────────────────────────────────── */}
           <div>
-            <div className="ptm-section-lbl">{t('ptm.preview', 'Tag Preview')}</div>
+            <div className="ptm-section-lbl">{t('ptm.preview')}</div>
 
             <div className="ptm-size-picker">
-              <span className="ptm-size-picker-lbl">{t('ptm.print_size', 'Print size:')}</span>
+              <span className="ptm-size-picker-lbl">{t('ptm.print_size')}</span>
               {SIZE_OPTIONS.map(opt => (
                 <button
                   key={opt.id}
@@ -239,13 +239,13 @@ export default function PrintTagModal({
             </div>
 
             <div className="ptm-preview-hint">
-              {t('ptm.preview_hint', 'Print on {{size}} label paper · Dymo / Zebra / Brother compatible',
+              {t('ptm.preview_hint',
                  { size: SIZE_OPTIONS.find(s => s.id === sizeId)?.label })}
             </div>
 
             {product.barcodeValue && !barcode.valid && (
               <div className="ptm-barcode-warn">
-                ⚠ {t('ptm.barcode_warn', "Barcode value doesn't match {{format}} format — pattern is decorative and may not scan.",
+                ⚠ {t('ptm.barcode_warn',
                       { format: product.barcodeFormat?.toUpperCase() || 'EAN-13' })}
               </div>
             )}
@@ -253,28 +253,28 @@ export default function PrintTagModal({
 
           {/* ── RIGHT: Settings ───────────────────────────────────────── */}
           <div>
-            <div className="ptm-section-lbl">{t('ptm.settings', 'Tag Settings')}</div>
+            <div className="ptm-section-lbl">{t('ptm.settings')}</div>
 
             <div className="form-group">
-              <label className="form-lbl">{t('ptm.size_to_print', 'Size to print')}</label>
+              <label className="form-lbl">{t('ptm.size_to_print')}</label>
               <select
                 className="form-select"
                 value={sizeToPrint}
                 onChange={e => setSizeToPrint(e.target.value)}
               >
                 <option value="ALL">
-                  {t('ptm.all_sizes', 'All sizes ({{sizes}})',
-                     { sizes: sizes.map(s => s.size).join(', ') || t('ptm.one_size', 'One Size') })}
+                  {t('ptm.all_sizes',
+                     { sizes: sizes.map(s => s.size).join(', ') || t('ptm.one_size') })}
                 </option>
                 {sizes.map(s => (
-                  <option key={s.size} value={s.size}>{t('ptm.size_only', 'Size {{size}} only', { size: s.size })}</option>
+                  <option key={s.size} value={s.size}>{t('ptm.size_only', { size: s.size })}</option>
                 ))}
-                {sizes.length === 0 && <option value="One Size">{t('ptm.one_size_only', 'One Size only')}</option>}
+                {sizes.length === 0 && <option value="One Size">{t('ptm.one_size_only')}</option>}
               </select>
             </div>
 
             <div className="form-group">
-              <label className="form-lbl">{t('ptm.qty_per_size', 'Quantity per size')}</label>
+              <label className="form-lbl">{t('ptm.qty_per_size')}</label>
               <input
                 className="form-input"
                 type="number"
@@ -286,7 +286,7 @@ export default function PrintTagModal({
               />
             </div>
 
-            <div className="ptm-section-lbl ptm-section-lbl-mt">{t('ptm.show_on_tag', 'Show on tag')}</div>
+            <div className="ptm-section-lbl ptm-section-lbl-mt">{t('ptm.show_on_tag')}</div>
             <div className="ptm-fields-list">
               {FIELD_OPTIONS.map(f => (
                 <label key={f.key} className="ptm-field-lbl">
@@ -306,8 +306,8 @@ export default function PrintTagModal({
               <button className="btn btn-primary ptm-flex-1" onClick={handlePrint} disabled={totalTags === 0}>
                 <span className="material-symbols-outlined">print</span>
                 {totalTags === 1
-                  ? t('ptm.print_one', 'Print 1 tag')
-                  : t('ptm.print_many', 'Print {{count}} tags', { count: totalTags })}
+                  ? t('ptm.print_one')
+                  : t('ptm.print_many', { count: totalTags })}
               </button>
             </div>
           </div>

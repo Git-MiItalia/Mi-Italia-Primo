@@ -15,6 +15,7 @@ import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, DEFAULT_CLASS_ID, f
 import { isLawfulOnline, suggestClass, resolvePolicy, buildClassMap } from '../lib/returnsPolicy/engine'
 import { fetchPolicies, fetchClasses } from '../lib/returnsPolicy/api'
 import { sortSizeLabels } from '../common/sizechart'
+import Toggle from '../components/ui/Toggle'
 
 const API = import.meta.env.VITE_API_URL
 const MAX_PRODUCTS = Number(import.meta.env.VITE_MAX_PRODUCTS ?? 10)
@@ -62,14 +63,6 @@ function generateBarcodeValue(format) {
     return randomAlphaNumeric(12)
   }
   return ''
-}
-
-function Toggle({ on, onToggle }) {
-  return (
-    <div className={`toggle${on ? ' on' : ''}`} onClick={onToggle}>
-      <div className="toggle-knob" />
-    </div>
-  )
 }
 
 function BrandOption({ brand, selected, onSelect }) {
@@ -735,14 +728,14 @@ export default function AddProduct() {
                   <div className="brand-selected-logo own">
                     <span className="material-symbols-outlined">storefront</span>
                   </div>
-                  <div className="brand-selected-name">{selectedBrand.name ?? t('common.own_label', 'Own Label')}</div>
+                  <div className="brand-selected-name">{selectedBrand.name ?? t('common.own_label')}</div>
                   <div className="brand-selected-tag own-tag">{t('add_product.brand.own_label')}</div>
                   <span className="material-symbols-outlined ap-expand-icon">expand_more</span>
                 </div>
                 <div className={`brand-dropdown${brandOpen ? ' open' : ''}`}>
                   <div className="brand-search">
                     <span className="material-symbols-outlined">search</span>
-                    <input placeholder={t('add_product.brand.search_placeholder', 'Search brands') + '…'} />
+                    <input placeholder={t('add_product.brand.search_placeholder') + '…'} />
                   </div>
                   <div>
                     <div className="brand-section-lbl">{t('add_product.brand.your_store')}</div>
@@ -758,13 +751,13 @@ export default function AddProduct() {
                     {/* An empty picker used to look identical whether the list
                         was still loading, had failed, or was genuinely empty. */}
                     {brandsLoading && (
-                      <div className="form-hint">{t('add_product.brand.loading', 'Loading brands') + '…'}</div>
+                      <div className="form-hint">{t('add_product.brand.loading') + '…'}</div>
                     )}
                     {!brandsLoading && brandsError && (
-                      <div className="form-hint">{t('add_product.brand.err_load', 'Could not load the brand list — only your own label is available right now.')}</div>
+                      <div className="form-hint">{t('add_product.brand.err_load')}</div>
                     )}
                     {!brandsLoading && !brandsError && brandCarry.length === 0 && brandAll.length === 0 && (
-                      <div className="form-hint">{t('add_product.brand.none_yet', 'No brands added yet. Use "Add a new brand" below to request one.')}</div>
+                      <div className="form-hint">{t('add_product.brand.none_yet')}</div>
                     )}
                     {brandCarry.length > 0 && <div className="brand-section-lbl">{t('add_product.brand.carried')}</div>}
                     {brandCarry.map(b => (
@@ -867,7 +860,7 @@ export default function AddProduct() {
           <div className="card">
             <div className="ap-pricing-inner">
               <div className="ap-pricing-hdr">
-                <div className="ap-pricing-title">{t('add_product.pricing.title', 'Pricing')}</div>
+                <div className="ap-pricing-title">{t('add_product.pricing.title')}</div>
                 <div className="ap-pricing-toggle-row">
                   <span className="ap-pricing-toggle-lbl">{t('add_product.pricing.hide_price')}</span>
                   <Toggle on={priceHidden} onToggle={() => setPriceHidden(v => !v)} />
@@ -962,10 +955,10 @@ export default function AddProduct() {
           <div className="card">
             <div className="card-hdr">
               <div>
-                <div className="card-title">{t('inventory.title', 'Inventory')} <em>{t('add_product.inventory.title_em', '& Costing')}</em></div>
-                <div className="ap-card-sub">{t('add_product.inventory.private_sub', 'Private — never shown to customers or Mi Italia')}</div>
+                <div className="card-title">{t('inventory.title')} <em>{t('add_product.inventory.title_em')}</em></div>
+                <div className="ap-card-sub">{t('add_product.inventory.private_sub')}</div>
               </div>
-              <span className="ap-private-badge">{t('add_product.inventory.private_badge', 'PRIVATE')}</span>
+              <span className="ap-private-badge">{t('add_product.inventory.private_badge')}</span>
             </div>
 
             <div className="ap-section-row">
@@ -995,9 +988,9 @@ export default function AddProduct() {
                   <option value="1–2 weeks">{t('add_product.vendor.lead_1_2')}</option>
                   <option value="2–4 weeks">{t('add_product.vendor.lead_2_4')}</option>
                   <option value="4–6 weeks">4–6 weeks</option>
-                  <option value="6–8 weeks">{t('add_product.vendor.lead_6_8', '6–8 weeks')}</option>
+                  <option value="6–8 weeks">{t('add_product.vendor.lead_6_8')}</option>
                   <option value="8+ weeks">{t('add_product.vendor.lead_8_plus')}</option>
-                  <option value="Pre-order only">{t('add_product.vendor.lead_preorder', 'Pre-order only')}</option>
+                  <option value="Pre-order only">{t('add_product.vendor.lead_preorder')}</option>
                 </select>
               </div>
             </div>
@@ -1009,10 +1002,10 @@ export default function AddProduct() {
               Cost &amp; Margins
             </div>
             <div className="form-row3">
-              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.cost_price', 'Cost Price (ex. VAT)')}</label><input className="form-input" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
-              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.shipping_duty', 'Shipping & Duty')}</label><input className="form-input" value={shippingCost} onChange={e => setShippingCost(e.target.value)} /></div>
+              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.cost_price')}</label><input className="form-input" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
+              <div className="form-group ap-no-mb"><label className="form-lbl">{t('add_product.inventory.shipping_duty')}</label><input className="form-input" value={shippingCost} onChange={e => setShippingCost(e.target.value)} /></div>
               <div className="form-group ap-no-mb">
-                <label className="form-lbl">{t('add_product.inventory.landed_cost', 'Landed Cost')}</label>
+                <label className="form-lbl">{t('add_product.inventory.landed_cost')}</label>
                 <input className="form-input ap-landed-cost"
                   value={costPrice && shippingCost ? `€${(parseFloat(costPrice||0) + parseFloat(shippingCost||0)).toFixed(2)}` : '—'}
                   readOnly />
@@ -1058,7 +1051,7 @@ export default function AddProduct() {
                     if (!val) setBarcodeValue('')
                   }}
                 >
-                  <option value="">{t('add_product.barcode.none', 'No barcode')}</option>
+                  <option value="">{t('add_product.barcode.none')}</option>
                   <option value="ean13">{t('add_product.barcode.ean13')}</option>
                   <option value="code128">Code 128</option>
                 </select>
@@ -1069,7 +1062,7 @@ export default function AddProduct() {
                   <input className="form-input" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)} />
                   <button
                     className="btn btn-sm btn-outline"
-                    title={t('add_product.barcode.autogen', 'Auto-generate')}
+                    title={t('add_product.barcode.autogen')}
                     disabled={!barcodeFormat}
                     onClick={() => setBarcodeValue(generateBarcodeValue(barcodeFormat))}
                   >
@@ -1104,8 +1097,8 @@ export default function AddProduct() {
             <div className="showroom-row">
               <div className="showroom-icon"><span className="material-symbols-outlined">business_center</span></div>
               <div className="ap-showroom-body">
-                <div className="ap-showroom-title">{t('products.bulk.showroom', 'Push to Showroom')}</div>
-                <div className="ap-showroom-sub">{t('add_product.showroom.sub', 'B2B buyers can discover and order at wholesale price')}</div>
+                <div className="ap-showroom-title">{t('products.bulk.showroom')}</div>
+                <div className="ap-showroom-sub">{t('add_product.showroom.sub')}</div>
               </div>
               <Toggle on={showroomOn} onToggle={() => setShowroomOn(v => !v)} />
             </div>
@@ -1115,7 +1108,7 @@ export default function AddProduct() {
                 <input className="form-input" value={wholesaleDiscount} onChange={e => setWholesaleDiscount(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-lbl">{t('add_product.showroom.min_qty', 'Min Order Qty')}</label>
+                <label className="form-lbl">{t('add_product.showroom.min_qty')}</label>
                 <input className="form-input" value={wholesaleMinQty} onChange={e => setWholesaleMinQty(e.target.value)} />
               </div>
             </div>
@@ -1147,23 +1140,23 @@ export default function AddProduct() {
           {/* Returns */}
           <div className="card">
             <div className="card-hdr">
-              <div className="card-title">{t('add_product.returns.title_a', 'Returns')} <em>{t('add_product.returns.title_b', 'Policy')}</em></div>
+              <div className="card-title">{t('add_product.returns.title_a')} <em>{t('add_product.returns.title_b')}</em></div>
             </div>
 
             <div className="ap-toggle-row ap-toggle-border">
               <div>
-                <div className="ap-toggle-label">{t('add_product.returns.online_label', 'Listed online')}</div>
+                <div className="ap-toggle-label">{t('add_product.returns.online_label')}</div>
                 <div className="form-hint">
                   {listedOnline
-                    ? t('add_product.returns.online_hint_on', 'Distance sale: 14-day minimum enforced.')
-                    : t('add_product.returns.online_hint_off', 'In-store only: boutique sets its own goodwill policy.')}
+                    ? t('add_product.returns.online_hint_on')
+                    : t('add_product.returns.online_hint_off')}
                 </div>
               </div>
               <Toggle on={listedOnline} onToggle={() => setListedOnline(v => !v)} />
             </div>
 
             <div className="form-group">
-              <label className="form-lbl">{t('add_product.returns.class_label', 'Returns class')}</label>
+              <label className="form-lbl">{t('add_product.returns.class_label')}</label>
               <select
                 className="form-select"
                 value={returnsClassId}
@@ -1171,33 +1164,33 @@ export default function AddProduct() {
               >
                 {rpClasses.map(c => (
                   <option key={c.id} value={c.id}>
-                    {rpName(c)}{rpSuggestion.classId === c.id ? ` (${t('add_product.returns.suggested_tag', 'suggested')})` : ''}
+                    {rpName(c)}{rpSuggestion.classId === c.id ? ` (${t('add_product.returns.suggested_tag')})` : ''}
                   </option>
                 ))}
               </select>
               <div className="form-hint">
                 {rpSuggestion.reasonEn
-                  ? `${t('add_product.returns.suggest_from', 'Suggested class')}: ${rpName(findById(rpClasses, rpSuggestion.classId))} · ${rpReason(rpSuggestion)}`
-                  : t('add_product.returns.suggest_none', 'No special signal from this category. Defaulting to Standard goods.')}
+                  ? `${t('add_product.returns.suggest_from')}: ${rpName(findById(rpClasses, rpSuggestion.classId))} · ${rpReason(rpSuggestion)}`
+                  : t('add_product.returns.suggest_none')}
               </div>
             </div>
 
             <div className="form-group">
-              <label className="form-lbl">{t('add_product.returns.policy_label', 'Returns policy')}</label>
+              <label className="form-lbl">{t('add_product.returns.policy_label')}</label>
               <div className="rp-row" style={{ marginBottom: 0 }}>
                 <div className="rp-row-body">
                   <div className="rp-row-name">{rpResolvedPolicy ? rpName(rpResolvedPolicy) : '—'}</div>
                   <div className="rp-row-desc">
                     {rpResolved.source === 'product'
-                      ? t('add_product.returns.src_product', 'Overridden · this product')
+                      ? t('add_product.returns.src_product')
                       : rpResolved.source === 'class'
-                        ? `${t('add_product.returns.src_class', 'From returns class')} · ${rpName(findById(rpClasses, returnsClassId))}`
-                        : t('add_product.returns.src_store', 'Inherited · store default')}
-                    {rpResolved.fallback ? ` (${t('add_product.returns.online_fallback', 'online fallback')})` : ''}
+                        ? `${t('add_product.returns.src_class')} · ${rpName(findById(rpClasses, returnsClassId))}`
+                        : t('add_product.returns.src_store')}
+                    {rpResolved.fallback ? ` (${t('add_product.returns.online_fallback')})` : ''}
                   </div>
                 </div>
                 <button type="button" className="btn btn-sm btn-outline" onClick={() => setOverrideOpen(v => !v)}>
-                  {overrideOpen ? t('common.close', 'Close') : t('add_product.returns.override_btn', 'Override')}
+                  {overrideOpen ? t('common.close') : t('add_product.returns.override_btn')}
                 </button>
               </div>
 
@@ -1215,15 +1208,15 @@ export default function AddProduct() {
 
               <div className="rp-row-meta" style={{ marginTop: 10 }}>
                 <span style={rpResolved.source === 'store' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
-                  {t('add_product.returns.trail_store', 'Store default')}
+                  {t('add_product.returns.trail_store')}
                 </span>
                 {' › '}
                 <span style={rpResolved.source === 'class' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
-                  {t('add_product.returns.trail_class', 'Returns class')}
+                  {t('add_product.returns.trail_class')}
                 </span>
                 {' › '}
                 <span style={rpResolved.source === 'product' ? { color: 'var(--deep)', fontWeight: 600 } : undefined}>
-                  {t('add_product.returns.trail_product', 'This product')}
+                  {t('add_product.returns.trail_product')}
                 </span>
               </div>
 
@@ -1235,8 +1228,8 @@ export default function AddProduct() {
                   >
                     <div className="rp-opt-radio" />
                     <div className="rp-opt-body">
-                      <div className="rp-opt-name">{t('add_product.returns.no_override', 'No override — use resolved policy')}</div>
-                      <div className="rp-opt-sub">{t('add_product.returns.no_override_sub', 'Follows the returns class, or the store default.')}</div>
+                      <div className="rp-opt-name">{t('add_product.returns.no_override')}</div>
+                      <div className="rp-opt-sub">{t('add_product.returns.no_override_sub')}</div>
                     </div>
                   </div>
                   {rpPolicies.map(p => {
@@ -1251,12 +1244,12 @@ export default function AddProduct() {
                         <div className="rp-opt-radio" />
                         <div className="rp-opt-body">
                           <div className="rp-opt-name">{rpName(p)}</div>
-                          <div className="rp-opt-sub">{p.none ? t('returns_policy.window_none', 'No returns') : `${p.days} ${t('returns_policy.days', 'days')}`}</div>
+                          <div className="rp-opt-sub">{p.none ? t('returns_policy.window_none') : `${p.days} ${t('returns_policy.days')}`}</div>
                         </div>
                         {blocked && (
                           <div className="rp-opt-badge">
                             <span className="material-symbols-outlined">lock</span>
-                            {t('add_product.returns.unavailable_online', 'Unavailable online')}
+                            {t('add_product.returns.unavailable_online')}
                           </div>
                         )}
                       </div>
@@ -1269,8 +1262,8 @@ export default function AddProduct() {
             <div className="alert alert-info rp-callout">
               <span className="material-symbols-outlined">lightbulb</span>
               <span>
-                <strong>{t('add_product.returns.callout_strong', 'Why locked, not hidden:')}</strong>{' '}
-                {t('add_product.returns.callout_body', "Primo won't let you pick a policy that would be unlawful for the current channel — those options are grayed out and locked instead of silently accepted. Turn the channel off and they become available for in-store use.")}
+                <strong>{t('add_product.returns.callout_strong')}</strong>{' '}
+                {t('add_product.returns.callout_body')}
               </span>
             </div>
           </div>
@@ -1282,7 +1275,7 @@ export default function AddProduct() {
         <div className="modal-backdrop" onClick={() => setShowAddBrand(false)}>
           <div className="modal modal-sm ap-brand-modal-scroll" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('add_product.brand_modal.title', 'Add a')} <em>{t('add_product.details.brand_label', 'Brand')}</em></div>
+              <div className="modal-title">{t('add_product.brand_modal.title')} <em>{t('add_product.details.brand_label')}</em></div>
               <div className="modal-close" onClick={() => setShowAddBrand(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1292,28 +1285,28 @@ export default function AddProduct() {
               <div className="ap-brand-success">
                 <div className="ap-brand-success-emoji">✅</div>
                 <div className="ap-brand-success-title">
-                  {t('add_product.details.brand_label', 'Brand')} <em>{t('add_product.brand_modal.submitted', 'Submitted')}</em>
+                  {t('add_product.details.brand_label')} <em>{t('add_product.brand_modal.submitted')}</em>
                 </div>
                 <div className="ap-brand-success-sub">
                   <Trans i18nKey="add_product.brand_modal.added" values={{ name: newBrand.name }} components={{ b: <strong /> }} defaults="<b>{{name}}</b> has been added to your Boutique." />
                 </div>
                 <button className="btn btn-primary ap-brand-success-btn"
-                  onClick={() => { setShowAddBrand(false); setBrandSuccess(false) }}>{t('common.done', 'Done')}</button>
+                  onClick={() => { setShowAddBrand(false); setBrandSuccess(false) }}>{t('common.done')}</button>
               </div>
             ) : (
               <>
                 <div className="alert alert-info ap-mb14">
                   <span className="material-symbols-outlined">info</span>
-                  {t('add_product.brand_modal.review_note', 'New brands are reviewed by Mi Italia within 24h.')}
+                  {t('add_product.brand_modal.review_note')}
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('add_product.brand_modal.name_label', 'Brand Name')}</label>
-                  <input className="form-input" placeholder={t('add_product.brand_modal.name_placeholder', 'e.g. Loro Piana')}
+                  <label className="form-lbl">{t('add_product.brand_modal.name_label')}</label>
+                  <input className="form-input" placeholder={t('add_product.brand_modal.name_placeholder')}
                     value={newBrand.name} onChange={e => setNewBrand(b => ({ ...b, name: e.target.value }))} />
                 </div>
                 <div className="form-row2">
                   <div className="form-group">
-                    <label className="form-lbl">{t('add_product.brand_modal.country_label', 'Country of Origin')}</label>
+                    <label className="form-lbl">{t('add_product.brand_modal.country_label')}</label>
                     <select className="form-select" value={newBrand.country}
                       onChange={e => setNewBrand(b => ({ ...b, country: e.target.value }))}>
                       {/* value stays English — it is what gets stored and sent
@@ -1324,7 +1317,7 @@ export default function AddProduct() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-lbl">{t('add_product.details.category_label', 'Category')}</label>
+                    <label className="form-lbl">{t('add_product.details.category_label')}</label>
                     <select className="form-select" value={newBrand.category}
                       onChange={e => setNewBrand(b => ({ ...b, category: e.target.value }))}>
                       {BRAND_CATEGORIES.map(c => (
@@ -1334,7 +1327,7 @@ export default function AddProduct() {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('add_product.brand_modal.website_label', 'Brand Website')}</label>
+                  <label className="form-lbl">{t('add_product.brand_modal.website_label')}</label>
                   <input className="form-input" placeholder="https://www.loropiana.com"
                     value={newBrand.website} onChange={e => setNewBrand(b => ({ ...b, website: e.target.value }))} />
                 </div>
@@ -1345,7 +1338,7 @@ export default function AddProduct() {
                   </div>
                 )}
                 <div className="modal-footer">
-                  <button className="btn btn-outline" onClick={() => setShowAddBrand(false)}>{t('common.cancel', 'Cancel')}</button>
+                  <button className="btn btn-outline" onClick={() => setShowAddBrand(false)}>{t('common.cancel')}</button>
                   <button className="btn btn-primary" disabled={!newBrand.name.trim() || brandSubmitting}
                     onClick={async () => {
                       if (!newBrand.name.trim()) return
@@ -1384,10 +1377,10 @@ export default function AddProduct() {
                           // Previously neither branch reported anything: a failed
                           // create just left the form sitting there, looking as
                           // though the button had not been pressed.
-                          setBrandError(res.message || t('add_product.brand_modal.err_create', 'Could not add the brand. Please try again.'))
+                          setBrandError(res.message || t('add_product.brand_modal.err_create'))
                         }
                       } catch {
-                        setBrandError(t('add_product.brand_modal.err_create', 'Could not add the brand. Please try again.'))
+                        setBrandError(t('add_product.brand_modal.err_create'))
                       }
                       finally { setBrandSubmitting(false) }
                     }}>
@@ -1405,7 +1398,7 @@ export default function AddProduct() {
         <div className="modal-backdrop" onClick={() => setShowCatRequest(false)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('add_product.cat_request.title', 'Request New')} <em>{t('add_product.details.category_label', 'Category')}</em></div>
+              <div className="modal-title">{t('add_product.cat_request.title')} <em>{t('add_product.details.category_label')}</em></div>
               <div className="modal-close" onClick={() => setShowCatRequest(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>
@@ -1414,30 +1407,30 @@ export default function AddProduct() {
             {catRequestSuccess ? (
               <div className="ap-brand-success">
                 <div className="ap-brand-success-emoji">✅</div>
-                <div className="ap-brand-success-title">{t('add_product.cat_request.request', 'Request')} <em>{t('add_product.cat_request.sent', 'Sent')}</em></div>
-                <div className="ap-brand-success-sub">{t('add_product.cat_request.success_sub', 'Mi Italia will review your request and get back to you.')}</div>
+                <div className="ap-brand-success-title">{t('add_product.cat_request.request')} <em>{t('add_product.cat_request.sent')}</em></div>
+                <div className="ap-brand-success-sub">{t('add_product.cat_request.success_sub')}</div>
                 <button className="btn btn-primary ap-brand-success-btn"
                   onClick={() => {
                     setShowCatRequest(false); setCatRequestSuccess(false)
                     setCatRequestName(''); setCatRequestExample(''); setCatRequestNote('')
-                  }}>{t('common.done', 'Done')}</button>
+                  }}>{t('common.done')}</button>
               </div>
             ) : (
               <>
                 <div className="form-group">
-                  <label className="form-lbl">{t('add_product.cat_request.name_label', 'Category Name')}</label>
-                  <input className="form-input" placeholder={t('add_product.cat_request.name_placeholder', 'e.g. Home Fragrance')}
+                  <label className="form-lbl">{t('add_product.cat_request.name_label')}</label>
+                  <input className="form-input" placeholder={t('add_product.cat_request.name_placeholder')}
                     value={catRequestName} onChange={e => setCatRequestName(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('add_product.cat_request.example_label', 'Example Product')} <span className="sup-optional">{t('common.optional_paren', '(optional)')}</span></label>
-                  <input className="form-input" placeholder={t('add_product.cat_request.example_placeholder', "e.g. Fico d'India diffuser 200ml")}
+                  <label className="form-lbl">{t('add_product.cat_request.example_label')} <span className="sup-optional">{t('common.optional_paren')}</span></label>
+                  <input className="form-input" placeholder={t('add_product.cat_request.example_placeholder')}
                     value={catRequestExample} onChange={e => setCatRequestExample(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-lbl">{t('add_product.cat_request.message_label', 'Message')}</label>
+                  <label className="form-lbl">{t('add_product.cat_request.message_label')}</label>
                   <textarea className="form-textarea" rows={4}
-                    placeholder={t('add_product.cat_request.message_placeholder', 'Why do you need this category?')}
+                    placeholder={t('add_product.cat_request.message_placeholder')}
                     value={catRequestNote} onChange={e => setCatRequestNote(e.target.value)} />
                 </div>
                 {catRequestError && (
@@ -1464,14 +1457,14 @@ export default function AddProduct() {
                           }),
                         }).then(r => r.json())
                         if (res?.success) { setCatRequestError(''); setCatRequestSuccess(true) }
-                        else setCatRequestError(res?.message || t('add_product.cat_request.err_send', 'Could not send the request. Please try again.'))
+                        else setCatRequestError(res?.message || t('add_product.cat_request.err_send'))
                       } catch {
-                        setCatRequestError(t('add_product.cat_request.err_send', 'Could not send the request. Please try again.'))
+                        setCatRequestError(t('add_product.cat_request.err_send'))
                       }
                       finally { setCatRequestSubmitting(false) }
                     }}>
                     <span className="material-symbols-outlined">send</span>
-                    {catRequestSubmitting ? t('add_product.cat_request.sending', 'Sending') + '…' : t('add_product.cat_request.send_btn', 'Send')}
+                    {catRequestSubmitting ? t('add_product.cat_request.sending') + '…' : t('add_product.cat_request.send_btn')}
                   </button>
                 </div>
               </>

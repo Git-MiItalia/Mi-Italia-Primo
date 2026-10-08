@@ -103,14 +103,14 @@ export default function RangePicker({ open, onClose, onApply }) {
   const rightMonth = leftMonth === 11 ? 0 : leftMonth + 1
   const rightYear  = leftMonth === 11 ? leftYear + 1 : leftYear
 
-  const selLabel = !start        ? t('rangepicker.select_start', 'Select a start date')
+  const selLabel = !start        ? t('rangepicker.select_start')
                  : start && !end ? t('rangepicker.select_end', { date: fmtDate(start), defaultValue: '{{date}} → select end date' })
                  :                 `${fmtDate(start)} – ${fmtDate(end)}`
 
   return (
     <div className="prange-picker open" onClick={e => e.stopPropagation()}>
       <div className="prange-pk-hdr">
-        <div className="prange-pk-title">{t('common.custom_date_range', 'Custom date range')}</div>
+        <div className="prange-pk-title">{t('common.custom_date_range')}</div>
         <div className="prange-pk-sel">{selLabel}</div>
       </div>
       <div className="prange-pk-months">
@@ -140,10 +140,10 @@ export default function RangePicker({ open, onClose, onApply }) {
       <div className="prange-pk-foot">
         <div className="prange-pk-presets">
           {[
-            { k: 'this-month',   label: t('rangepicker.this_month',   'This month') },
-            { k: 'last-month',   label: t('rangepicker.last_month',   'Last month') },
-            { k: 'last-quarter', label: t('rangepicker.last_quarter', 'Last quarter') },
-            { k: 'ytd',          label: t('rangepicker.ytd',          'Year to date') },
+            { k: 'this-month',   label: t('rangepicker.this_month') },
+            { k: 'last-month',   label: t('rangepicker.last_month') },
+            { k: 'last-quarter', label: t('rangepicker.last_quarter') },
+            { k: 'ytd',          label: t('rangepicker.ytd') },
           ].map(p => (
             <button
               key={p.k}
@@ -154,12 +154,12 @@ export default function RangePicker({ open, onClose, onApply }) {
           ))}
         </div>
         <div className="prange-pk-actions">
-          <button className="prange-pk-cancel" onClick={onClose}>{t('common.cancel', 'Cancel')}</button>
+          <button className="prange-pk-cancel" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="prange-pk-apply"
             disabled={!start || !end}
             onClick={() => start && end && onApply({ start, end })}>
-            {t('common.apply', 'Apply')}
+            {t('common.apply')}
           </button>
         </div>
       </div>

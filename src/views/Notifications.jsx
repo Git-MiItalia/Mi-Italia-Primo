@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/api'
 import Loading from '../components/ui/Loading'
 import useNotifStore from '../store/notifStore'
 import { timeAgo } from '../lib/timeAgo'
+import Toggle from '../components/ui/Toggle'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -58,18 +59,18 @@ export default function Notifications() {
   const navigate = useNavigate()
 
   const TABS  = [
-    t('notifications.tabs.all',          'All'),
-    t('notifications.tabs.reservations', 'Reservations'),
-    t('notifications.tabs.orders',       'Orders'),
-    t('notifications.tabs.stock',        'Stock'),
-    t('notifications.tabs.messages',     'Messages'),
+    t('notifications.tabs.all'),
+    t('notifications.tabs.reservations'),
+    t('notifications.tabs.orders'),
+    t('notifications.tabs.stock'),
+    t('notifications.tabs.messages'),
   ]
   // `field` maps each row to its key in the preferences payload.
   const prefs = [
-    { field: 'reservation_expiry', label: t('notifications.prefs.expiry',    'Reservation expiry'), sub: t('notifications.prefs.expiry_sub',    'Alert me before a reservation expires') },
-    { field: 'new_orders',         label: t('notifications.prefs.orders',    'New orders'),         sub: t('notifications.prefs.orders_sub',    'Alert me when an order comes in')       },
-    { field: 'low_stock',          label: t('notifications.prefs.low_stock', 'Low stock'),          sub: t('notifications.prefs.low_stock_sub', 'Alert me when a size is running out')   },
-    { field: 'tryon_requests',     label: t('notifications.prefs.tryon',     'Try-on requests'),    sub: t('notifications.prefs.tryon_sub',     'Alert me when a customer books a try-on') },
+    { field: 'reservation_expiry', label: t('notifications.prefs.expiry'), sub: t('notifications.prefs.expiry_sub') },
+    { field: 'new_orders',         label: t('notifications.prefs.orders'),         sub: t('notifications.prefs.orders_sub')       },
+    { field: 'low_stock',          label: t('notifications.prefs.low_stock'),          sub: t('notifications.prefs.low_stock_sub')   },
+    { field: 'tryon_requests',     label: t('notifications.prefs.tryon'),    sub: t('notifications.prefs.tryon_sub') },
   ]
 
   const notifications    = useNotifStore(s => s.notifications)
@@ -116,11 +117,11 @@ export default function Notifications() {
       .then(r => r.json())
       .then(res => {
         if (res?.success) { if (res.data) setPrefValues(res.data) }
-        else { setPrefValues(previous); setPrefError(res?.message ?? t('common.error_generic', 'Something went wrong. Please try again.')) }
+        else { setPrefValues(previous); setPrefError(res?.message ?? t('common.error_generic')) }
       })
       .catch(() => {
         setPrefValues(previous)  // put the switch back rather than lie about it
-        setPrefError(t('common.error_network', 'Network error. Please check your connection.'))
+        setPrefError(t('common.error_network'))
       })
       .finally(() => setPrefSaving(false))
   }
@@ -226,8 +227,8 @@ export default function Notifications() {
 
       <div className="card">
         <div className="card-hdr">
-          <div className="card-title">{t('notifications.recent', 'Recent')} <em>{t('notifications.recent_em', 'Activity')}</em></div>
-          <div className="card-action" onClick={markAllRead}>{t('notifications.mark_all_read', 'Mark all as read')}</div>
+          <div className="card-title">{t('notifications.recent')} <em>{t('notifications.recent_em')}</em></div>
+          <div className="card-action" onClick={markAllRead}>{t('notifications.mark_all_read')}</div>
         </div>
 
         {/* The shared indicator, but the in-card one rather than the page-level
@@ -242,7 +243,7 @@ export default function Notifications() {
         {!loading && notifications.length === 0 && (
           <div className="notif-state">
             <span className="material-symbols-outlined notif-state-icon">notifications_none</span>
-            {t('notifications.empty', 'No notifications yet')}
+            {t('notifications.empty')}
           </div>
         )}
 
@@ -251,7 +252,7 @@ export default function Notifications() {
           <>
             <div className="notif-section-hdr">
               <div className="notif-unread-dot" />
-              <div className="notif-section-lbl">{t('notifications.unread', 'Unread')} · {unread.length}</div>
+              <div className="notif-section-lbl">{t('notifications.unread')} · {unread.length}</div>
             </div>
             {unread.map(n => (
               <NotifItem key={n.id} n={n} isUnreadItem={true} isLast={false} />
@@ -262,7 +263,7 @@ export default function Notifications() {
         {/* Read / Earlier section */}
         {!loading && read.length > 0 && (
           <div className={`notif-read-section${unread.length > 0 ? ' notif-read-section-mt' : ''}`}>
-            <div className="notif-section-lbl notif-section-lbl-mb">{t('notifications.earlier', 'Earlier')}</div>
+            <div className="notif-section-lbl notif-section-lbl-mb">{t('notifications.earlier')}</div>
             {read.map((n, i) => (
               <NotifItem key={n.id} n={n} isUnreadItem={false} isLast={i === read.length - 1} />
             ))}
@@ -271,7 +272,7 @@ export default function Notifications() {
 
         {!loading && listFailed && (
           <div className="alert alert-urgent notif-prefs-pending">
-            {t('notifications.err_load', 'Could not load your notifications — this list may be incomplete or out of date.')}
+            {t('notifications.err_load')}
           </div>
         )}
 
@@ -283,13 +284,13 @@ export default function Notifications() {
 
         {/* Preferences */}
         <div className="detail-divider" />
-        <div className="notif-prefs-lbl">{t('notifications.prefs.title', 'Notification Preferences')}</div>
+        <div className="notif-prefs-lbl">{t('notifications.prefs.title')}</div>
         {prefError && (
           <div className="alert alert-urgent notif-prefs-pending">{prefError}</div>
         )}
         {prefLoadFailed && (
           <div className="alert alert-urgent notif-prefs-pending">
-            {t('notifications.prefs.err_load', 'Could not load your notification preferences, so these switches are disabled. Reload the page to try again.')}
+            {t('notifications.prefs.err_load')}
           </div>
         )}
         <div className="notif-prefs-list">
@@ -304,12 +305,7 @@ export default function Notifications() {
                   <div className="notif-pref-title">{p.label}</div>
                   <div className="notif-pref-sub">{p.sub}</div>
                 </div>
-                <div
-                  className={`toggle${on ? ' on' : ''}${ready && !prefSaving ? '' : ' toggle-disabled'}`}
-                  onClick={() => togglePref(p.field)}
-                >
-                  <div className="toggle-knob" />
-                </div>
+                <Toggle on={on} disabled={!ready || prefSaving} onToggle={() => togglePref(p.field)} />
               </div>
             )
           })}

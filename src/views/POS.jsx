@@ -14,9 +14,9 @@ import { SEED_POLICIES, RETURNS_CLASSES, BASELINE_POLICY_ID, DEFAULT_CLASS_ID, f
 import { resolvePolicy, buildClassMap } from '../lib/returnsPolicy/engine'
 import { receiptPolicyLine, guaranteeLine } from '../lib/returnsPolicy/copy'
 import { fetchPolicies, fetchClasses } from '../lib/returnsPolicy/api'
+import { imgUrl as imgSrc } from '../lib/imageUrl'
 
 const API      = import.meta.env.VITE_API_URL
-const IMG_BASE = import.meta.env.VITE_IMG_BASE_URL
 
 // ══ Helpers ═══════════════════════════════════════════════════════════
 
@@ -77,7 +77,6 @@ function defaultPayMethod(profile) {
 }
 
 function fmt(n) { return '€' + Number(n).toFixed(2) }
-function imgSrc(url) { return !url ? null : url.startsWith('http') ? url : `${IMG_BASE}${url}` }
 
 // Extract distinct top-level categories from products' category_path
 function extractCategories(products) {
@@ -221,7 +220,7 @@ function VariantPickerModal({ t, product, onClose, onPick }) {
                   {v.colour && <div className="pos-vpick-cell-col">{v.colour}</div>}
                   <div className="pos-vpick-cell-stock">
                     {inactive
-                      ? t('pos.variant.inactive', 'Not for sale')
+                      ? t('pos.variant.inactive')
                       : oos ? t('pos.variant.out') : `${stock} ${t('pos.variant.in_stock')}`}
                   </div>
                 </button>
@@ -501,14 +500,14 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
                           {r.name}
                           <span className={`pos-cust-badge${linkable ? ' crm' : ''}`}>
                             {linkable
-                              ? t('pos.cust.in_crm', 'In your CRM')
-                              : t('pos.cust.mi_only', 'Mi Italia only')}
+                              ? t('pos.cust.in_crm')
+                              : t('pos.cust.mi_only')}
                           </span>
                         </div>
                         <div className="pos-cust-result-meta">
                           {r.email || r.phone || '—'}
                           {r.platform_profile?.tier && <span className="pos-cust-result-tier"> · {r.platform_profile.tier}</span>}
-                          {!linkable && ` · ${t('pos.cust.not_linked_hint', 'sale records as Guest')}`}
+                          {!linkable && ` · ${t('pos.cust.not_linked_hint')}`}
                         </div>
                       </div>
                       <span className="material-symbols-outlined pos-cust-result-chev">chevron_right</span>
@@ -527,12 +526,17 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
           </>
         )}
 
+        {/* Own <form> so Chrome's autofill preview stays on these fields
+            instead of lighting up the POS page's inputs behind the modal. */}
         {!customer && mode === 'walkin' && (
-          <>
+          <form className="pos-cust-walkin-form" noValidate
+            onSubmit={e => { e.preventDefault(); if (!saving && walkin.firstName.trim() && !dupMatch) checkDupAndCreate() }}>
             <div className="pos-cust-form">
               <div className="pos-cust-form-row">
                 <input
                   className="pos-pay-input"
+                  name="given-name"
+                  autoComplete="given-name"
                   placeholder={t('pos.cust.first_name')}
                   autoFocus
                   value={walkin.firstName}
@@ -540,6 +544,8 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
                 />
                 <input
                   className="pos-pay-input"
+                  name="family-name"
+                  autoComplete="family-name"
                   placeholder={t('pos.cust.last_name')}
                   value={walkin.lastName}
                   onChange={e => setWalkin(w => ({ ...w, lastName: e.target.value }))}
@@ -547,13 +553,19 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
               </div>
               <input
                 className="pos-pay-input"
-                placeholder={t('staff.table.email', 'Email')}
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder={t('staff.table.email')}
                 value={walkin.email}
                 onChange={e => { setWalkin(w => ({ ...w, email: e.target.value })); setDupMatch(null) }}
               />
               <input
                 className="pos-pay-input"
-                placeholder={t('staff.invite_modal.phone_label', 'Phone')}
+                type="tel"
+                name="phone"
+                autoComplete="tel"
+                placeholder={t('staff.invite_modal.phone_label')}
                 value={walkin.phone}
                 onChange={e => { setWalkin(w => ({ ...w, phone: e.target.value })); setDupMatch(null) }}
               />
@@ -563,10 +575,10 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
               <div className="alert alert-red pos-cust-alert">
                 <div>{t('pos.cust.dup_found', { name: dupMatch.name, defaultValue: `Already in CRM: ${dupMatch.name}` })}</div>
                 <div className="modal-footer">
-                  <button className="btn btn-outline btn-sm" onClick={() => { setDupMatch(null); createWalkin() }} disabled={saving}>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => { setDupMatch(null); createWalkin() }} disabled={saving}>
                     {t('pos.cust.dup_create_anyway', { defaultValue: 'Create new anyway' })}
                   </button>
-                  <button className="btn btn-primary btn-sm" onClick={attachExistingMatch}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={attachExistingMatch}>
                     {t('pos.cust.dup_attach_existing', { defaultValue: 'Attach existing' })}
                   </button>
                 </div>
@@ -575,12 +587,12 @@ function CustomerModal({ t, customer, onClose, onAttach, onDetach }) {
 
             {error && <div className="alert alert-red pos-cust-alert">{error}</div>}
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setMode('search')}>{t('common.back')}</button>
-              <button className="btn btn-primary" onClick={checkDupAndCreate} disabled={saving || !walkin.firstName.trim() || !!dupMatch}>
+              <button type="button" className="btn btn-outline" onClick={() => setMode('search')}>{t('common.back')}</button>
+              <button type="submit" className="btn btn-primary" disabled={saving || !walkin.firstName.trim() || !!dupMatch}>
                 {saving ? t('common.saving') : t('pos.cust.save_attach')}
               </button>
             </div>
-          </>
+          </form>
         )}
       </div>
     </div>
@@ -1391,7 +1403,7 @@ function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en', boutiq
     </tr>
   `
   }).join('')
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(t('pos.receipt.doc_title', 'Receipt'))}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(t('pos.receipt.doc_title'))}</title>
     <style>
       body{font-family:'Jost',system-ui,sans-serif;padding:16px;color:#0A0A0A;font-size:12px;margin:0;}
       h1{font-family:'Bodoni Moda',Georgia,serif;font-size:22px;font-weight:500;text-align:center;margin:0 0 4px;}
@@ -1415,12 +1427,12 @@ function buildReceiptHtml(order, cart, customer, rpPolicies, lang = 'en', boutiq
     ${customer ? '<div class="sub">' + escapeHtml(customer.name) + '</div>' : ''}
     <table>${rows}</table>
     <div class="tot">
-      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.subtotal', 'Subtotal'))}</span><span>€${Number(order?.subtotal ?? 0).toFixed(2)}</span></div>
-      ${Number(order?.promo_discount ?? 0) > 0 ? '<div class="tot-row"><span>' + escapeHtml(t('pos.receipt.discount', 'Discount')) + '</span><span>−€' + Number(order.promo_discount).toFixed(2) + '</span></div>' : ''}
+      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.subtotal'))}</span><span>€${Number(order?.subtotal ?? 0).toFixed(2)}</span></div>
+      ${Number(order?.promo_discount ?? 0) > 0 ? '<div class="tot-row"><span>' + escapeHtml(t('pos.receipt.discount')) + '</span><span>−€' + Number(order.promo_discount).toFixed(2) + '</span></div>' : ''}
       <!-- VAT rate read from the order, not fixed at 22%: order.vat_rate comes
            back as a decimal string ("0.2200"). -->
-      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.vat', 'VAT ({{rate}}%)', { rate: (Number(order?.vat_rate ?? 0.22) * 100).toFixed(0) }))}</span><span>€${Number(order?.vat_amount ?? 0).toFixed(2)}</span></div>
-      <div class="tot-row grand"><span>${escapeHtml(t('pos.receipt.total', 'Total'))}</span><span>€${Number(order?.gross_amount ?? 0).toFixed(2)}</span></div>
+      <div class="tot-row"><span>${escapeHtml(t('pos.receipt.vat', { rate: (Number(order?.vat_rate ?? 0.22) * 100).toFixed(0) }))}</span><span>€${Number(order?.vat_amount ?? 0).toFixed(2)}</span></div>
+      <div class="tot-row grand"><span>${escapeHtml(t('pos.receipt.total'))}</span><span>€${Number(order?.gross_amount ?? 0).toFixed(2)}</span></div>
     </div>
     <div class="ret">
       <div class="ret-lbl">${lang === 'it' ? 'Resi' : 'Returns'}</div>
@@ -1702,7 +1714,7 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, init
   if (phase === 'success') {
     const methodLabel = order?.payment_method === 'card'     ? t('pos.pay.method_card') :
                         order?.payment_method === 'split'    ? t('pos.pay.method_split') :
-                        order?.payment_method === 'external' ? t('pos.pay.method_external', 'External') :
+                        order?.payment_method === 'external' ? t('pos.pay.method_external') :
                         t('pos.pay.method_cash')
     return (
       <div className="modal-backdrop" onClick={onClose}>
@@ -1787,7 +1799,7 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, init
           {[
             { k: 'cash',     label: t('pos.pay.method_cash'),  ic: 'payments' },
             { k: 'card',     label: t('pos.pay.tab_card'),     ic: 'credit_card' },
-            { k: 'external', label: t('pos.pay.method_external', 'External'), ic: 'point_of_sale' },
+            { k: 'external', label: t('pos.pay.method_external'), ic: 'point_of_sale' },
             { k: 'split',    label: t('pos.pay.tab_split'),    ic: 'call_split' },
           ].filter(m => methods.includes(m.k)).map(t => (
             <button
@@ -1883,7 +1895,7 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, init
             <div className="pos-pay-card-visual">
               <span className="material-symbols-outlined pos-pay-card-ic">point_of_sale</span>
               <div className="pos-pay-card-msg">
-                {t('pos.pay.ext_take', 'Take the payment on your card terminal')}
+                {t('pos.pay.ext_take')}
               </div>
               <div className="pos-pay-card-sub">
                 {t('pos.pay.amount_charge')}: <strong>{fmt(total)}</strong>
@@ -1891,7 +1903,7 @@ function PaymentModal({ t, cart, customer, discount, discountAmount, total, init
             </div>
             <div className="pos-pay-note">
               <span className="material-symbols-outlined">info</span>
-              <span>{t('pos.pay.ext_note', 'Confirm once the terminal approves it. Primo records the sale — it does not charge the card.')}</span>
+              <span>{t('pos.pay.ext_note')}</span>
             </div>
           </div>
         )}
@@ -2410,7 +2422,7 @@ export default function POS() {
                 value={prodSearch}
                 onChange={e => setProdSearch(e.target.value)}
               />
-              <button className="pos-scan-btn" title={t('pos.scan_focus', 'Click, then scan a barcode')}
+              <button className="pos-scan-btn" title={t('pos.scan_focus')}
                 onClick={() => scanInputRef.current?.focus()}>
                 <span className="material-symbols-outlined">photo_camera</span>
               </button>

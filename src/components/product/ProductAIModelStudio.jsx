@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../lib/api'
+import Toggle from '../ui/Toggle'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -218,12 +219,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         </div>
         <div className="ap-ai-hdr-right">
           <span className="ap-ai-badge">{t('ais_legacy.powered_by_ai')}</span>
-          <div
-            className={`toggle${aiStudioOn ? ' on' : ''}`}
-            onClick={() => setAiStudioOn(v => !v)}
-          >
-            <div className="toggle-knob" />
-          </div>
+          <Toggle on={aiStudioOn} onToggle={() => setAiStudioOn(v => !v)} />
         </div>
       </div>
 
@@ -524,7 +520,7 @@ export default function AIModelStudio({ productId, refreshKey, onPhotosChange })
         <div className="modal-backdrop" onClick={() => setShowAllModelsModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ overflowY:'auto', maxHeight:'85vh' }}>
             <div className="modal-hdr">
-              <div className="modal-title">{t('ais_legacy.all_models_pre', 'All')} <em>{t('ais_legacy.all_models_em', 'Available Models')}</em></div>
+              <div className="modal-title">{t('ais_legacy.all_models_pre')} <em>{t('ais_legacy.all_models_em')}</em></div>
               <div className="modal-close" onClick={() => setShowAllModelsModal(false)}>
                 <span className="material-symbols-outlined">close</span>
               </div>

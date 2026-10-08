@@ -75,9 +75,11 @@ const CUSTOMER_REPORTS = [
  *   GET    /boutique/reports/schedules
  *   POST   /boutique/reports/schedules      report_type, format, frequency, recipients
  *   PATCH  /boutique/reports/schedules/:id  any subset of frequency, recipients, is_active
+ *   DELETE /boutique/reports/schedules/:id
  *
- * There is no delete — is_active:false is how a schedule is stopped, so the
- * edit dialog offers a switch rather than a delete button.
+ * The edit dialog stops a schedule with an is_active switch, and paused rows
+ * are greyed with a "Paused" tag. DELETE was added later and is not wired up
+ * yet, so a schedule created by mistake can be switched off but not removed.
  */
 
 /* Every report, flattened. `nameKey` doubles as the backend's `report_type`:
@@ -464,8 +466,8 @@ function ReportCard({ report, exporting, onExport, t }) {
           className="btn btn-sm btn-outline rpt-eye"
           onClick={() => onExport(report, 'preview')}
           disabled={busy}
-          title={t('reports.preview.view', 'Preview')}
-          aria-label={t('reports.preview.view', 'Preview')}
+          title={t('reports.preview.view')}
+          aria-label={t('reports.preview.view')}
         >
           <span className="material-symbols-outlined">{previewBusy ? 'hourglass_top' : 'visibility'}</span>
         </button>
@@ -620,7 +622,7 @@ function ReportPreview({ name, csv, onClose, t }) {
 
         <div className="rpt-preview-body">
           {sections.length === 0 && (
-            <div className="state-empty">{t('reports.preview.empty', 'This report has no data for the selected period.')}</div>
+            <div className="state-empty">{t('reports.preview.empty')}</div>
           )}
           {sections.map((s, i) => (
             <div key={i} className="rpt-preview-section">
@@ -644,7 +646,7 @@ function ReportPreview({ name, csv, onClose, t }) {
         </div>
 
         <div className="modal-footer">
-          <button className="btn btn-primary" onClick={onClose}>{t('common.close', 'Close')}</button>
+          <button className="btn btn-primary" onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>
@@ -684,7 +686,7 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
   async function save() {
     const emails = parseRecipients(recipients)
     if (!emails.length) {
-      setError(t('reports.sched.err_no_recipients', 'Add at least one email address.')); return
+      setError(t('reports.sched.err_no_recipients')); return
     }
     if (emails.length > MAX_RECIPIENTS) {
       setError(t('reports.sched.err_too_many', { max: MAX_RECIPIENTS, count: emails.length,
@@ -710,7 +712,7 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
       const data = await res.json()
       if (!data?.success) {
         // Server's own words first — it knows why it refused better than we do.
-        setError(data?.message || t('reports.sched.err_save', 'Could not save this schedule.'))
+        setError(data?.message || t('reports.sched.err_save'))
         setSaving(false)
         return
       }
@@ -726,8 +728,8 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
       <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
           <div className="modal-title">
-            {isEdit ? t('reports.sched.edit_title', 'Edit schedule')
-                    : t('reports.sched.new_title',  'New scheduled report')}
+            {isEdit ? t('reports.sched.edit_title')
+                    : t('reports.sched.new_title')}
           </div>
           <button className="modal-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -756,7 +758,7 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
           )}
           {isEdit && (
             <div className="form-hint">
-              {t('reports.sched.locked_hint', 'The report and format cannot be changed — create a new schedule instead.')}
+              {t('reports.sched.locked_hint')}
             </div>
           )}
 
@@ -773,7 +775,7 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
             rows={3}
             value={recipients}
             onChange={e => setRecipients(e.target.value)}
-            placeholder={t('reports.sched.recipients_ph', 'owner@boutique.it, finance@boutique.it')}
+            placeholder={t('reports.sched.recipients_ph')}
           />
           <div className="form-hint">
             {t('reports.sched.recipients_hint', { max: MAX_RECIPIENTS,
@@ -789,12 +791,12 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
             <>
               <label className="rpt-sched-active">
                 <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
-                <span>{t('reports.sched.active2', 'Active — send this report automatically')}</span>
+                <span>{t('reports.sched.active2')}</span>
               </label>
               <div className="form-hint rpt-sched-active-hint">
                 {isActive
-                  ? t('reports.sched.active_hint',  'Untick to pause. The schedule stays in the list, but no emails are sent.')
-                  : t('reports.sched.paused_hint', 'Paused — no emails will be sent. Tick to start again.')}
+                  ? t('reports.sched.active_hint')
+                  : t('reports.sched.paused_hint')}
               </div>
             </>
           )}
@@ -806,7 +808,7 @@ function ScheduleModal({ schedule, onClose, onSaved, t }) {
           <button className="btn btn-dark" onClick={onClose} disabled={saving}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
             <span className="material-symbols-outlined">{saving ? 'hourglass_top' : 'check_circle'}</span>
-            {saving ? t('reports.sched.saving', 'Saving…') : t('common.save')}
+            {saving ? t('reports.sched.saving') : t('common.save')}
           </button>
         </div>
       </div>
@@ -935,7 +937,7 @@ export default function Reports() {
       if (mode === 'pdf') {
         const doc = reportDoc(name, csv)
         if (!openPrintWindow(buildPrintHtml(doc.title, doc.sections, `${stem}.pdf`))) {
-          showToast(t('reports.preview.blocked', 'Your browser blocked the print window. Allow pop-ups for this site, then try again.'), 'error', 6000)
+          showToast(t('reports.preview.blocked'), 'error', 6000)
           return
         }
         showToast(t('reports.export_success', { name }), 'success')
@@ -958,8 +960,8 @@ export default function Reports() {
   function handleScheduleSaved(wasEdit) {
     setSchedModal(null)
     showToast(wasEdit
-      ? t('reports.sched.toast_updated', 'Schedule updated')
-      : t('reports.sched.toast_created', 'Schedule created'), 'success')
+      ? t('reports.sched.toast_updated')
+      : t('reports.sched.toast_created'), 'success')
     loadSchedules()
   }
 
@@ -1036,12 +1038,12 @@ export default function Reports() {
             )}
             {!schedLoading && schedError !== null && (
               <tr><td colSpan={6} className="state-empty">
-                {schedError || t('reports.sched.err_load', 'Could not load your scheduled reports — this list may be incomplete. Reload the page to try again.')}
+                {schedError || t('reports.sched.err_load')}
               </td></tr>
             )}
             {!schedLoading && schedError === null && schedules.length === 0 && (
               <tr><td colSpan={6} className="state-empty">
-                {t('reports.sched.empty', 'No scheduled reports yet. Use New Schedule to have one emailed to you automatically.')}
+                {t('reports.sched.empty')}
               </td></tr>
             )}
             {!schedLoading && schedules.map((s, i) => {
@@ -1062,7 +1064,7 @@ export default function Reports() {
                     }}>
                   <td style={{ fontWeight:600 }}>
                     {known ? t(`reports.items.${type}.name`) : type}
-                    {!active && <span className="rpt-sched-paused">{t('reports.sched.paused', 'Paused')}</span>}
+                    {!active && <span className="rpt-sched-paused">{t('reports.sched.paused')}</span>}
                   </td>
                   <td>{freqLabel(t, s.frequency)}</td>
                   <td>{fmt ? <span className={`report-fmt ${fmt}`}>{fmt.toUpperCase()}</span> : '—'}</td>

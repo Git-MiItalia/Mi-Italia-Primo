@@ -67,6 +67,7 @@ export default function Customers() {
   const [newEmail, setNewEmail] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [addError, setAddError] = useState('')
+  const [adding, setAdding] = useState(false)
 
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesValue, setNotesValue]     = useState('')
@@ -167,8 +168,12 @@ export default function Customers() {
   }
 
   function createCustomer() {
-    if (!newName || !newEmail) { setAddError(t('customers.add_modal.error_required', 'Name and email are required.')); return }
+    // A second click while the first POST is still out created the customer
+    // once and then reported "already exists" for the duplicate request.
+    if (adding) return
+    if (!newName || !newEmail) { setAddError(t('customers.add_modal.error_required')); return }
     setAddError('')
+    setAdding(true)
     apiFetch(`${API}/boutique/customers`, {
       method: 'POST',
       body: JSON.stringify({ name: newName, email: newEmail, phone: newPhone })
@@ -185,10 +190,11 @@ export default function Customers() {
           apiFetch(`${API}/boutique/customers/stats`).then(r => r.json())
             .then(r => { if (r.success) setStats(mapStats(r.data)) }).catch(() => {})
         } else {
-          setAddError(res.message ?? t('customers.add_modal.error_generic', 'Failed to add customer.'))
+          setAddError(res.message ?? t('customers.add_modal.error_generic'))
         }
       })
-      .catch(() => setAddError(t('common.error_network', 'Network error. Please try again.')))
+      .catch(() => setAddError(t('common.error_network')))
+      .finally(() => setAdding(false))
   }
 
   function saveNotes() {
@@ -262,33 +268,33 @@ export default function Customers() {
             <span className="material-symbols-outlined cu-search-icon">search</span>
             <input
               className="cu-search-input"
-              placeholder={t('customers.search_placeholder', 'Search customers…')}
+              placeholder={t('customers.search_placeholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <select className="form-select cu-filter-select" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
-            <option value="all">{t('customers.filter_all', 'All')}</option>
-            <option value="vip">{t('customers.filter_vip', 'VIP')}</option>
-            <option value="repeat">{t('customers.filter_repeat', 'Repeat')}</option>
-            <option value="new">{t('customers.filter_new', 'New')}</option>
+          <select className="form-select cu-filter-select" autoComplete="off" value={filterTag} onChange={e => setFilterTag(e.target.value)}>
+            <option value="all">{t('customers.filter_all')}</option>
+            <option value="vip">{t('customers.filter_vip')}</option>
+            <option value="repeat">{t('customers.filter_repeat')}</option>
+            <option value="new">{t('customers.filter_new')}</option>
           </select>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
-            <span className="material-symbols-outlined">add</span>{t('customers.add_btn', 'Add Customer')}
+            <span className="material-symbols-outlined">add</span>{t('customers.add_btn')}
           </button>
         </div>
 
         {/* Stats */}
         <div className="stat-row cu-stats">
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.total', 'Total Customers')}</div><div className="stat-val">{stats.totalCustomers}</div></div>
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.new_month', 'New This Month')}</div><div className="stat-val">{stats.newThisMonth}</div></div>
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.repeat', 'Repeat Buyers')}</div><div className="stat-val">{repeatBuyersDisplay}</div></div>
-          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.avg_lifetime', 'Avg. Lifetime Value')}</div><div className="stat-val">{fmtSpend(stats.avgLifetimeValue, lang)}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.total')}</div><div className="stat-val">{stats.totalCustomers}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.new_month')}</div><div className="stat-val">{stats.newThisMonth}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.repeat')}</div><div className="stat-val">{repeatBuyersDisplay}</div></div>
+          <div className="stat-card"><div className="stat-lbl">{t('customers.stats.avg_lifetime')}</div><div className="stat-val">{fmtSpend(stats.avgLifetimeValue, lang)}</div></div>
         </div>
 
         <div className="card">
           <div className="card-hdr">
-            <div className="card-title">{t('customers.card_title', 'All')} <em>{t('customers.card_title_em', 'Customers')}</em></div>
+            <div className="card-title">{t('customers.card_title')} <em>{t('customers.card_title_em')}</em></div>
           </div>
 
 
@@ -309,7 +315,7 @@ export default function Customers() {
                 </div>
                 <div className="cu-row-spend">
                   <div className="cu-spend-val">{fmtSpend(c.total_spend, lang)}</div>
-                  <div className="cu-visit-count">{c.visit_count ?? 0} {t('customers.detail.visits', 'Visits').toLowerCase()}</div>
+                  <div className="cu-visit-count">{c.visit_count ?? 0} {t('customers.detail.visits').toLowerCase()}</div>
                 </div>
                 <div className={`customer-tag ${tag}`}>{tag.toUpperCase()}</div>
               </div>
@@ -319,14 +325,14 @@ export default function Customers() {
           {/* A failed load used to be indistinguishable from an empty list. */}
           {!loading && loadFailed && (
             <div className="cu-empty">
-              {t('customers.err_load', 'Could not load customers.')}{' '}
+              {t('customers.err_load')}{' '}
               <span className="db-alert-link" onClick={() => setReloadTick(n => n + 1)}>
-                {t('common.retry', 'Retry')}
+                {t('common.retry')}
               </span>
             </div>
           )}
           {!loading && !loadFailed && filteredCustomers.length === 0 && (
-            <div className="cu-empty">{t('customers.empty', 'No customers found.')}</div>
+            <div className="cu-empty">{t('customers.empty')}</div>
           )}
         </div>
       </div>
@@ -334,7 +340,7 @@ export default function Customers() {
       {/* ── RIGHT COLUMN — Detail Panel ── */}
       {!detailLoading && detailFailed && (
         <div className="detail-panel">
-          <div className="cu-empty">{t('customers.err_detail', 'Could not load this customer.')}</div>
+          <div className="cu-empty">{t('customers.err_detail')}</div>
         </div>
       )}
       {selected && !detailLoading && (
@@ -345,7 +351,7 @@ export default function Customers() {
             </div>
             <div className="cu-detail-hdr-body">
               <div className="detail-panel-title">{selected.name}</div>
-              <div className="detail-panel-sub">{t('customers.detail.since', 'Customer since')} {fmtDate(selected.created_at, lang)} · {sourceLabel(selected.source)}</div>
+              <div className="detail-panel-sub">{t('customers.detail.since')} {fmtDate(selected.created_at, lang)} · {sourceLabel(selected.source)}</div>
             </div>
             <div className="cu-detail-hdr-actions">
               <span className={`customer-tag ${selected.segment || 'new'}`}>
@@ -361,9 +367,9 @@ export default function Customers() {
             {/* Mini stats */}
             <div className="stat-row col3 cu-mini-stats">
               {[
-                { v: fmtSpend(selected.boutique_total_spend, lang), l: t('customers.detail.lifetime_spend', 'Lifetime Spend') },
-                { v: String(selected.boutique_visit_count ?? 0), l: t('customers.detail.visits', 'Visits') },
-                { v: selected.points_balance ?? '—',    l: t('customers.detail.points', 'Points') },
+                { v: fmtSpend(selected.boutique_total_spend, lang), l: t('customers.detail.lifetime_spend') },
+                { v: String(selected.boutique_visit_count ?? 0), l: t('customers.detail.visits') },
+                { v: selected.points_balance ?? '—',    l: t('customers.detail.points') },
               ].map(s => (
                 <div key={s.l} className="cu-mini-stat">
                   <div className="cu-mini-stat-val">{s.v}</div>
@@ -372,15 +378,15 @@ export default function Customers() {
               ))}
             </div>
 
-            <div className="detail-row"><div className="detail-label">{t('customers.detail.email', 'Email')}</div><div className="detail-value">{selected.email ?? '—'}</div></div>
-            <div className="detail-row"><div className="detail-label">{t('customers.detail.phone', 'Phone')}</div><div className="detail-value">{selected.phone ?? '—'}</div></div>
-            <div className="detail-row"><div className="detail-label">{t('customers.detail.source', 'Source')}</div><div className="detail-value">{sourceLabel(selected.source)}</div></div>
+            <div className="detail-row"><div className="detail-label">{t('customers.detail.email')}</div><div className="detail-value">{selected.email ?? '—'}</div></div>
+            <div className="detail-row"><div className="detail-label">{t('customers.detail.phone')}</div><div className="detail-value">{selected.phone ?? '—'}</div></div>
+            <div className="detail-row"><div className="detail-label">{t('customers.detail.source')}</div><div className="detail-value">{sourceLabel(selected.source)}</div></div>
             <div className="detail-row">
-              <div className="detail-label">{t('customers.detail.last_visit', 'Last Visit')}</div>
-              <div className="detail-value">{selected.boutique_last_visit_at ? fmtDate(selected.boutique_last_visit_at, lang) : t('customers.detail.never', 'Never')}</div>
+              <div className="detail-label">{t('customers.detail.last_visit')}</div>
+              <div className="detail-value">{selected.boutique_last_visit_at ? fmtDate(selected.boutique_last_visit_at, lang) : t('customers.detail.never')}</div>
             </div>
             <div className="detail-row">
-              <div className="detail-label">{t('customers.detail.tier', 'Tier')}</div>
+              <div className="detail-label">{t('customers.detail.tier')}</div>
               <div className="detail-value">
                 <span className="cu-tier-badge">{selected.tier ?? '—'}</span>
               </div>
@@ -390,34 +396,34 @@ export default function Customers() {
 
             {/* Notes */}
             <div className="cu-notes-hdr">
-              <div className="cu-notes-lbl">{t('customers.detail.notes', 'Notes')}</div>
+              <div className="cu-notes-lbl">{t('customers.detail.notes')}</div>
               {!editingNotes
-                ? <button className="btn btn-sm btn-outline" onClick={() => setEditingNotes(true)}>{t('common.edit', 'Edit')}</button>
+                ? <button className="btn btn-sm btn-outline" onClick={() => setEditingNotes(true)}>{t('common.edit')}</button>
                 : <div className="cu-notes-actions">
-                    <button className="btn btn-sm btn-outline" onClick={() => setEditingNotes(false)}>{t('common.cancel', 'Cancel')}</button>
-                    <button className="btn btn-sm btn-primary" onClick={saveNotes}>{t('common.save', 'Save')}</button>
+                    <button className="btn btn-sm btn-outline" onClick={() => setEditingNotes(false)}>{t('common.cancel')}</button>
+                    <button className="btn btn-sm btn-primary" onClick={saveNotes}>{t('common.save')}</button>
                   </div>
               }
             </div>
             {editingNotes
               ? <textarea className="form-textarea cu-notes-ta" value={notesValue} onChange={e => setNotesValue(e.target.value)} />
               : <div className={`cu-notes-body${selected.notes ? '' : ' cu-notes-empty'}`}>
-                  {selected.notes ?? t('customers.detail.notes_empty', 'No notes yet.')}
+                  {selected.notes ?? t('customers.detail.notes_empty')}
                 </div>
             }
 
             <div className="detail-divider" />
 
             {/* Recent Orders */}
-            <div className="cu-section-lbl">{t('customers.detail.orders', 'Recent Orders')}</div>
+            <div className="cu-section-lbl">{t('customers.detail.orders')}</div>
             {selected.recent_orders?.length > 0 ? (
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>{t('customers.table.order', 'Order')}</th>
-                    <th>{t('customers.table.amount', 'Amount')}</th>
-                    <th>{t('customers.table.status', 'Status')}</th>
-                    <th>{t('customers.table.date', 'Date')}</th>
+                    <th>{t('customers.table.order')}</th>
+                    <th>{t('customers.table.amount')}</th>
+                    <th>{t('customers.table.status')}</th>
+                    <th>{t('customers.table.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -432,21 +438,21 @@ export default function Customers() {
                 </tbody>
               </table>
             ) : (
-              <div className="cu-empty-italic">{t('customers.detail.orders_empty', 'No orders yet.')}</div>
+              <div className="cu-empty-italic">{t('customers.detail.orders_empty')}</div>
             )}
 
             <div className="detail-divider" />
 
             {/* Recent Reservations */}
-            <div className="cu-section-lbl">{t('customers.detail.reservations', 'Recent Reservations')}</div>
+            <div className="cu-section-lbl">{t('customers.detail.reservations')}</div>
             {selected.recent_reservations?.length > 0 ? (
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>{t('customers.table.item', 'Item')}</th>
-                    <th>{t('customers.table.price', 'Price')}</th>
-                    <th>{t('customers.table.status', 'Status')}</th>
-                    <th>{t('customers.table.date', 'Date')}</th>
+                    <th>{t('customers.table.item')}</th>
+                    <th>{t('customers.table.price')}</th>
+                    <th>{t('customers.table.status')}</th>
+                    <th>{t('customers.table.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -461,7 +467,7 @@ export default function Customers() {
                 </tbody>
               </table>
             ) : (
-              <div className="cu-empty-italic">{t('customers.detail.reservations_empty', 'No reservations yet.')}</div>
+              <div className="cu-empty-italic">{t('customers.detail.reservations_empty')}</div>
             )}
 
             <div className="detail-divider" />
@@ -484,31 +490,37 @@ export default function Customers() {
       {/* ── Add Customer Modal ── */}
       {showAdd && (
         <div className="modal-backdrop" onClick={() => setShowAdd(false)}>
-          <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
+          {/* Its own <form>: without one Chrome treats every field on the page as
+              one form, and its autofill preview lit up the filter select behind
+              the backdrop. Enter submits; createCustomer ignores repeat clicks. */}
+          <form className="modal modal-sm" noValidate onClick={e => e.stopPropagation()}
+            onSubmit={e => { e.preventDefault(); createCustomer() }}>
             <div className="modal-hdr">
-              <span className="modal-title">{t('customers.add_modal.title', 'Add')} <em>{t('customers.add_modal.title_em', 'Customer')}</em></span>
+              <span className="modal-title">{t('customers.add_modal.title')} <em>{t('customers.add_modal.title_em')}</em></span>
               <span className="modal-close" onClick={() => setShowAdd(false)}>
                 <span className="material-symbols-outlined">close</span>
               </span>
             </div>
             {addError && <div className="alert alert-urgent cu-alert-mb">{addError}</div>}
             <div className="form-group">
-              <label className="form-lbl">{t('customers.add_modal.name_label', 'Name')}</label>
-              <input className="form-input" value={newName} onChange={e => setNewName(e.target.value)} placeholder={t('customers.add_modal.name_placeholder', 'e.g. Sofia Marchetti')} />
+              <label className="form-lbl">{t('customers.add_modal.name_label')}</label>
+              <input className="form-input" name="name" autoComplete="name" value={newName} onChange={e => setNewName(e.target.value)} placeholder={t('customers.add_modal.name_placeholder')} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('customers.add_modal.email_label', 'Email')}</label>
-              <input className="form-input" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder={t('customers.add_modal.email_placeholder', 'sofia@example.com')} />
+              <label className="form-lbl">{t('customers.add_modal.email_label')}</label>
+              <input className="form-input" type="email" name="email" autoComplete="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder={t('customers.add_modal.email_placeholder')} />
             </div>
             <div className="form-group">
-              <label className="form-lbl">{t('customers.add_modal.phone_label', 'Phone')}</label>
-              <input className="form-input" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder={t('customers.add_modal.phone_placeholder', '+39 333 000 0000')} />
+              <label className="form-lbl">{t('customers.add_modal.phone_label')}</label>
+              <input className="form-input" type="tel" name="phone" autoComplete="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder={t('customers.add_modal.phone_placeholder')} />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowAdd(false)}>{t('common.cancel', 'Cancel')}</button>
-              <button className="btn btn-primary" onClick={createCustomer}>{t('customers.add_modal.create_btn', 'Add Customer')}</button>
+              <button type="button" className="btn btn-outline" onClick={() => setShowAdd(false)}>{t('common.cancel')}</button>
+              <button type="submit" className="btn btn-primary" disabled={adding}>
+                {adding ? t('customers.add_modal.creating') : t('customers.add_modal.create_btn')}
+              </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -517,12 +529,12 @@ export default function Customers() {
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-confirm-title">
-              {t('customers.delete_modal.title', 'Delete')} <em className="modal-em-red">{t('customers.delete_modal.title_em', 'Customer')}</em>
+              {t('customers.delete_modal.title')} <em className="modal-em-red">{t('customers.delete_modal.title_em')}</em>
             </div>
-            <div className="modal-confirm-msg">{t('customers.delete_modal.msg', 'Are you sure you want to delete this customer? This cannot be undone.')}</div>
+            <div className="modal-confirm-msg">{t('customers.delete_modal.msg')}</div>
             <div className="modal-confirm-actions">
-              <button onClick={() => setDeleteConfirm(null)} className="btn btn-outline modal-confirm-btn">{t('common.cancel', 'Cancel')}</button>
-              <button onClick={() => deleteCustomer(deleteConfirm)} className="btn btn-red modal-confirm-btn">{t('common.delete', 'Delete')}</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn btn-outline modal-confirm-btn">{t('common.cancel')}</button>
+              <button onClick={() => deleteCustomer(deleteConfirm)} className="btn btn-red modal-confirm-btn">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -534,13 +546,13 @@ export default function Customers() {
           <div className="modal modal-sm" onClick={e => e.stopPropagation()}>
             <div className="modal-success-emoji">✅</div>
             <div className="modal-success-title">
-              {t('customers.add_success.title', 'Customer')} <em className="modal-em-red">{t('customers.add_success.title_em', 'Added')}</em>
+              {t('customers.add_success.title')} <em className="modal-em-red">{t('customers.add_success.title_em')}</em>
             </div>
             <div className="modal-success-msg">
               {t('customers.add_success.msg', { name: createSuccess.name, defaultValue: '{{name}} has been added to your customers.' })}
-              {createSuccess.email && <><br />{t('customers.add_success.email_prefix', 'A confirmation was sent to')} <strong>{createSuccess.email}</strong></>}
+              {createSuccess.email && <><br />{t('customers.add_success.email_prefix')} <strong>{createSuccess.email}</strong></>}
             </div>
-            <button onClick={() => setCreateSuccess(null)} className="btn btn-primary modal-success-btn">{t('common.done', 'Done')}</button>
+            <button onClick={() => setCreateSuccess(null)} className="btn btn-primary modal-success-btn">{t('common.done')}</button>
           </div>
         </div>
       )}

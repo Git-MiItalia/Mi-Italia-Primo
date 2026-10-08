@@ -10,9 +10,28 @@ import useNotifStore from '../store/notifStore'
 import useLangStore from '../store/langStore'
 import { generatePackingSlip } from '../lib/packingSlip'
 import i18n from '../lib/i18n'
+import { imgUrl } from '../lib/imageUrl'
+import WholesaleOrderPanel from '../components/orders/WholesaleOrderPanel'
+import { WS_PILL, wsMoney, WS_NEW_EVENT } from '../lib/wholesaleOrders'
 
 const API = import.meta.env.VITE_API_URL
 const STATUS_TABS = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled']
+
+/* Showroom (wholesale) orders live on their own endpoint with their own
+ * lifecycle (GET /boutique/showroom/orders). They are shown in this one list,
+ * as in the Showroom design, so each status tab also takes the wholesale
+ * statuses that mean the same thing. The row itself still shows the real
+ * wholesale status ("In production"). */
+const WS_TAB_STATUSES = {
+  all:        null,
+  pending:    ['submitted'],
+  processing: ['confirmed', 'in_production'],
+  shipped:    ['dispatched'],
+  delivered:  ['delivered'],
+  cancelled:  ['cancelled'],
+}
+const SOURCES = ['all', 'showroom', 'online']
+const wsDate = o => o.submitted_at ?? o.created_at ?? null
 
 /* DHL service ("product") code sent when booking a shipment.
  *
@@ -49,16 +68,16 @@ function StatusConfirmModal({ open, onClose, onConfirm, currentStatus, newStatus
           </button>
         </div>
         <div className="modal-intro">
-          {t('orders.confirm_status.from', 'Change order status from')}{' '}
+          {t('orders.confirm_status.from')}{' '}
           <span className={`status ${currentStatus}`}>{statusLabel(t, currentStatus)}</span>
-          {' '}{t('orders.confirm_status.to', 'to')}{' '}
+          {' '}{t('orders.confirm_status.to')}{' '}
           <span className={`status ${newStatus}`}>{statusLabel(t, newStatus)}</span>?
         </div>
         <div className="modal-footer">
           <button className="btn btn-dark" onClick={onClose} disabled={submitting}>{t('common.cancel')}</button>
           <button className="btn btn-primary" onClick={onConfirm} disabled={submitting}>
             <span className="material-symbols-outlined">check_circle</span>
-            {submitting ? t('orders.confirm_status.updating', 'Updating…') : t('common.confirm')}
+            {submitting ? t('orders.confirm_status.updating') : t('common.confirm')}
           </button>
         </div>
       </div>
@@ -71,15 +90,15 @@ function OrderTimeline({ order }) {
   const { t } = useTranslation()
   const status = order?.status ?? ''
   const tracked = !!order?.dhl_tracking_number
-  const done = t('orders.timeline.done', 'Done')
+  const done = t('orders.timeline.done')
 
   const STEPS = [
     {
       key:   'placed',
-      title: t('orders.timeline.placed', 'Order Placed'),
+      title: t('orders.timeline.placed'),
       sub:   order
-        ? t('orders.timeline.placed_sub', '{{method}} confirmed · €{{amount}}', {
-            method: order.payment_method ?? t('orders.timeline.payment', 'Payment'),
+        ? t('orders.timeline.placed_sub', {
+            method: order.payment_method ?? t('orders.timeline.payment'),
             amount: order.gross_amount,
           })
         : '',
@@ -89,8 +108,8 @@ function OrderTimeline({ order }) {
     },
     {
       key:   'processing',
-      title: t('orders.timeline.processing', 'Processing'),
-      sub:   t('orders.timeline.processing_sub', 'Boutique notified · preparing your order'),
+      title: t('orders.timeline.processing'),
+      sub:   t('orders.timeline.processing_sub'),
       icon:  'inventory_2',
       time:  ['processing','shipped','delivered'].includes(status) ? done : '—',
       done:  ['processing','shipped','delivered'].includes(status),
@@ -99,34 +118,34 @@ function OrderTimeline({ order }) {
     {
       key:   'dhl',
       title: tracked
-        ? t('orders.timeline.dhl_tracked', 'DHL · {{tracking}}', { tracking: order.dhl_tracking_number })
-        : t('orders.timeline.dhl_pending', 'DHL Label — Pending'),
+        ? t('orders.timeline.dhl_tracked', { tracking: order.dhl_tracking_number })
+        : t('orders.timeline.dhl_pending'),
       sub:   tracked
-        ? t('orders.timeline.dhl_status', 'Status: {{status}}', {
-            status: order.dhl_status ?? t('orders.timeline.in_transit', 'In transit'),
+        ? t('orders.timeline.dhl_status', {
+            status: order.dhl_status ?? t('orders.timeline.in_transit'),
           })
         // Was "Generate label to continue", which sent people looking for a
         // Generate button that never existed. A new key rather than a changed
         // default: the old one is already in the bundle and may be translated,
         // and a default is only used when the key is absent.
-        : t('orders.timeline.dhl_no_label', 'No label yet — add a tracking number below'),
+        : t('orders.timeline.dhl_no_label'),
       icon:  'local_shipping',
-      time:  tracked ? t('orders.timeline.generated', 'Generated') : t('orders.timeline.now', 'Now'),
+      time:  tracked ? t('orders.timeline.generated') : t('orders.timeline.now'),
       done:  tracked,
       pending: !tracked && ['processing','shipped'].includes(status),
     },
     {
       key:   'shipped',
-      title: t('orders.timeline.shipped', 'Shipped'),
-      sub:   t('orders.timeline.shipped_sub', 'DHL pickup or drop-off'),
+      title: t('orders.timeline.shipped'),
+      sub:   t('orders.timeline.shipped_sub'),
       icon:  'local_shipping',
       time:  ['shipped','delivered'].includes(status) ? done : '—',
       done:  ['shipped','delivered'].includes(status),
     },
     {
       key:   'delivered',
-      title: t('orders.timeline.delivered', 'Delivered'),
-      sub:   t('orders.timeline.delivered_sub', 'Order completed'),
+      title: t('orders.timeline.delivered'),
+      sub:   t('orders.timeline.delivered_sub'),
       icon:  'inventory',
       time:  status === 'delivered' ? done : '—',
       done:  status === 'delivered',
@@ -193,6 +212,17 @@ export default function Orders() {
   const [submitting,    setSubmitting]    = useState(false)
   const [visitedTabs,   setVisitedTabs]   = useState(new Set([0]))
 
+  // Wholesale orders: all of them are loaded (a boutique has few), so the
+  // Showroom chip filters and the "All sources" list merges them in by date.
+  const [source,        setSource]        = useState('all')
+  const [wsOrders,      setWsOrders]      = useState([])
+  const [wsCounts,      setWsCounts]      = useState({})
+  const [wsFailed,      setWsFailed]      = useState(false)
+  const [selectedWsId,  setSelectedWsId]  = useState(null)
+  // Oldest created_at on each consumer page already loaded — where each page
+  // ends, so a wholesale order is shown on exactly one page (see rows below).
+  const [pageFloors,    setPageFloors]    = useState({})
+
   // Mark order notifications as read on mount
   useEffect(() => {
     if (hasMarkedRead.current) return
@@ -234,6 +264,37 @@ export default function Orders() {
 
   }, [lang])
 
+  // Every wholesale order, all pages. The list endpoint pages like the others
+  // ({ orders, counts, pagination:{ page, limit, total } }); counts cover the
+  // whole set, whatever page.
+  function loadWsOrders() {
+    const page = n => apiFetch(`${API}/boutique/showroom/orders?page=${n}&limit=50`).then(r => r.json())
+    return page(1)
+      .then(async res => {
+        if (!res?.success || !res.data) throw new Error(res?.message || 'showroom orders request failed')
+        const first = res.data.orders ?? []
+        const p     = res.data.pagination ?? {}
+        const pages = Number(p.total_pages) || (p.total && p.limit ? Math.ceil(p.total / p.limit) : 1)
+        let all = first
+        if (pages > 1) {
+          const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, i) =>
+            page(i + 2).then(r => r.data?.orders ?? []).catch(() => [])))
+          all = first.concat(...rest)
+        }
+        all.sort((a, b) => String(wsDate(b) ?? '').localeCompare(String(wsDate(a) ?? '')))
+        setWsOrders(all)
+        setWsCounts(res.data.counts ?? {})
+        // Keep the sidebar's Orders badge in step (confirmed orders drop off).
+        const waiting = res.data.counts?.submitted ?? all.filter(o => o.status === 'submitted').length
+        window.dispatchEvent(new CustomEvent(WS_NEW_EVENT, { detail: Number(waiting) || 0 }))
+        setWsFailed(false)
+        return all
+      })
+      .catch(() => { setWsFailed(true); return [] })
+  }
+
+  useEffect(() => { loadWsOrders() }, [lang])
+
   function refetchOrders(tabIndex, targetPage) {
     setLoading(true)
     const params = new URLSearchParams({ page: String(targetPage), limit: '20' })
@@ -248,12 +309,17 @@ export default function Orders() {
         // request left the tab on "Loading…" permanently.
         if (!res.success || !res.data) throw new Error(res.message || 'orders request failed')
         const list = res.data.orders ?? []
+        // The list comes newest first; the last row is where this page ends.
+        // A new tab starts again from page 1, so earlier boundaries are dropped.
+        const floor = list.length ? list[list.length - 1].created_at : null
+        setPageFloors(prev => targetPage === 1 ? { 1: floor } : { ...prev, [targetPage]: floor })
         setOrders(list)
         setOrdersPage(targetPage)
         setOrdersTotalPages(res.data.pagination?.total_pages ?? 1)
         // With an order id in the URL the detail panel is driven by the route
         // effect below, so don't override it with the first row.
         if (routeOrderId) { /* handled by the route effect */ }
+        else if (source === 'showroom') { /* the wholesale panel stays */ }
         else if (list.length > 0) fetchDetail(list[0].id)
         else setSelected(null)
       })
@@ -303,34 +369,33 @@ export default function Orders() {
     }
   }
 
+  function handleSourceClick(src) {
+    clearRouteOrderId()
+    setSource(src)
+    if (src === 'online') setSelectedWsId(null)
+    if (src === 'showroom') setSelectedWsId(wsInTab[0]?.id ?? null)
+  }
+
+  function openWsOrder(id) {
+    clearRouteOrderId()
+    setSelectedWsId(id)
+  }
+
+  // A wholesale status or payment word with no label yet is shown as sent,
+  // rather than as a raw key name.
+  const wsLabel = (group, value) => {
+    const key = `orders.ws.${group}.${value}`
+    return i18n.exists(key) ? t(key) : String(value ?? '—')
+  }
+
   function fetchDetail(id) {
     apiFetch(`${API}/boutique/orders/${id}`)
       .then(r => r.json())
       .then(res => {
         const order = res.data
+        setSelectedWsId(null)
         setSelected(order)
         setTrackingInput(order.dhl_tracking_number ?? '')
-
-        // POS sales link the shopper through `customer_id`, but the order
-        // endpoint fills name/email/phone from `user_id` only — so a walk-in
-        // with a customer attached still arrives nameless and reads "Guest".
-        // Look the customer up directly rather than lose the name. One extra
-        // request, and only when there is genuinely a customer to resolve.
-        // (The list keeps showing "Guest" until the join is fixed server-side;
-        //  resolving it per row would be one request per order.)
-        if (!order?.name && order?.customer_id) {
-          apiFetch(`${API}/boutique/customers/${order.customer_id}`)
-            .then(r => r.json())
-            .then(cres => {
-              if (!cres?.success) return
-              const c = cres.data?.customer ?? cres.data ?? {}
-              if (!c.name && !c.email && !c.phone) return
-              setSelected(prev => (prev?.id === order.id
-                ? { ...prev, name: c.name ?? prev.name, email: c.email ?? prev.email, phone: c.phone ?? prev.phone }
-                : prev))
-            })
-            .catch(() => { /* keep "Guest" — the order is still usable */ })
-        }
       })
   }
 
@@ -379,7 +444,7 @@ export default function Orders() {
           // DHL's own words come back through here — a rejected address or an
           // unknown service code reads as a DHL error, which is more use to
           // the merchant than anything this screen could invent.
-          showToast(data?.message || t('orders.toast.ship_failed', 'Could not book this shipment with DHL. The order has not been marked as shipped.'), 'error')
+          showToast(data?.message || t('orders.toast.ship_failed'), 'error')
           return
         }
         const d     = data.data ?? data ?? {}
@@ -391,7 +456,7 @@ export default function Orders() {
         setOrders(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
         setSelected(prev => prev?.id === id ? { ...prev, ...patch } : prev)
         if (trk) setTrackingInput(trk)
-        showToast(lbl ? t('orders.toast.ship_label_ready', 'Shipped — the DHL label is ready') : t('orders.toast.ship_booked', 'Shipped — booked with DHL, fetching the label'), 'success')
+        showToast(lbl ? t('orders.toast.ship_label_ready') : t('orders.toast.ship_booked'), 'success')
         fetchDetail(id)
         return
       }
@@ -401,16 +466,16 @@ export default function Orders() {
       })
       const data = await res.json()
       if (!data.success) {
-        showToast(data.message || t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
+        showToast(data.message || t('orders.toast.cannot_transition', { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
         return
       }
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: pendingStatus } : o))
       setSelected(prev => prev ? { ...prev, status: pendingStatus } : prev)
-      showToast(t('orders.toast.status_updated', 'Status updated to {{status}}', { status: statusLabel(t, pendingStatus) }), 'success')
+      showToast(t('orders.toast.status_updated', { status: statusLabel(t, pendingStatus) }), 'success')
     } catch {
       showToast(booking
-        ? t('orders.toast.ship_failed', 'Could not book this shipment with DHL. The order has not been marked as shipped.')
-        : t('orders.toast.cannot_transition', "Cannot transition from '{{from}}' to '{{to}}'", { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
+        ? t('orders.toast.ship_failed')
+        : t('orders.toast.cannot_transition', { from: statusLabel(t, fromStatus), to: statusLabel(t, pendingStatus) }), 'error')
     } finally {
       setSubmitting(false); setConfirmOpen(false); setPendingStatus(null)
     }
@@ -446,13 +511,13 @@ export default function Orders() {
         if (res.success) {
           setOrders(prev => prev.map(o => o.id === id ? { ...o, dhl_tracking_number: trackingInput } : o))
           setSelected(prev => prev?.id === id ? { ...prev, dhl_tracking_number: trackingInput } : prev)
-          showToast(t('orders.toast.tracking_saved', 'Tracking number saved'), 'success')
+          showToast(t('orders.toast.tracking_saved'), 'success')
           return
         }
         // No else and no catch before this: a rejected save did nothing at
         // all, so the number stayed in the box and looked saved until the
         // next reload dropped it.
-        showToast(res.message || t('orders.toast.tracking_error', 'Could not save the tracking number. Please try again.'), 'error')
+        showToast(res.message || t('orders.toast.tracking_error'), 'error')
       })
       .catch(() => showToast(t('common.error_network'), 'error'))
   }
@@ -476,7 +541,7 @@ export default function Orders() {
     const known = orders.find(o => o.id === id)?.dhl_label_url ?? selected?.dhl_label_url
     if (known) {
       window.open(known, '_blank', 'noopener,noreferrer')
-      showToast(t('orders.toast.label_opened', 'DHL label opened in a new tab'), 'success')
+      showToast(t('orders.toast.label_opened'), 'success')
       return
     }
     setLabelLoading(true)
@@ -496,10 +561,10 @@ export default function Orders() {
               ? t('orders.toast.tracking_rejected', { min: TRACKING_MIN, max: TRACKING_MAX,
                   defaultValue: 'DHL did not recognise that tracking number. It should be {{min}}–{{max}} characters — check it against the label.' })
             : /no tracking number/i.test(raw)
-              ? t('orders.toast.label_not_ready', 'No DHL label has been created for this order yet.')
+              ? t('orders.toast.label_not_ready')
             : /^DHL /.test(raw) || /-> \d{3}:/.test(raw)
-              ? t('orders.toast.label_failed', 'Could not fetch the DHL label.')
-            : (raw || t('orders.toast.label_failed', 'Could not fetch the DHL label.'))
+              ? t('orders.toast.label_failed')
+            : (raw || t('orders.toast.label_failed'))
           showToast(friendly, 'error')
           return
         }
@@ -534,15 +599,15 @@ export default function Orders() {
           // Opened rather than downloaded: it is a PDF, and the browser's own
           // viewer lets the merchant check the address before printing.
           window.open(d.label_url, '_blank', 'noopener,noreferrer')
-          showToast(t('orders.toast.label_opened', 'DHL label opened in a new tab'), 'success')
+          showToast(t('orders.toast.label_opened'), 'success')
         } else if (!(d.tracking?.shipments ?? []).length) {
           // A valid-format number DHL has never heard of comes back as
           // success:true with an empty shipments array. Saying only "no label
           // yet" would hide the likelier cause — a mistyped number, or one
           // DHL has not registered yet. The two are worth telling apart.
-          showToast(t('orders.toast.tracking_unknown', 'DHL has no record of this tracking number. Check it against the label — a new shipment can also take a few hours to appear.'), 'error')
+          showToast(t('orders.toast.tracking_unknown'), 'error')
         } else {
-          showToast(t('orders.toast.label_not_ready', 'No DHL label has been created for this order yet.'), 'info')
+          showToast(t('orders.toast.label_not_ready'), 'info')
         }
       })
       .catch(() => showToast(t('common.error_network'), 'error'))
@@ -562,14 +627,51 @@ export default function Orders() {
   // already only contains the current tab's page.
   const visibleOrders = orders
 
+  // Wholesale orders belonging to the current status tab.
+  const tabKey  = STATUS_TABS[activeTab]
+  const wsInTab = wsOrders.filter(o => !WS_TAB_STATUSES[tabKey] || WS_TAB_STATUSES[tabKey].includes(o.status))
+
+  /* The rows on screen. Consumer orders stay paged by the server; wholesale
+     orders are all loaded, so on "All sources" each one goes on the page whose
+     date range holds it — after the previous page's oldest order and no older
+     than this page's oldest. That keeps the whole list in date order, and no
+     wholesale order appears on two pages or on none. */
+  const byDateDesc = (a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0)
+  const onlineRows = visibleOrders.map(o => ({ kind: 'online', o, date: o.created_at }))
+  const wsRows     = wsInTab.map(o => ({ kind: 'ws', o, date: wsDate(o) }))
+  let rows
+  if (source === 'online') rows = onlineRows
+  else if (source === 'showroom') rows = wsRows
+  else {
+    const upper = ordersPage > 1 ? pageFloors[ordersPage - 1] : null
+    const lower = ordersPage < ordersTotalPages ? pageFloors[ordersPage] : null
+    const here  = wsRows.filter(r =>
+      (!upper || Date.parse(r.date) < Date.parse(upper)) &&
+      (!lower || Date.parse(r.date) >= Date.parse(lower)))
+    rows = [...onlineRows, ...here].sort(byDateDesc)
+  }
+
+  // Tab counts: the consumer summary plus the wholesale statuses mapped onto
+  // each tab — only the sources the chip is showing.
+  const wsCount = key => WS_TAB_STATUSES[key]
+    ? WS_TAB_STATUSES[key].reduce((n, st) => n + Number(wsCounts[st] ?? wsOrders.filter(o => o.status === st).length), 0)
+    : Number(wsCounts.all ?? wsOrders.length)
+  const onlineCount = {
+    all: summary.total_orders, pending: summary.pending, processing: summary.processing,
+    shipped: summary.shipped, delivered: summary.delivered, cancelled: summary.cancelled,
+  }
+  const tabCount = key =>
+    (source !== 'showroom' ? Number(onlineCount[key] ?? 0) : 0) + (source !== 'online' ? wsCount(key) : 0)
+  const wsNew = wsCount('pending')
+
   // Use summary for tab counts (accurate full-dataset counts from API)
   const TABS = [
-    `${t('orders.tabs.all')} (${summary.total_orders ?? 0})`,
-    `${t('orders.tabs.pending')} (${summary.pending ?? 0})`,
-    `${t('orders.tabs.processing')} (${summary.processing ?? 0})`,
-    `${t('orders.tabs.shipped')} (${summary.shipped ?? 0})`,
-    `${t('orders.tabs.delivered')} (${summary.delivered ?? 0})`,
-    `${t('orders.tabs.cancelled')} (${summary.cancelled ?? 0})`,
+    `${t('orders.tabs.all')} (${tabCount('all')})`,
+    `${t('orders.tabs.pending')} (${tabCount('pending')})`,
+    `${t('orders.tabs.processing')} (${tabCount('processing')})`,
+    `${t('orders.tabs.shipped')} (${tabCount('shipped')})`,
+    `${t('orders.tabs.delivered')} (${tabCount('delivered')})`,
+    `${t('orders.tabs.cancelled')} (${tabCount('cancelled')})`,
   ]
 
   const snap = selected?.shipping_address_snapshot ?? {}
@@ -599,10 +701,26 @@ export default function Orders() {
         {/* ── Order list ── */}
         <div>
           <div className="card ord-table-card">
+            <div className="ord-src-chips">
+              {SOURCES.map(src => (
+                <button key={src} className={`ord-src-chip${source === src ? ' act' : ''}`} onClick={() => handleSourceClick(src)}>
+                  {src === 'showroom' && <span className="material-symbols-outlined">business_center</span>}
+                  {t(`orders.source.${src}`)}
+                  {src === 'showroom' && wsNew > 0 && <span className="ord-src-new">{t('orders.source.new', { count: wsNew })}</span>}
+                </button>
+              ))}
+            </div>
+            {source !== 'online' && wsFailed && (
+              <div className="shw-error">
+                {t('orders.ws.err_list')}{' '}
+                <span className="db-alert-link" onClick={loadWsOrders}>{t('common.retry')}</span>
+              </div>
+            )}
             <table className="tbl">
               <thead>
                 <tr>
                   <th>{t('orders.table.order')}</th>
+                  <th>{t('orders.table.source')}</th>
                   <th>{t('orders.table.customer')}</th>
                   <th>{t('orders.table.items')}</th>
                   <th>{t('orders.table.total')}</th>
@@ -612,14 +730,42 @@ export default function Orders() {
                 </tr>
               </thead>
               <tbody>
-                {loading && <Loading row cols={7} />}
-                {!loading && visibleOrders.map(o => (
-                  <tr key={o.id} className={selected?.id === o.id ? 'ord-row-selected' : ''}>
+                {loading && <Loading row cols={8} />}
+                {!loading && rows.map(({ kind, o }) => kind === 'ws' ? (
+                  <tr key={`ws-${o.id}`} className={selectedWsId === o.id ? 'ord-row-selected' : ''}>
+                    <td>
+                      <span className="ord-id-link" onClick={() => openWsOrder(o.id)}>
+                        {o.po_number ?? `#${String(o.id).slice(0, 8)}`}
+                      </span>
+                      {o.deposit_status && o.status !== 'cancelled' && (
+                        o.deposit_status !== 'paid' ? (
+                          <div className="ord-dep">{t('orders.ws.deposit')}: {wsLabel('pay', o.deposit_status)}</div>
+                        ) : o.balance_status === 'paid' ? (
+                          <div className="ord-dep paid">{t('orders.ws.paid_full')}</div>
+                        ) : (
+                          <div className="ord-dep">{t('orders.ws.balance_due')}</div>
+                        )
+                      )}
+                    </td>
+                    <td><span className="ord-src-badge ws"><span className="material-symbols-outlined">business_center</span>{t('orders.source.showroom')}</span></td>
+                    <td>
+                      {o.buyer?.company_name ?? '—'}
+                      {o.buyer?.country && <div className="ord-cust-sub">{o.buyer.country}</div>}
+                    </td>
+                    <td>{o.units ?? '—'}</td>
+                    <td>{wsMoney(o.subtotal)}</td>
+                    <td><span style={{ fontSize: 9, color: 'var(--stone)' }}>—</span></td>
+                    <td>{fmtDate(wsDate(o))}</td>
+                    <td><span className={`status ${WS_PILL[o.status] ?? 'pending'}`}>{wsLabel('status', o.status)}</span></td>
+                  </tr>
+                ) : (
+                  <tr key={o.id} className={!selectedWsId && selected?.id === o.id ? 'ord-row-selected' : ''}>
                     <td>
                       <span className="ord-id-link" onClick={() => { clearRouteOrderId(); fetchDetail(o.id) }}>
                         #{String(o.id).slice(0, 8)}
                       </span>
                     </td>
+                    <td><span className="ord-src-badge">{t('orders.source.online')}</span></td>
                     <td>{o.name ?? <span className="ord-guest">{t('orders.guest')}</span>}</td>
                     <td>{o.item_count}</td>
                     <td>€{o.gross_amount}</td>
@@ -636,33 +782,37 @@ export default function Orders() {
                 instead of where the rows were about to appear. It is now a
                 <Loading row /> in the tbody above. */}
             {/* A failed load used to render as an empty tab. */}
-            {!loading && loadFailed && (
+            {!loading && loadFailed && source !== 'showroom' && (
               <div className="empty">
                 <span className="material-symbols-outlined">cloud_off</span>
-                {t('orders.err_load', 'Could not load orders.')}{' '}
+                {t('orders.err_load')}{' '}
                 <span className="db-alert-link" onClick={() => refetchOrders(activeTab, 1)}>
-                  {t('common.retry', 'Retry')}
+                  {t('common.retry')}
                 </span>
               </div>
             )}
-            {!loading && !loadFailed && visibleOrders.length === 0 && (
+            {!loading && !(loadFailed && source !== 'showroom') && rows.length === 0 && (
               <div className="empty">
-                <span className="material-symbols-outlined">local_shipping</span>
-                {t('orders.empty', { status: STATUS_TABS[activeTab] })}
+                <span className="material-symbols-outlined">{source === 'showroom' ? 'business_center' : 'local_shipping'}</span>
+                {source === 'showroom' ? t('orders.ws.empty') : t('orders.empty', { status: STATUS_TABS[activeTab] })}
               </div>
             )}
-            {!loading && ordersTotalPages > 1 && (
+            {!loading && source !== 'showroom' && ordersTotalPages > 1 && (
               <div className="ord-table-footer" style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:12, padding:'10px 0' }}>
-                <button className="btn btn-outline btn-xs" disabled={ordersPage <= 1} onClick={() => goToOrdersPage(ordersPage - 1)}>{t('orders.prev', '← Prev')}</button>
+                <button className="btn btn-outline btn-xs" disabled={ordersPage <= 1} onClick={() => goToOrdersPage(ordersPage - 1)}>{t('orders.prev')}</button>
                 <span>{t('orders.page_n', { page: ordersPage, total: ordersTotalPages, defaultValue: 'Page {{page}} of {{total}}' })}</span>
-                <button className="btn btn-outline btn-xs" disabled={ordersPage >= ordersTotalPages} onClick={() => goToOrdersPage(ordersPage + 1)}>{t('orders.next', 'Next →')}</button>
+                <button className="btn btn-outline btn-xs" disabled={ordersPage >= ordersTotalPages} onClick={() => goToOrdersPage(ordersPage + 1)}>{t('orders.next')}</button>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Detail panel ── */}
-        {selected && (
+        {/* ── Detail panel ── a wholesale order gets its own panel; key makes
+            each order a fresh mount, so nothing carries over between orders. */}
+        {selectedWsId && (
+          <WholesaleOrderPanel key={selectedWsId} orderId={selectedWsId} showToast={showToast} onUpdated={loadWsOrders} />
+        )}
+        {!selectedWsId && selected && (
           <div className="detail-panel">
             <div className="detail-panel-hdr">
               <div className="detail-panel-icon">
@@ -674,7 +824,7 @@ export default function Orders() {
                   {selected.name ?? t('orders.guest')} · {fmtDate(selected.created_at)}
                   {selected.dhl_tracking_number
                     ? ` · ${selected.dhl_tracking_number}`
-                    : selected.channel === 'ship' ? ` · ${t('orders.awaiting_shipment', 'Awaiting shipment')}` : ''}
+                    : selected.channel === 'ship' ? ` · ${t('orders.awaiting_shipment')}` : ''}
                 </div>
               </div>
               <span className={`status ${selected.status} ord-status-ml`}>{statusLabel(t, selected.status)}</span>
@@ -688,9 +838,7 @@ export default function Orders() {
                 <div key={i} className="ord-item-row">
                   <div className="ord-item-img" style={{
                     backgroundImage: item.product_photo
-                      ? `url('${item.product_photo.startsWith('http')
-                          ? item.product_photo
-                          : `${import.meta.env.VITE_IMG_BASE_URL}${item.product_photo}`}')`
+                      ? `url('${imgUrl(item.product_photo)}')`
                       : 'none',
                     backgroundColor: 'var(--mist)'
                   }} />
@@ -736,7 +884,7 @@ export default function Orders() {
                 {parseFloat(selected.promo_discount) > 0 && (
                   <div className="ord-fin-row">
                     <span>
-                      {t('orders.detail.discount', 'Discount')}
+                      {t('orders.detail.discount')}
                       {selected.promo_code ? ` (${selected.promo_code})` : ''}
                     </span>
                     <span>−€{parseFloat(selected.promo_discount).toFixed(2)}</span>
@@ -773,12 +921,12 @@ export default function Orders() {
                       onClick={() => fetchDhlLabel(selected.id)}
                       disabled={labelLoading || !(selected.dhl_tracking_number || selected.dhl_label_url)}
                       title={!(selected.dhl_tracking_number || selected.dhl_label_url)
-                        ? t('orders.detail.label_needs_tracking', 'Save a DHL tracking number first — the label is looked up by it.')
+                        ? t('orders.detail.label_needs_tracking')
                         : undefined}>
                       <span className="material-symbols-outlined">local_shipping</span>
                       {labelLoading
-                        ? t('orders.detail.label_loading', 'Fetching…')
-                        : t('orders.detail.dhl_label', 'DHL Label')}
+                        ? t('orders.detail.label_loading')
+                        : t('orders.detail.dhl_label')}
                     </button>
                     <button className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}
                       onClick={() => generatePackingSlip(selected.id)}>
@@ -788,7 +936,7 @@ export default function Orders() {
                   </div>
                   {!(selected.dhl_tracking_number || selected.dhl_label_url) && (
                     <div className="form-hint" style={{ marginBottom: 8 }}>
-                      {t('orders.detail.label_needs_tracking', 'Save a DHL tracking number first — the label is looked up by it.')}
+                      {t('orders.detail.label_needs_tracking')}
                       {' '}
                       {t('orders.detail.tracking_format', { min: TRACKING_MIN, max: TRACKING_MAX,
                         defaultValue: 'DHL numbers are {{min}}–{{max}} characters.' })}
@@ -829,7 +977,6 @@ export default function Orders() {
                   // Goes to the customer, so it follows the boutique's language.
                   const msg   = encodeURIComponent(t(
                     'orders.whatsapp_msg',
-                    'Ciao {{name}}, regarding your order #{{order}} — ',
                     { name, order: String(selected.id).slice(0, 8) },
                   ))
                   if (phone) {
@@ -840,7 +987,7 @@ export default function Orders() {
                 }}
               >
                 <span className="material-symbols-outlined">chat_bubble</span>
-                {t('orders.detail.message_customer', 'Message Customer')}
+                {t('orders.detail.message_customer')}
               </button>}
 
               {/* Update Status */}
@@ -867,11 +1014,11 @@ export default function Orders() {
                     disabled = true
                   } else if (isFinal) {
                     disabled = true
-                    tooltip  = t('orders.tooltip.final', 'This order is already {{status}} — no further changes allowed', { status: statusLabel(t, current) })
+                    tooltip  = t('orders.tooltip.final', { status: statusLabel(t, current) })
                   } else if (s === 'cancelled') {
                     if (current !== 'pending') {
                       disabled = true
-                      tooltip  = t('orders.tooltip.cancel_window', 'Orders can only be cancelled before processing begins')
+                      tooltip  = t('orders.tooltip.cancel_window')
                     }
                   } else {
                     const currentIdx = ORDER.indexOf(current)

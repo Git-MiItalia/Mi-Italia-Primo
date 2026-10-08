@@ -114,7 +114,7 @@ function meter(entry, t) {
     return { display: num(n), pct: 100, unlimited: true, level: 'ok' }
   }
   if (cap === 0) {
-    return { display: t ? t('sub.page.not_included', 'Not included') : '0', pct: 0, level: 'ok' }
+    return { display: t ? t('sub.page.not_included') : '0', pct: 0, level: 'ok' }
   }
   const pct = Math.min(100, Math.round((n / cap) * 100))
   return {
@@ -292,9 +292,9 @@ function TopupModal({ t, onClose }) {
         window.location.href = url          // hand off to Stripe
         return                              // keep the spinner while the browser navigates
       }
-      setError(res?.message ?? t('sub.topup.err_checkout', 'Could not start checkout. Please try again.'))
+      setError(res?.message ?? t('sub.topup.err_checkout'))
     } catch {
-      setError(t('common.error_network', 'Network error. Please check your connection.'))
+      setError(t('common.error_network'))
     }
     setRedirecting(false)
   }
@@ -348,7 +348,7 @@ function TopupModal({ t, onClose }) {
 
         <div className="sub-topup-note">
           <span className="material-symbols-outlined">lock</span>
-          <span>{t('sub.topup.stripe_redirect_note', 'You will be taken to Stripe to pay securely. Your card details are never entered in Primo.')}</span>
+          <span>{t('sub.topup.stripe_redirect_note')}</span>
         </div>
 
         {error && <div className="alert alert-urgent">{error}</div>}
@@ -357,7 +357,7 @@ function TopupModal({ t, onClose }) {
           <button className="btn btn-outline btn-sm" onClick={onClose} disabled={redirecting}>{t('common.cancel')}</button>
           <button className="btn btn-primary btn-sm" onClick={handlePay} disabled={redirecting}>
             {redirecting
-              ? t('sub.topup.redirecting', 'Opening Stripe') + '…'
+              ? t('sub.topup.redirecting') + '…'
               : t('sub.topup.pay', { amount: pack.price })}
           </button>
         </div>
@@ -419,9 +419,9 @@ function AttributionTab({ t }) {
       .then(res => {
         if (cancelled) return
         if (res?.success) setAttr(res.data)
-        else setAttrErr(res?.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
+        else setAttrErr(res?.message ?? t('common.error_generic'))
       })
-      .catch(() => { if (!cancelled) setAttrErr(t('common.error_network', 'Network error. Please check your connection.')) })
+      .catch(() => { if (!cancelled) setAttrErr(t('common.error_network')) })
       .finally(() => { if (!cancelled) setLoad(false) })
     return () => { cancelled = true }
   }, [range, compare, customRange, t])
@@ -434,10 +434,10 @@ function AttributionTab({ t }) {
 
   const baseRate  = ladder.find(l => l.tier === 'base')?.rate_pct ?? null
   const tierNames = {
-    base:     t('sub.attr.tier_base',     'Base'),
-    silver:   t('sub.attr.tier_silver',   'Silver'),
-    gold:     t('sub.attr.tier_gold',     'Gold'),
-    platinum: t('sub.attr.tier_platinum', 'Platinum'),
+    base:     t('sub.attr.tier_base'),
+    silver:   t('sub.attr.tier_silver'),
+    gold:     t('sub.attr.tier_gold'),
+    platinum: t('sub.attr.tier_platinum'),
   }
   const tierName = key => tierNames[key] ?? key
 
@@ -465,13 +465,13 @@ function AttributionTab({ t }) {
 
   const SOURCE_CLASS = { 'in-app': 'app', app: 'app', walkin: 'walkin', 'walk-in': 'walkin', email: 'digital', digital: 'digital', unidentified: 'organic', organic: 'organic' }
   const SOURCE_LABEL = {
-    'in-app':       t('sub.attr.src_app',     'In-app'),
-    app:            t('sub.attr.src_app',     'In-app'),
-    walkin:         t('sub.attr.src_walkin',  'Identified walk-in'),
-    'walk-in':      t('sub.attr.src_walkin',  'Identified walk-in'),
-    email:          t('sub.attr.src_email',   'Email click'),
-    unidentified:   t('sub.attr.unidentified','Unidentified walk-in'),
-    organic:        t('sub.attr.src_organic', 'Organic'),
+    'in-app':       t('sub.attr.src_app'),
+    app:            t('sub.attr.src_app'),
+    walkin:         t('sub.attr.src_walkin'),
+    'walk-in':      t('sub.attr.src_walkin'),
+    email:          t('sub.attr.src_email'),
+    unidentified:   t('sub.attr.unidentified'),
+    organic:        t('sub.attr.src_organic'),
   }
 
   // Floor simulator — pure arithmetic against the ladder the API returned, so
@@ -504,17 +504,17 @@ function AttributionTab({ t }) {
 
   function exportCsv() {
     const header = [
-      t('sub.attr.csv.date',     'Date'),
-      t('sub.attr.csv.customer', 'Customer'),
-      t('sub.attr.csv.item',     'Item'),
-      t('sub.attr.csv.sale',     'Sale'),
-      t('sub.attr.csv.source',   'Source'),
-      t('sub.attr.csv.rate_pct', 'Rate %'),
-      t('sub.attr.csv.fee',      'Fee'),
+      t('sub.attr.csv.date'),
+      t('sub.attr.csv.customer'),
+      t('sub.attr.csv.item'),
+      t('sub.attr.csv.sale'),
+      t('sub.attr.csv.source'),
+      t('sub.attr.csv.rate_pct'),
+      t('sub.attr.csv.fee'),
     ]
     const body = txs.map(x => [
       isoDay(x.date),
-      x.customer_name ?? t('sub.attr.unidentified', 'Unidentified walk-in'),
+      x.customer_name ?? t('sub.attr.unidentified'),
       x.item ?? '',
       x.sale_amount ?? '',
       // Same label the table shows — the raw enum ("walkin", "unidentified")
@@ -564,7 +564,7 @@ function AttributionTab({ t }) {
                 <div className="th-tier">{tierName(tierInfo?.tier)}</div>
                 <div className="th-tier-sub">
                   {tierInfo?.tier
-                    ? `${tierBand(ladder.findIndex(l => l.tier === tierInfo.tier))} ${t('sub.attr.tier_band_sub', 'identification rate')} · ${tierInfo.rate_pct}% ${t('sub.attr.tier_band_commission', 'attributed commission')}`
+                    ? `${tierBand(ladder.findIndex(l => l.tier === tierInfo.tier))} ${t('sub.attr.tier_band_sub')} · ${tierInfo.rate_pct}% ${t('sub.attr.tier_band_commission')}`
                     : '—'}
                 </div>
               </div>
@@ -578,10 +578,10 @@ function AttributionTab({ t }) {
                 <div className="th-progress">
                   <div className="th-progress-row">
                     <span>
-                      {t('sub.attr.progress_to', 'Progress to')} <strong>{tierName(tierInfo.next_tier)} ({tierInfo.next_rate_pct}%)</strong>
+                      {t('sub.attr.progress_to')} <strong>{tierName(tierInfo.next_tier)} ({tierInfo.next_rate_pct}%)</strong>
                     </span>
                     <span>
-                      {idRate}% → {t('sub.attr.need', 'need')} {ladder.find(l => l.tier === tierInfo.next_tier)?.min_pct}%
+                      {idRate}% → {t('sub.attr.need')} {ladder.find(l => l.tier === tierInfo.next_tier)?.min_pct}%
                     </span>
                   </div>
                   <div className="prog">
@@ -591,7 +591,7 @@ function AttributionTab({ t }) {
                   </div>
                 </div>
                 <div className="th-projection">
-                  {t('sub.attr.points_to_next', '{{count}} more percentage points to reach {{tier}}.', {
+                  {t('sub.attr.points_to_next', {
                     count: tierInfo.points_to_next_tier,
                     tier: tierName(tierInfo.next_tier),
                   })}
@@ -599,20 +599,20 @@ function AttributionTab({ t }) {
               </>
             ) : (
               <div className="th-projection">
-                {t('sub.attr.top_tier', 'You are on the highest tier — this is the lowest commission rate available.')}
+                {t('sub.attr.top_tier')}
               </div>
             )}
           </div>
         </div>
 
         <div>
-          <div className="sub-attr-section-lbl">{t('sub.attr.id_rate_status', 'Identification rate')}</div>
+          <div className="sub-attr-section-lbl">{t('sub.attr.id_rate_status')}</div>
           <div className="floor-strip safe">
             <div className="fs-ico"><span className="material-symbols-outlined">badge</span></div>
             <div className="fs-content">
               <div className="fs-title">{idRate != null ? `${idRate}%` : '—'}</div>
               <div className="fs-sub">
-                {t('sub.attr.id_rate_desc', 'Share of sales matched to a Mi Italia customer over this period. The higher it goes, the lower your commission rate.')}
+                {t('sub.attr.id_rate_desc')}
               </div>
               <div className="fs-bar-wrap">
                 <div className="fs-bar-row">
@@ -626,7 +626,7 @@ function AttributionTab({ t }) {
             </div>
             <div className="fs-right">
               <div className="fs-rate">{attributed.length}/{txs.length}</div>
-              <div className="fs-buffer-lbl">{t('sub.attr.identified_sales', 'identified')}</div>
+              <div className="fs-buffer-lbl">{t('sub.attr.identified_sales')}</div>
             </div>
           </div>
         </div>
@@ -661,7 +661,7 @@ function AttributionTab({ t }) {
                   <td><span className={`tag tag-${ti.tier}`}>{tierName(ti.tier)}</span></td>
                   <td>
                     <span className={ti.tier === 'base' ? 'sub-tier-range-mute' : undefined}>{tierBand(i)}</span>
-                    {current && <span className="sub-tier-current-hint"> · {t('sub.attr.you_at', 'You: {{pct}}%', { pct: idRate })}</span>}
+                    {current && <span className="sub-tier-current-hint"> · {t('sub.attr.you_at', { pct: idRate })}</span>}
                   </td>
                   <td>
                     <span className={`sub-tier-commission sub-tier-commission-${ti.tier}`}>{ti.rate_pct}%</span>
@@ -671,12 +671,12 @@ function AttributionTab({ t }) {
                       ? <span className="tag tag-active">{t('sub.badge.current')}</span>
                       : gap != null && gap > 0
                         ? <span className="sub-tier-status">{t('sub.attr.pts_away', { count: gap })}</span>
-                        : <span className="sub-tier-status">{t('sub.attr.reached', 'Reached')}</span>
+                        : <span className="sub-tier-status">{t('sub.attr.reached')}</span>
                     }
                   </td>
                   <td>
                     <span className={ti.tier === 'base' ? 'sub-tier-baseline' : 'sub-tier-saving'}>
-                      {ti.tier === 'base' ? t('sub.attr.baseline', '— baseline') : annualSaving(ti.rate_pct)}
+                      {ti.tier === 'base' ? t('sub.attr.baseline') : annualSaving(ti.rate_pct)}
                     </span>
                   </td>
                 </tr>
@@ -696,7 +696,7 @@ function AttributionTab({ t }) {
             </div>
           </div>
           {trend.length === 0 ? (
-            <div className="state-empty">{t('sub.attr.no_trend', 'No identification data for this period yet.')}</div>
+            <div className="state-empty">{t('sub.attr.no_trend')}</div>
           ) : (
             <>
               <div className="sub-attr-trend-chart">
@@ -712,7 +712,7 @@ function AttributionTab({ t }) {
                         // Scaled against the tallest month so a short series
                         // still fills the chart rather than sitting flat.
                         style={{ height: `${Math.max(4, (pct / Math.max(...trend.map(x => Number(x.id_rate_pct ?? 0)), 1)) * 150)}px` }}
-                        title={t('sub.attr.trend_tooltip', '{{identified}} of {{total}} orders identified', { identified: m.identified_orders, total: m.total_orders })}
+                        title={t('sub.attr.trend_tooltip', { identified: m.identified_orders, total: m.total_orders })}
                       />
                       <div className={`sub-attr-trend-lbl${current ? ' current' : ''}`}>{label}</div>
                     </div>
@@ -726,7 +726,7 @@ function AttributionTab({ t }) {
                 return (
                   <div className="sub-attr-trend-note">
                     <strong className={delta >= 0 ? 'sub-attr-trend-note-up' : undefined}>
-                      {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)} {t('sub.attr.points_over', 'points over')} {trend.length} {t('sub.attr.months', 'months')}.
+                      {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)} {t('sub.attr.points_over')} {trend.length} {t('sub.attr.months')}.
                     </strong>
                   </div>
                 )
@@ -746,7 +746,7 @@ function AttributionTab({ t }) {
             <div className="sub-sim-input-lbl">
               <span>{t('sub.attr.sim_if_rate')}</span>
               <div className="sub-sim-input-lbl-sub">
-                {t('sub.attr.sim_current_is', 'Currently {{pct}}% · {{tier}}', { pct: idRate ?? 0, tier: tierName(tierInfo?.tier) })}
+                {t('sub.attr.sim_current_is', { pct: idRate ?? 0, tier: tierName(tierInfo?.tier) })}
               </div>
             </div>
             <input className="sub-sim-input" type="number" min="0" max="100"
@@ -756,7 +756,7 @@ function AttributionTab({ t }) {
             <div className="sub-sim-input-lbl">
               <span>{t('sub.attr.sim_monthly_rev')}</span>
               <div className="sub-sim-input-lbl-sub">
-                {t('sub.attr.sim_avg_is', 'Your attributed total this period: €{{amount}}', { amount: num(Math.round(attributedTotal)) })}
+                {t('sub.attr.sim_avg_is', { amount: num(Math.round(attributedTotal)) })}
               </div>
             </div>
             <input className="sub-sim-input" type="number" min="0"
@@ -774,10 +774,10 @@ function AttributionTab({ t }) {
           </div>
           <div className="sub-sim-note">
             {simTier
-              ? t('sub.attr.sim_at_tier', 'At {{pct}}% you would be on {{tier}}, paying {{rate}}% commission.', {
+              ? t('sub.attr.sim_at_tier', {
                   pct: Number(simRate) || 0, tier: tierName(simTier.tier), rate: simTier.rate_pct,
                 })
-              : t('sub.attr.sim_no_ladder', 'Commission tiers are not available for this plan.')}
+              : t('sub.attr.sim_no_ladder')}
           </div>
         </div>
       </div>
@@ -804,7 +804,7 @@ function AttributionTab({ t }) {
         </div>
 
         {txs.length === 0 && (
-          <div className="state-empty">{t('sub.attr.no_transactions', 'No transactions in this period.')}</div>
+          <div className="state-empty">{t('sub.attr.no_transactions')}</div>
         )}
 
         {txs.map((tx, i) => {
@@ -812,7 +812,7 @@ function AttributionTab({ t }) {
           const src    = tx.attribution_source ?? 'unidentified'
           const sale   = Number(tx.sale_amount || 0)
           const fee    = Number(tx.fee_charged || 0)
-          const name   = tx.customer_name || t('sub.attr.unidentified', 'Unidentified walk-in')
+          const name   = tx.customer_name || t('sub.attr.unidentified')
           const isAnon = src === 'unidentified'
           return (
             <div key={`${tx.date}-${i}`} className="sub-tx-row">
@@ -845,7 +845,7 @@ function AttributionTab({ t }) {
           <div className="sub-tx-row sub-tx-summary">
             <div />
             <div className="sub-tx-more">
-              {t('sub.attr.tx_total_count', '{{count}} transactions · {{identified}} identified', { count: txs.length, identified: attributed.length })}
+              {t('sub.attr.tx_total_count', { count: txs.length, identified: attributed.length })}
             </div>
             <div />
             <div className="sub-tx-amount">€{num(Math.round(attributedTotal))}</div>
@@ -890,22 +890,22 @@ function BillingTab({ t, onOpenPortal, portalLoading, portalError, subData, prof
           <div className="sub-bill-kpi-val"><em>{fmtEur(planPrice)}</em></div>
           <div className="sub-bill-kpi-sub">
             {nextChargeAt
-              ? t('sub.bill.next_charge_on', 'Due {{date}}', { date: nextChargeAt.toLocaleDateString(activeLocale(), { day: 'numeric', month: 'long' }) })
-              : t('sub.bill.next_charge_unknown', 'No renewal date on file')}
+              ? t('sub.bill.next_charge_on', { date: nextChargeAt.toLocaleDateString(activeLocale(), { day: 'numeric', month: 'long' }) })
+              : t('sub.bill.next_charge_unknown')}
           </div>
         </div>
         <div className="sub-bill-kpi-card">
           <div className="sub-bill-kpi-lbl">{t('sub.bill.ytd_paid')}</div>
           <div className="sub-bill-kpi-val">{fmtEur(ytdPaid)}</div>
           <div className="sub-bill-kpi-sub">
-            {ytdPaid == null ? t('sub.bill.not_available', 'Not available yet') : t('sub.bill.ytd_paid_sub')}
+            {ytdPaid == null ? t('sub.bill.not_available') : t('sub.bill.ytd_paid_sub')}
           </div>
         </div>
         <div className="sub-bill-kpi-card">
           <div className="sub-bill-kpi-lbl">{t('sub.bill.avg_monthly')}</div>
           <div className="sub-bill-kpi-val">{fmtEur(avgMonthly)}</div>
           <div className="sub-bill-kpi-sub">
-            {avgMonthly == null ? t('sub.bill.not_available', 'Not available yet') : t('sub.bill.avg_monthly_sub')}
+            {avgMonthly == null ? t('sub.bill.not_available') : t('sub.bill.avg_monthly_sub')}
           </div>
         </div>
       </div>
@@ -924,8 +924,8 @@ function BillingTab({ t, onOpenPortal, portalLoading, portalError, subData, prof
               before, inventing one. */}
           <div className="sub-pm-card">
             <div className="sub-pm-info">
-              <div className="sub-pm-num">{t('sub.bill.pm_in_stripe', 'Your card is held securely by Stripe')}</div>
-              <div className="sub-pm-exp">{t('sub.bill.pm_in_stripe_sub', 'Add, replace or remove a payment method in the billing portal.')}</div>
+              <div className="sub-pm-num">{t('sub.bill.pm_in_stripe')}</div>
+              <div className="sub-pm-exp">{t('sub.bill.pm_in_stripe_sub')}</div>
             </div>
             <button className="btn btn-outline btn-sm" onClick={onOpenPortal} disabled={portalLoading}>
               <span className="material-symbols-outlined">credit_card</span>
@@ -988,17 +988,17 @@ function BillingTab({ t, onOpenPortal, portalLoading, portalError, subData, prof
         <div className="sub-inv-portal">
           <div>
             <div className="sub-inv-portal-title">
-              {t('sub.bill.portal_title', 'Invoices are kept in Stripe')}
+              {t('sub.bill.portal_title')}
             </div>
             <div className="sub-inv-portal-sub">
-              {t('sub.bill.portal_sub', 'Your full invoice history, PDF downloads and payment methods are available in the Stripe billing portal.')}
+              {t('sub.bill.portal_sub')}
             </div>
           </div>
           <button className="btn btn-primary" onClick={onOpenPortal} disabled={portalLoading}>
             <span className="material-symbols-outlined">receipt_long</span>
             {portalLoading
               ? t('sub.page.opening_portal')
-              : t('sub.bill.open_portal_btn', 'View invoices in Stripe')}
+              : t('sub.bill.open_portal_btn')}
           </button>
         </div>
         {portalError && <div className="alert alert-urgent">{portalError}</div>}
@@ -1113,11 +1113,11 @@ export default function Subscription() {
 
       {subFailed && (
         <div className="sub-load-error">
-          {t('sub.page.err_load', 'Could not load your subscription. The plan, allowances and prices shown below are defaults and may not be yours — reload before acting on them.')}
+          {t('sub.page.err_load')}
         </div>
       )}
       {!subFailed && plansFailed && (
-        <div className="sub-load-error">{t('sub.page.err_plans', 'Could not load the available plans.')}</div>
+        <div className="sub-load-error">{t('sub.page.err_plans')}</div>
       )}
 
       <div className="sub-nav">
@@ -1190,7 +1190,7 @@ export default function Subscription() {
                     derive from a rate held client-side — the real one belongs
                     in the payload, or on Billing where the invoices are. */}
                 {isWhatsappEnabled() && (
-                  <UsageMeter label={t('sub.page.wa_sends')} {...meter(usage.whatsapp_sends, t)} hint={t('sub.page.wa_rate', '€0.10/msg')} />
+                  <UsageMeter label={t('sub.page.wa_sends')} {...meter(usage.whatsapp_sends, t)} hint={t('sub.page.wa_rate')} />
                 )}
               </div>
               <div>
@@ -1276,11 +1276,21 @@ export default function Subscription() {
                 <span className="material-symbols-outlined">error</span>{portalError}
               </div>
             )}
+            {/* This alert used to read "Based on your average €4,200/mo
+                attributed revenue, you'd save €136/month on Pro vs Connect."
+                Both figures were baked into the bundle string, not computed,
+                so every boutique saw the same two invented numbers — a
+                boutique that signed up an hour ago was told its average
+                monthly revenue. Same fault as the three invented schedules
+                that were removed from Reports.
+
+                The per-plan break-even above IS real (plan.breakeven_eur
+                comes from the API), so the link to the attribution tab, where
+                the actual figures live, is kept. The sentence is not. */}
             {currentPlan !== 'pro' && (
               <div className="alert info sub-cmp-alert">
                 <span className="material-symbols-outlined">tips_and_updates</span>
                 <div>
-                  <span dangerouslySetInnerHTML={{ __html: t('sub.page.savings_alert') }} />{' '}
                   <span className="sub-link" onClick={() => setTab('attribution')}>{t('sub.page.view_breakeven')}</span>
                 </div>
               </div>

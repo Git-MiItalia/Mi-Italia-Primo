@@ -66,19 +66,19 @@ export default function RangeBar({
 
   const customBtnLabel = range === 'custom' && customRange
     ? `${fmtDateShort(customRange.start)} – ${fmtDateShort(customRange.end)}`
-    : t('rangebar.custom', 'Custom')
+    : t('rangebar.custom')
 
   const prevYear = PR_TODAY.getFullYear() - 1
 
   const compareLabels = {
-    none:     t('rangebar.cmp_none', 'None'),
-    prev:     t('rangebar.cmp_prev_short', 'Prev period'),
+    none:     t('rangebar.cmp_none'),
+    prev:     t('rangebar.cmp_prev_short'),
     prevyear: String(prevYear),
   }
 
   return (
     <div className="prange-bar">
-      <div className="prange-bar-lbl">{t('rangebar.range', 'Range')}</div>
+      <div className="prange-bar-lbl">{t('rangebar.range')}</div>
 
       <div className="prange-cap">
         {presetKeys.map(k => (
@@ -109,16 +109,16 @@ export default function RangeBar({
           <button
             className={`pcmp-btn${compare !== 'none' ? ' has-cmp' : ''}`}
             onClick={(e) => { e.stopPropagation(); setCmpMenuOpen(v => !v); setPickerOpen(false) }}>
-            <span className="pcmp-lbl">{t('rangebar.compare', 'Compare')}</span>
+            <span className="pcmp-lbl">{t('rangebar.compare')}</span>
             <span className="pcmp-val">{compareLabels[compare] ?? compare}</span>
             <span className="material-symbols-outlined">expand_more</span>
           </button>
           {cmpMenuOpen && (
             <div className="pcmp-menu open" onClick={e => e.stopPropagation()}>
               {[
-                { k: 'none',     title: t('rangebar.cmp_none', 'None'),     sub: t('rangebar.cmp_none_sub', 'Show just the selected range') },
-                { k: 'prev',     title: t('rangebar.cmp_prev', 'Previous period'), sub: t('rangebar.cmp_prev_sub', 'Same length, immediately before') },
-                { k: 'prevyear', title: t('rangebar.cmp_prevyear', { year: prevYear, defaultValue: 'Previous year ({{year}})' }), sub: t('rangebar.cmp_prevyear_sub', 'Same dates, one year earlier') },
+                { k: 'none',     title: t('rangebar.cmp_none'),     sub: t('rangebar.cmp_none_sub') },
+                { k: 'prev',     title: t('rangebar.cmp_prev'), sub: t('rangebar.cmp_prev_sub') },
+                { k: 'prevyear', title: t('rangebar.cmp_prevyear', { year: prevYear, defaultValue: 'Previous year ({{year}})' }), sub: t('rangebar.cmp_prevyear_sub') },
               ].map(o => (
                 <div
                   key={o.k}
@@ -138,7 +138,7 @@ export default function RangeBar({
 
       {onExport && (
         <button className="prange-export" onClick={onExport}>
-          <span className="material-symbols-outlined">download</span>{t('common.export', 'Export')}
+          <span className="material-symbols-outlined">download</span>{t('common.export')}
         </button>
       )}
     </div>

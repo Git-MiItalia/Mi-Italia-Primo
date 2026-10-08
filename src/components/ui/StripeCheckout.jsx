@@ -96,7 +96,7 @@ export default function StripeCheckout({ plan = 'pro', onClose }) {
           {/* Said "Upgrade to Pro" for every plan, ignoring the `plan` prop —
               so a boutique buying Connect was told it was buying Pro. */}
           <div className="sco-title">
-            {t('sco.title_pre', 'Upgrade to')} <em>{planName(plan)}</em>
+            {t('sco.title_pre')} <em>{planName(plan)}</em>
           </div>
           <button className="sco-close" onClick={onClose}>
             <span className="material-symbols-outlined">close</span>
@@ -105,7 +105,7 @@ export default function StripeCheckout({ plan = 'pro', onClose }) {
 
         {/* Body */}
         <div className="sco-body">
-          {loading && <Loading className="ld-cell" label={t('sco.preparing', 'Preparing secure checkout') + '…'} />}
+          {loading && <Loading className="ld-cell" label={t('sco.preparing') + '…'} />}
 
           {error && (
             <div className="alert alert-red sco-error">

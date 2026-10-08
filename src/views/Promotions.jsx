@@ -112,7 +112,7 @@ function CompliancePanel({ t, result, checking }) {
       <div className={`prm-comp-hd ${cls}`}>
         <span className="material-symbols-outlined">{icon}</span>
         {result.ok ? t('promotions.compliance.ok') : t('promotions.compliance.blocked')}
-        {checking && <span className="prm-comp-checking"> · {t('promotions.compliance.checking', 'checking…')}</span>}
+        {checking && <span className="prm-comp-checking"> · {t('promotions.compliance.checking')}</span>}
       </div>
       {result.findings.map((f, i) => (
         <div key={i} className={`prm-finding ${f.level}`}>
@@ -133,7 +133,7 @@ function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisibl
   if (products.length === 0) {
     return (
       <div className="empty">
-        {t('promotions.items.empty', 'No products to show.')}
+        {t('promotions.items.empty')}
         {emptyHint && <div className="prm-empty-hint">{emptyHint}</div>}
       </div>
     )
@@ -167,9 +167,9 @@ function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisibl
                 </div>
               </div>
               {onToggleSeasonal && (
-                <div className={`prm-seasonal-tag${p.seasonal ? ' on' : ''}`} onClick={() => onToggleSeasonal(p)} title={t('promotions.items.seasonal_toggle_hint', 'Eligible for Seasonal Saldi')}>
+                <div className={`prm-seasonal-tag${p.seasonal ? ' on' : ''}`} onClick={() => onToggleSeasonal(p)} title={t('promotions.items.seasonal_toggle_hint')}>
                   <span className="material-symbols-outlined">{p.seasonal ? 'toggle_on' : 'toggle_off'}</span>
-                  {t('promotions.items.seasonal_label', 'Seasonal')}
+                  {t('promotions.items.seasonal_label')}
                 </div>
               )}
             </div>
@@ -178,7 +178,7 @@ function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisibl
               <div className="prm-datum"><span>{t('promotions.items.qty')}</span><b>{p.qtyOnHand ?? '—'}</b></div>
               <div className={`prm-datum ${ageCls}`}><span>{t('promotions.items.aging')}</span><b>{days != null ? t('promotions.items.days_short', { days }) : '—'}{ageCls === 'prm-datum-hot' && <span className="material-symbols-outlined prm-datum-warn-ic">warning</span>}</b></div>
               <div className="prm-datum"><span>{t('promotions.items.current')}</span><b>{fmtEUR(p.currentPrice)}</b></div>
-              <div className="prm-datum"><span>{t('promotions.items.ref_30d')}</span><b>{fmtEUR(ref)}{p.refPriceProvisional && <span className="prm-provisional" title={t('promotions.items.ref_provisional_hint', 'Provisional — fewer than 2 price observations')}>*</span>}</b></div>
+              <div className="prm-datum"><span>{t('promotions.items.ref_30d')}</span><b>{fmtEUR(ref)}{p.refPriceProvisional && <span className="prm-provisional" title={t('promotions.items.ref_provisional_hint')}>*</span>}</b></div>
               {costVisible && <div className="prm-datum prm-datum-owner"><span>{t('promotions.items.cost')}</span><b>{p.cost != null ? fmtEUR(p.cost) : '—'}</b></div>}
               {costVisible && <div className="prm-datum prm-datum-owner"><span>{t('promotions.items.gm_label')}</span><b className={gm != null ? (gm < 45 ? 'prm-gm-thin' : gm > 60 ? 'prm-gm-ok' : '') : ''}>{gm != null ? `${gm}%` : '·'}</b></div>}
             </div>
@@ -199,7 +199,7 @@ function SaleItemsTable({ t, products, saleDisc, selected, overrides, costVisibl
                 </div>
                 {overridden && <span className="prm-override-tag">{t('promotions.items.edited')}</span>}
                 {overridden && <span className="prm-reset-link" onClick={() => onReset(id)}>{t('promotions.items.reset')}</span>}
-                {onHistory && <span className="prm-history-link" onClick={() => onHistory(id)}><span className="material-symbols-outlined">history</span>{t('promotions.items.history', 'History')}</span>}
+                {onHistory && <span className="prm-history-link" onClick={() => onHistory(id)}><span className="material-symbols-outlined">history</span>{t('promotions.items.history')}</span>}
               </div>
             )}
 
@@ -219,14 +219,14 @@ function PriceHistoryModal({ t, loading, history, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-title">{t('promotions.history.title', 'Price history')}</div>
+        <div className="modal-title">{t('promotions.history.title')}</div>
         {loading
           ? <Loading />
           : (history.length === 0
-            ? <div className="empty">{t('promotions.history.empty', 'No recorded price history')}</div>
+            ? <div className="empty">{t('promotions.history.empty')}</div>
             : (
               <table className="tbl">
-                <thead><tr><th>{t('promotions.history.col_date', 'Date')}</th><th className="prm-num">{t('promotions.history.col_price', 'Price')}</th><th>{t('promotions.history.col_source', 'Source')}</th><th>{t('promotions.history.col_by', 'Changed by')}</th></tr></thead>
+                <thead><tr><th>{t('promotions.history.col_date')}</th><th className="prm-num">{t('promotions.history.col_price')}</th><th>{t('promotions.history.col_source')}</th><th>{t('promotions.history.col_by')}</th></tr></thead>
                 <tbody>
                   {history.map((h, i) => (
                     <tr key={i}>
@@ -240,7 +240,7 @@ function PriceHistoryModal({ t, loading, history, onClose }) {
               </table>
             ))}
         <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-          <button className="btn btn-outline" onClick={onClose}>{t('common.close', 'Close')}</button>
+          <button className="btn btn-outline" onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>
@@ -294,8 +294,8 @@ export default function Promotions() {
     setProfile(p => ({ ...p, region: newRegion }))
     api(`${API}/boutique/promotions/profile`, { method: 'PUT', body: JSON.stringify({ region: newRegion, tier: profile.tier }) })
       .then(res => {
-        if (!res.success) { setProfile(p => ({ ...p, region: prev })); show(res.message ?? t('promotions.region.update_failed', 'Failed to update region'), 'error') }
-        else show(t('promotions.region.updated', 'Region updated'), 'success')
+        if (!res.success) { setProfile(p => ({ ...p, region: prev })); show(res.message ?? t('promotions.region.update_failed'), 'error') }
+        else show(t('promotions.region.updated'), 'success')
       })
   }
 
@@ -396,7 +396,7 @@ export default function Promotions() {
     api(`${API}/boutique/promotions/items/${p.productId}/attrs`, { method: 'PUT', body: JSON.stringify({ seasonal: next }) })
       .then(res => {
         if (res.success) setSelfProducts(ps => ps.map(x => x.productId === p.productId ? { ...x, seasonal: next } : x))
-        else show(res.message ?? t('promotions.items.seasonal_update_failed', 'Failed to update'), 'error')
+        else show(res.message ?? t('promotions.items.seasonal_update_failed'), 'error')
       })
   }
   function aiSuggestSelf() {
@@ -443,14 +443,14 @@ export default function Promotions() {
       const startsAt = new Date(selfStart).toISOString(), endsAt = new Date(selfEnd).toISOString()
       if (!selfCampaignId) {
         const res = await api(`${API}/boutique/promotions/sales`, { method: 'POST', body: JSON.stringify({ kind: 'boutique_promo', name: selfName, description: '', discountValue: selfDisc, startsAt, endsAt, items }) })
-        if (!res.success) { show(res.message ?? t('promotions.self.save_failed', 'Failed to save'), 'error'); return null }
+        if (!res.success) { show(res.message ?? t('promotions.self.save_failed'), 'error'); return null }
         setSelfCampaignId(res.data.campaign.id); setSelfStatus(res.data.campaign.status)
         return res.data.campaign.id
       }
       const r1 = await api(`${API}/boutique/promotions/sales/${selfCampaignId}`, { method: 'PUT', body: JSON.stringify({ name: selfName, discountValue: selfDisc, startsAt, endsAt }) })
-      if (!r1.success) { show(r1.message ?? t('promotions.self.save_failed', 'Failed to save'), 'error'); return null }
+      if (!r1.success) { show(r1.message ?? t('promotions.self.save_failed'), 'error'); return null }
       const r2 = await api(`${API}/boutique/promotions/sales/${selfCampaignId}/items?mode=replace`, { method: 'PUT', body: JSON.stringify({ items }) })
-      if (!r2.success) { show(r2.message ?? t('promotions.self.save_failed', 'Failed to save'), 'error'); return null }
+      if (!r2.success) { show(r2.message ?? t('promotions.self.save_failed'), 'error'); return null }
       return selfCampaignId
     } finally { setSelfSaving(false) }
   }
@@ -459,29 +459,29 @@ export default function Promotions() {
     if (!id) return
     const res = await api(`${API}/boutique/promotions/sales/${id}/start`, { method: 'POST', body: '{}' })
     if (res.success) { setSelfStatus('active'); show(t('promotions.self.toast_started', { name: selfName, count: Object.keys(selfSelected).filter(k => selfSelected[k]).length }), 'success') }
-    else { if (res.data) setSelfCompliance(res.data); show(res.message ?? t('promotions.self.start_failed', 'Could not start'), 'error') }
+    else { if (res.data) setSelfCompliance(res.data); show(res.message ?? t('promotions.self.start_failed'), 'error') }
   }
   async function stopSelfPromo() {
     const res = await api(`${API}/boutique/promotions/sales/${selfCampaignId}/stop`, { method: 'POST', body: '{}' })
-    if (res.success) { setSelfStatus('paused'); show(t('promotions.self.toast_stopped', 'Sale stopped'), 'success') }
-    else show(res.message ?? t('promotions.self.stop_failed', 'Could not stop'), 'error')
+    if (res.success) { setSelfStatus('paused'); show(t('promotions.self.toast_stopped'), 'success') }
+    else show(res.message ?? t('promotions.self.stop_failed'), 'error')
   }
   // Lets you add/remove products from an already-active sale — previously the
   // only actions available once active were "Stop sale", so there was no way
   // to apply the sale to a newly-selected product without stopping it first.
   async function updateActiveSelfSale() {
     const id = await saveSelfDraft()
-    if (id) show(t('promotions.self.toast_updated', 'Sale updated'), 'success')
+    if (id) show(t('promotions.self.toast_updated'), 'success')
   }
   async function discardSelfDraft() {
     if (!selfCampaignId) return
     const res = await api(`${API}/boutique/promotions/sales/${selfCampaignId}`, { method: 'DELETE' })
-    if (!res.success) { show(res.message ?? t('promotions.self.discard_failed', 'Could not discard'), 'error'); return }
+    if (!res.success) { show(res.message ?? t('promotions.self.discard_failed'), 'error'); return }
     setSelfCampaignId(null); setSelfStatus('none')
     setSelfName(t('promotions.self.default_name')); setSelfDisc(20)
     setSelfStart(todayIso()); setSelfEnd(isoOf(addDays(todayIso(), 14)))
     setSelfSelected({}); setSelfOverride({}); setSelfAiNotes({})
-    show(t('promotions.self.toast_discarded', 'Draft discarded'), 'success')
+    show(t('promotions.self.toast_discarded'), 'success')
   }
 
   /* ── Seasonal saldi ── */
@@ -613,14 +613,14 @@ export default function Promotions() {
       if (!saldiCampaignId) {
         const seasonLabel = saldiSeason === 'summer' ? t('promotions.saldi.summer_title') : t('promotions.saldi.winter_title')
         const res = await api(`${API}/boutique/promotions/sales`, { method: 'POST', body: JSON.stringify({ kind: 'saldi', season: saldiSeason, name: t('promotions.saldi.default_name', { defaultValue: '{{season}} Saldi', season: seasonLabel }), description: '', discountValue: saldiDisc, startsAt, endsAt, items }) })
-        if (!res.success) { show(res.message ?? t('promotions.saldi.save_failed', 'Failed to save'), 'error'); return null }
+        if (!res.success) { show(res.message ?? t('promotions.saldi.save_failed'), 'error'); return null }
         setSaldiCampaignId(res.data.campaign.id); setSaldiStatus(res.data.campaign.status)
         return res.data.campaign.id
       }
       const r1 = await api(`${API}/boutique/promotions/sales/${saldiCampaignId}`, { method: 'PUT', body: JSON.stringify({ discountValue: saldiDisc, startsAt, endsAt }) })
-      if (!r1.success) { show(r1.message ?? t('promotions.saldi.save_failed', 'Failed to save'), 'error'); return null }
+      if (!r1.success) { show(r1.message ?? t('promotions.saldi.save_failed'), 'error'); return null }
       const r2 = await api(`${API}/boutique/promotions/sales/${saldiCampaignId}/items?mode=replace`, { method: 'PUT', body: JSON.stringify({ items }) })
-      if (!r2.success) { show(r2.message ?? t('promotions.saldi.save_failed', 'Failed to save'), 'error'); return null }
+      if (!r2.success) { show(r2.message ?? t('promotions.saldi.save_failed'), 'error'); return null }
       return saldiCampaignId
     } finally { setSaldiSaving(false) }
   }
@@ -629,20 +629,20 @@ export default function Promotions() {
     if (!id) return
     const res = await api(`${API}/boutique/promotions/sales/${id}/start`, { method: 'POST', body: '{}' })
     if (res.success) { setSaldiStatus('active'); show(t('promotions.saldi.toast_started', { count: Object.keys(saldiSelected).filter(k => saldiSelected[k]).length }), 'success') }
-    else { if (res.data) setSaldiCompliance(res.data); show(res.message ?? t('promotions.saldi.start_failed', 'Could not start'), 'error') }
+    else { if (res.data) setSaldiCompliance(res.data); show(res.message ?? t('promotions.saldi.start_failed'), 'error') }
   }
   async function stopSaldiPromo() {
     const res = await api(`${API}/boutique/promotions/sales/${saldiCampaignId}/stop`, { method: 'POST', body: '{}' })
-    if (res.success) { setSaldiStatus('paused'); show(t('promotions.saldi.toast_stopped', 'Sale stopped'), 'success') }
-    else show(res.message ?? t('promotions.saldi.stop_failed', 'Could not stop'), 'error')
+    if (res.success) { setSaldiStatus('paused'); show(t('promotions.saldi.toast_stopped'), 'success') }
+    else show(res.message ?? t('promotions.saldi.stop_failed'), 'error')
   }
   async function discardSaldiDraft() {
     if (!saldiCampaignId) return
     const res = await api(`${API}/boutique/promotions/sales/${saldiCampaignId}`, { method: 'DELETE' })
-    if (!res.success) { show(res.message ?? t('promotions.saldi.discard_failed', 'Could not discard'), 'error'); return }
+    if (!res.success) { show(res.message ?? t('promotions.saldi.discard_failed'), 'error'); return }
     setSaldiCampaignId(null); setSaldiStatus('none')
     setSaldiDisc(30); setSaldiSelected({}); setSaldiOverride({}); setSaldiAiNotes({})
-    show(t('promotions.saldi.toast_discarded', 'Draft discarded'), 'success')
+    show(t('promotions.saldi.toast_discarded'), 'success')
   }
 
   /* ── Mi Italia platform invitations ── */
@@ -678,26 +678,26 @@ export default function Promotions() {
   async function optIn(inv) {
     const sel = invSelected[inv.invitationId] || {}
     const items = Object.keys(sel).filter(id => sel[id]).map(id => ({ productId: id }))
-    if (!items.length) { show(t('promotions.mi.select_at_least_one', 'Select at least one item'), 'error'); return }
+    if (!items.length) { show(t('promotions.mi.select_at_least_one'), 'error'); return }
     const res = await api(`${API}/boutique/promotions/invitations/${inv.invitationId}/opt-in`, { method: 'POST', body: JSON.stringify({ items }) })
     if (res.success) { show(t('promotions.mi.toast_joined', { name: inv.name, count: items.length }), 'success'); refetchInvitations() }
-    else show(res.message ?? t('promotions.mi.opt_in_failed', 'Failed to opt in'), 'error')
+    else show(res.message ?? t('promotions.mi.opt_in_failed'), 'error')
   }
   async function optOut(inv) {
     const res = await api(`${API}/boutique/promotions/invitations/${inv.invitationId}/opt-out`, { method: 'POST', body: '{}' })
-    if (res.success) { show(t('promotions.mi.toast_declined', 'Invitation declined'), 'success'); refetchInvitations() }
-    else show(res.message ?? t('promotions.mi.opt_out_failed', 'Failed to decline'), 'error')
+    if (res.success) { show(t('promotions.mi.toast_declined'), 'success'); refetchInvitations() }
+    else show(res.message ?? t('promotions.mi.opt_out_failed'), 'error')
   }
 
   const TABS = [t('promotions.tabs.your_sale'), t('promotions.tabs.seasonal_saldi'), t('promotions.tabs.mi_italia_sale')]
 
   const LOAD_NAMES = {
-    profile:        t('promotions.load.profile', 'your promotion profile'),
-    rules:          t('promotions.load.rules', 'the Saldi rules for your region'),
-    products:       t('promotions.load.products', 'products for your sale'),
-    saldi_products: t('promotions.load.saldi_products', 'products eligible for Saldi'),
-    campaigns:      t('promotions.load.campaigns', 'your saved campaigns'),
-    invitations:    t('promotions.load.invitations', 'Mi Italia invitations'),
+    profile:        t('promotions.load.profile'),
+    rules:          t('promotions.load.rules'),
+    products:       t('promotions.load.products'),
+    saldi_products: t('promotions.load.saldi_products'),
+    campaigns:      t('promotions.load.campaigns'),
+    invitations:    t('promotions.load.invitations'),
   }
 
   return (
@@ -774,22 +774,22 @@ export default function Promotions() {
           <CompliancePanel t={t} result={selfCompliance} checking={selfChecking} />
           <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
             {selfCampaignId && selfStatus !== 'active' && (
-              <span className="prm-discard-link" onClick={discardSelfDraft}>{t('promotions.self.discard_btn', 'Discard draft')}</span>
+              <span className="prm-discard-link" onClick={discardSelfDraft}>{t('promotions.self.discard_btn')}</span>
             )}
             {/* The success toast is wired at the button, not inside
                 saveSelfDraft: Start sale and Update sale call that too and
                 show their own message, so it would otherwise fire twice. */}
             {selfStatus !== 'active' && (
               <button className="btn btn-outline" disabled={selfSaving}
-                onClick={async () => { if (await saveSelfDraft()) show(t('promotions.self.toast_saved', 'Draft saved'), 'success') }}>
-                {t('promotions.self.save_btn', 'Save draft')}
+                onClick={async () => { if (await saveSelfDraft()) show(t('promotions.self.toast_saved'), 'success') }}>
+                {t('promotions.self.save_btn')}
               </button>
             )}
             {selfStatus === 'active' && (
-              <button className="btn btn-outline" onClick={updateActiveSelfSale} disabled={selfSaving}>{t('promotions.self.update_btn', 'Update sale')}</button>
+              <button className="btn btn-outline" onClick={updateActiveSelfSale} disabled={selfSaving}>{t('promotions.self.update_btn')}</button>
             )}
             {selfStatus === 'active'
-              ? <button className="btn btn-primary" onClick={stopSelfPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.self.stop_btn', 'Stop sale')}</button>
+              ? <button className="btn btn-primary" onClick={stopSelfPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.self.stop_btn')}</button>
               : <button className="btn btn-primary" onClick={startSelfPromo} disabled={!selfCompliance?.ok || selfSaving}>
                   <span className="material-symbols-outlined">rocket_launch</span>{t('promotions.self.start_btn')}
                 </button>}
@@ -809,7 +809,7 @@ export default function Promotions() {
           {!saldiAvailable ? (
             <div className="alert alert-info">
               <span className="material-symbols-outlined">block</span>
-              {t('promotions.saldi.unavailable', 'Saldi dates for this region are not yet confirmed — this season is blocked until verified.')}
+              {t('promotions.saldi.unavailable')}
             </div>
           ) : (
             <>
@@ -859,23 +859,23 @@ export default function Promotions() {
                   : <SaleItemsTable t={t} products={saldiProducts} saleDisc={saldiDisc} selected={saldiSelected} overrides={saldiOverride} costVisible={saldiCostVisible} aiNotes={saldiAiNotes}
                       onToggle={toggleSaldi} onEdit={editSaldiLine} onReset={resetSaldiLine} onHistory={openHistory}
                       emptyHint={saldiStart
-                        ? t('promotions.saldi.empty_hint', 'Saldi apply to end-of-season stock only. Mark products as "Seasonal" in the Your Sale tab and they will appear here.')
-                        : t('promotions.saldi.no_region_rules', 'Saldi dates are not available for your region yet, so no items can be loaded. Check the region selected at the top of this page.')} />}
+                        ? t('promotions.saldi.empty_hint')
+                        : t('promotions.saldi.no_region_rules')} />}
               </div>
 
               <CompliancePanel t={t} result={saldiCompliance} checking={saldiChecking} />
               <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
                 {saldiCampaignId && saldiStatus !== 'active' && (
-                  <span className="prm-discard-link" onClick={discardSaldiDraft}>{t('promotions.saldi.discard_btn', 'Discard draft')}</span>
+                  <span className="prm-discard-link" onClick={discardSaldiDraft}>{t('promotions.saldi.discard_btn')}</span>
                 )}
                 {saldiStatus !== 'active' && (
                   <button className="btn btn-outline" disabled={saldiSaving}
-                    onClick={async () => { if (await saveSaldiDraft()) show(t('promotions.saldi.toast_saved', 'Draft saved'), 'success') }}>
-                    {t('promotions.saldi.save_btn', 'Save draft')}
+                    onClick={async () => { if (await saveSaldiDraft()) show(t('promotions.saldi.toast_saved'), 'success') }}>
+                    {t('promotions.saldi.save_btn')}
                   </button>
                 )}
                 {saldiStatus === 'active'
-                  ? <button className="btn btn-primary" onClick={stopSaldiPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.saldi.stop_btn', 'Stop sale')}</button>
+                  ? <button className="btn btn-primary" onClick={stopSaldiPromo}><span className="material-symbols-outlined">stop_circle</span>{t('promotions.saldi.stop_btn')}</button>
                   : <button className="btn btn-primary" onClick={startSaldiPromo} disabled={!saldiCompliance?.ok || saldiSaving}>
                       <span className="material-symbols-outlined">rocket_launch</span>{t('promotions.saldi.start_btn')}
                     </button>}
@@ -891,7 +891,7 @@ export default function Promotions() {
           {invLoading
             ? <Loading />
             : invitations.length === 0
-              ? <div className="empty">{t('promotions.mi.empty', 'No platform sale invitations right now.')}</div>
+              ? <div className="empty">{t('promotions.mi.empty')}</div>
               : invitations.map(inv => {
                   const meta = MI_STATE_META[inv.state] ?? MI_STATE_META.pending
                   const sel  = invSelected[inv.invitationId] || {}
@@ -908,7 +908,7 @@ export default function Promotions() {
                         <div className="prm-mi-meta-row">
                           <div className="prm-mi-meta"><b>{fmtDate(inv.startsAt)} – {fmtDate(inv.endsAt)}</b><span>{t('promotions.mi.sale_window')}</span></div>
                           <div className="prm-mi-meta"><b>{inv.suggestedDepthPct}%</b><span>{t('promotions.mi.suggested_depth')}</span></div>
-                          <div className="prm-mi-meta"><b>{fmtDate(inv.respondBy)}</b><span>{t('promotions.mi.respond_by_label', 'Respond by')}</span></div>
+                          <div className="prm-mi-meta"><b>{fmtDate(inv.respondBy)}</b><span>{t('promotions.mi.respond_by_label')}</span></div>
                         </div>
 
                         <div className="prm-why">
@@ -947,7 +947,7 @@ export default function Promotions() {
                                 </table>
                               )}
                             <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
-                              <button className="btn btn-outline" onClick={() => optOut(inv)}>{t('promotions.mi.opt_out_btn', 'Decline')}</button>
+                              <button className="btn btn-outline" onClick={() => optOut(inv)}>{t('promotions.mi.opt_out_btn')}</button>
                               <button className="btn btn-primary" onClick={() => optIn(inv)}>
                                 <span className="material-symbols-outlined">check</span>{t('promotions.mi.confirm_btn')}
                               </button>
@@ -957,7 +957,7 @@ export default function Promotions() {
 
                         {inv.state === 'opted_in' && (
                           <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                            <button className="btn btn-outline" onClick={() => optOut(inv)}>{t('promotions.mi.withdraw_btn', 'Withdraw')}</button>
+                            <button className="btn btn-outline" onClick={() => optOut(inv)}>{t('promotions.mi.withdraw_btn')}</button>
                           </div>
                         )}
                       </div>

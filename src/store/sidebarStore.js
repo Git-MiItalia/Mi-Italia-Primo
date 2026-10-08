@@ -20,6 +20,14 @@ const useSidebarStore = create((set, get) => ({
   collapsed: loadCollapsed(),
   openSections: loadSections(),
 
+  /* Off-canvas drawer on narrow screens. Deliberately NOT persisted: a
+     remembered-open drawer would cover the page on the next visit. `collapsed`
+     is the desktop icon rail and stays a separate thing — below the breakpoint
+     the rail is ignored and this decides whether the nav is on screen at all. */
+  mobileOpen: false,
+  openMobile:  () => set({ mobileOpen: true }),
+  closeMobile: () => set({ mobileOpen: false }),
+
   toggleCollapsed: () => {
     const collapsed = !get().collapsed
     localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0')

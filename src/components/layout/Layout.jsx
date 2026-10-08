@@ -34,6 +34,8 @@ function Layout() {
   const addNotification   = useNotifStore(s => s.addNotification)
   const setNotifications  = useNotifStore(s => s.setNotifications)
   const sidebarCollapsed  = useSidebarStore(s => s.collapsed)
+  const mobileNavOpen     = useSidebarStore(s => s.mobileOpen)
+  const closeMobileNav    = useSidebarStore(s => s.closeMobile)
 
   useEffect(() => {
     const token = getToken()
@@ -87,6 +89,11 @@ function Layout() {
     }
   }, [])
 
+  /* A drawer left open over the page it just navigated to is the classic
+     mobile-nav bug, so closing it is tied to the route rather than to the
+     click. Above the breakpoint the drawer never opens and this is a no-op. */
+  useEffect(() => { closeMobileNav() }, [location.pathname])
+
   // Only armed while genuinely waiting, so the usual cached boot sets no timer.
   useEffect(() => {
     if (i18nReady) return
@@ -116,6 +123,7 @@ function Layout() {
         />
       )}
       <Sidebar />
+      {mobileNavOpen && <div className="sb-mobile-backdrop" onClick={closeMobileNav} />}
       <div className={`main${sidebarCollapsed ? ' sb-collapsed' : ''}`}>
         <Header />
         <div className="content">

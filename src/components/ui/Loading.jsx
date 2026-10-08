@@ -36,7 +36,7 @@ export default function Loading({ page, row, cols = 1, label, className = '' }) 
   // "Loading...…" under every spinner in the portal. Add the ellipsis only
   // when the words do not already finish with one, in either spelling, so this
   // holds whichever way the key is written in any language.
-  const word = t('common.loading', 'Loading')
+  const word = t('common.loading')
   const text = label ?? (/(\.{3}|…)\s*$/.test(word) ? word : word + '…')
 
   // role="status" so a screen reader announces the wait rather than leaving a

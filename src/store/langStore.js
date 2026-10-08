@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import i18n, { hasBootBundle } from '../lib/i18n'
 import { readCache, writeCache } from '../lib/i18nCache'
+import { loadEnglishFallback, primeEnglishFallback } from '../lib/i18nFallback'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -85,6 +86,16 @@ const useLangStore = create((set) => ({
         const locale  = data.data.preferred_locale || 'en'
         const version = data.data.translationsVersion ?? null
 
+        /* success:true with nothing in it. The words are generated per request
+           rather than stored, so an exhausted translation credit answers 200
+           with an empty payload — which is how production ended up rendering
+           key names. Treat it as the failure it is. */
+        if (!bundle || typeof bundle !== 'object' || Object.keys(bundle).length === 0) {
+          await loadEnglishFallback()
+          set({ ready: true })
+          return
+        }
+
         const cached = readCache()
         /* Whether i18n already holds exactly these words, applied from cache
          * before the first render. When it does, calling changeLanguage would
@@ -114,18 +125,23 @@ const useLangStore = create((set) => ({
 
         if (alreadyApplied) {
           set({ lang: locale, ready: true })
+          primeEnglishFallback()
           return
         }
 
         i18n.addResourceBundle(locale, 'translation', bundle, true, true)
         i18n.changeLanguage(locale)
         set({ lang: locale, ready: true })
+        primeEnglishFallback()
         return
       }
-      // success:false — nothing to apply, but the app must still render.
+      /* success:false — no words arrived. Fall back to the bundled English
+         rather than render key names, then let the app through. */
+      await loadEnglishFallback()
       set({ ready: true })
     } catch (err) {
       console.error('fetchTranslations error:', err)
+      await loadEnglishFallback()
       set({ ready: true })
     }
   },

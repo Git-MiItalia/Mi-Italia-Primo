@@ -31,9 +31,9 @@ export default function ForgotPassword() {
       .then(res => {
         setLoading(false)
         if (res.success) setSent(true)
-        else setError(res.message ?? t('common.error_generic', 'Something went wrong. Please try again.'))
+        else setError(res.message ?? t('common.error_generic'))
       })
-      .catch(() => { setLoading(false); setError(t('common.error_network', 'Network error. Please check your connection.')) })
+      .catch(() => { setLoading(false); setError(t('common.error_network')) })
   }
 
   return (
@@ -70,7 +70,10 @@ export default function ForgotPassword() {
                   />
                 </div>
                 <button className="btn btn-primary auth-submit-btn" type="submit" disabled={loading}>
-                  {loading ? t('forgot_password.sending', 'Sending') + '…' : t('forgot_password.send_btn', 'Send Reset Link')}
+                  {/* The ellipsis belongs to the text, not to this line: the
+                      login bundle's own value already ends with one, so
+                      appending another printed "Sending……". */}
+                  {loading ? t('forgot_password.sending', 'Sending…') : t('forgot_password.send_btn', 'Send Reset Link')}
                 </button>
               </form>
             </>
